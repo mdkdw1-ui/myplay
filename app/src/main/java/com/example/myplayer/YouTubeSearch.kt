@@ -1,5 +1,6 @@
 package com.example.myplayer
 
+import android.util.Log
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.net.HttpURLConnection
@@ -17,17 +18,25 @@ data class VideoItem(
 
 object YouTubeSearch {
 
+    private const val TAG = "YouTubeSearch"
     private const val API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
-    private const val ENDPOINT = "https://www.youtube.com/youtubei/v1/search?key=$API_KEY"
+    private const val ENDPOINT = "https://www.youtube.com/youtubei/v1/search"
+
+    var lastResponseSnippet: String = ""
 
     suspend fun search(query: String): List<VideoItem> = withContext(Dispatchers.IO) {
         val results = mutableListOf<VideoItem>()
         try {
-            val url = URL(ENDPOINT)
+            val url = URL("$ENDPOINT?key=$API_KEY&prettyPrint=false")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android)")
+            conn.setRequestProperty(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+            conn.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9")
+            conn.setRequestProperty("Origin", "https://www.youtube.com")
             conn.doOutput = true
             conn.connectTimeout = 15000
             conn.readTimeout = 15000
@@ -35,42 +44,53 @@ object YouTubeSearch {
             val body = JSONObject().apply {
                 put("context", JSONObject().apply {
                     put("client", JSONObject().apply {
-                        put("clientName", "ANDROID")
-                        put("clientVersion", "19.09.37")
-                        put("androidSdkVersion", 30)
+                        put("clientName", "WEB")
+                        put("clientVersion", "2.20240101.00.00")
                         put("hl", "ko")
                         put("gl", "KR")
                     })
                 })
                 put("query", query)
-                put("params", "EgIQAQ%3D%3D")
             }
 
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
 
-            if (conn.responseCode !in 200..299) return@withContext emptyList()
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                val err = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText)
+                lastResponseSnippet = "HTTP $code\n$err"
+                return@withContext emptyList()
+            }
 
             val response = conn.inputStream.bufferedReader().use(BufferedReader::readText)
+            lastResponseSnippet = response.take(800)
+
             val json = JSONObject(response)
-
-            val sections = json.optJSONObject("contents")
-                ?.optJSONObject("sectionListRenderer")
-                ?.optJSONArray("contents") ?: return@withContext emptyList()
-
-            for (i in 0 until sections.length()) {
-                val itemSection = sections.getJSONObject(i)
-                    .optJSONObject("itemSectionRenderer") ?: continue
-                val items = itemSection.optJSONArray("contents") ?: continue
-                for (j in 0 until items.length()) {
-                    val videoRenderer = items.getJSONObject(j)
-                        .optJSONObject("videoRenderer") ?: continue
-                    parseVideo(videoRenderer)?.let { results.add(it) }
-                }
-            }
+            collectVideoRenderers(json, results)
         } catch (e: Exception) {
-            e.printStackTrace()
+            lastResponseSnippet = "EXCEPTION: ${e.message}"
         }
         results
+    }
+
+    private fun collectVideoRenderers(node: Any?, out: MutableList<VideoItem>) {
+        when (node) {
+            is JSONObject -> {
+                node.optJSONObject("videoRenderer")?.let { vr ->
+                    parseVideo(vr)?.let { out.add(it) }
+                }
+                val keys = node.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    collectVideoRenderers(node.opt(key), out)
+                }
+            }
+            is org.json.JSONArray -> {
+                for (i in 0 until node.length()) {
+                    collectVideoRenderers(node.opt(i), out)
+                }
+            }
+        }
     }
 
     private fun parseVideo(v: JSONObject): VideoItem? {
@@ -78,14 +98,18 @@ object YouTubeSearch {
         val title = v.optJSONObject("title")
             ?.optJSONArray("runs")
             ?.optJSONObject(0)
-            ?.optString("text") ?: "(제목 없음)"
+            ?.optString("text")
+            ?: v.optJSONObject("title")?.optString("simpleText")
+            ?: "(no title)"
         val channel = v.optJSONObject("ownerText")
             ?.optJSONArray("runs")
             ?.optJSONObject(0)
             ?.optString("text") ?: ""
         val thumbnail = v.optJSONObject("thumbnail")
             ?.optJSONArray("thumbnails")
-            ?.let { thumbs -> thumbs.optJSONObject(thumbs.length() - 1)?.optString("url") }
+            ?.let { thumbs ->
+                thumbs.optJSONObject(thumbs.length() - 1)?.optString("url")
+            }
             ?: "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
         val duration = v.optJSONObject("lengthText")?.optString("simpleText") ?: ""
         return VideoItem(videoId, title, channel, thumbnail, duration)
