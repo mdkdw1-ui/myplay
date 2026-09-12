@@ -26,15 +26,6 @@ jobs:
       - name: Install Pillow
         run: pip install Pillow
 
-      - name: Debug - list files
-        run: |
-          echo "=== ls assets/www ==="
-          ls -la app/src/main/assets/www/ 2>&1 || echo "dir not found"
-          echo "=== find icon.png ==="
-          find . -name "icon.png" -type f 2>/dev/null || echo "no icon found"
-          echo "=== pwd ==="
-          pwd
-
       - name: Generate Android App Icons
         run: |
           python3 << 'PYEOF'
@@ -43,6 +34,9 @@ jobs:
 
           candidates = [
               'app/src/main/assets/www/icon.png',
+              'app/src/main/assets/www/icon.jpg',
+              'app/src/main/assets/www/icon.jpeg',
+              'app/src/main/assets/www/icon.webp',
               'www/icon.png',
               'www/icon.jpg',
               'www/icon.jpeg',
@@ -94,6 +88,7 @@ jobs:
               resized = img.resize((size, size), Image.Resampling.LANCZOS)
               resized.save(os.path.join(target_dir, 'ic_launcher.png'))
               resized.save(os.path.join(target_dir, 'ic_launcher_round.png'))
+              resized.save(os.path.join(target_dir, 'ic_launcher_foreground.png'))
 
           print('all icons generated')
           PYEOF
@@ -132,7 +127,7 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Myplayer-Debug-APK
+          name: TeslaDash-Debug-APK
           path: |
             app/build/outputs/apk/debug/*.apk
           retention-days: 3
