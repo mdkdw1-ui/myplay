@@ -1,5 +1,6 @@
 package com.example.myplayer
 
+import android.app.AlertDialog
 import android.app.PictureInPictureParams
 import android.content.ComponentName
 import android.content.pm.ActivityInfo
@@ -71,29 +72,28 @@ class PlayerActivity : AppCompatActivity() {
             val result = YouTubeStream.extract(videoId)
             progress.visibility = View.GONE
 
-            if (result == null || !result.hasAny) {
-                Toast.makeText(this@PlayerActivity, "extract failed", Toast.LENGTH_LONG).show()
+            if (!result.hasAny) {
+                AlertDialog.Builder(this@PlayerActivity)
+                    .setTitle("extract failed")
+                    .setMessage(result.debug)
+                    .setPositiveButton("OK", null)
+                    .show()
                 return@launch
             }
 
             when {
                 result.muxedUrl != null -> {
                     mediaController?.setMediaItem(MediaItem.fromUri(result.muxedUrl))
-                    mediaController?.prepare()
-                    mediaController?.playWhenReady = true
                 }
                 result.videoUrl != null -> {
-                    // video-only 재생 (오디오 없음)
                     mediaController?.setMediaItem(MediaItem.fromUri(result.videoUrl))
-                    mediaController?.prepare()
-                    mediaController?.playWhenReady = true
                 }
                 result.audioUrl != null -> {
                     mediaController?.setMediaItem(MediaItem.fromUri(result.audioUrl))
-                    mediaController?.prepare()
-                    mediaController?.playWhenReady = true
                 }
             }
+            mediaController?.prepare()
+            mediaController?.playWhenReady = true
 
             Toast.makeText(this@PlayerActivity, "play: ${result.title.take(30)}", Toast.LENGTH_SHORT).show()
         }
