@@ -24,6 +24,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var historyAdapter: HorizontalVideoAdapter
     private lateinit var relatedAdapter: HorizontalVideoAdapter
+    private lateinit var channelAdapter: ChannelAdapter
     private lateinit var etHomeSearch: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,7 +41,6 @@ class MainActivity : AppCompatActivity() {
 
         etHomeSearch = findViewById(R.id.etHomeSearch)
 
-        // 홈 검색바: 엔터 → 바로 결과 화면
         etHomeSearch.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 val q = etHomeSearch.text.toString().trim()
@@ -65,6 +65,7 @@ class MainActivity : AppCompatActivity() {
 
         historyAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         relatedAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
+        channelAdapter = ChannelAdapter { c -> openChannel(c) }
 
         val rvHistory = findViewById<RecyclerView>(R.id.rvHistory)
         rvHistory.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
@@ -73,6 +74,10 @@ class MainActivity : AppCompatActivity() {
         val rvRelated = findViewById<RecyclerView>(R.id.rvRelated)
         rvRelated.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         rvRelated.adapter = relatedAdapter
+
+        val rvChannels = findViewById<RecyclerView>(R.id.rvChannels)
+        rvChannels.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        rvChannels.adapter = channelAdapter
 
         loadRecentSearches()
         loadHistory()
@@ -110,7 +115,6 @@ class MainActivity : AppCompatActivity() {
                 ).apply { marginEnd = (8 * resources.displayMetrics.density).toInt() }
                 gravity = Gravity.CENTER
                 setOnClickListener {
-                    // ★ 칩 탭 → 바로 결과 화면 (한 단계)
                     RecentSearches.add(this@MainActivity, q)
                     startActivity(Intent(this@MainActivity, SearchActivity::class.java)
                         .putExtra("QUERY", q))
@@ -131,6 +135,7 @@ class MainActivity : AppCompatActivity() {
                     section.visibility = View.GONE
                     emptyState.visibility = View.VISIBLE
                     findViewById<View>(R.id.sectionRelated).visibility = View.GONE
+                    findViewById<View>(R.id.sectionChannels).visibility = View.GONE
                 } else {
                     section.visibility = View.VISIBLE
                     emptyState.visibility = View.GONE
@@ -141,6 +146,15 @@ class MainActivity : AppCompatActivity() {
                     historyAdapter.submit(home)
 
                     loadRelated(list.first().videoId)
+
+                    // 가장 자주 등장하는 채널명 → 채널 검색
+                    val topChannel = list.map { it.channel }
+                        .filter { it.isNotBlank() }
+                        .groupingBy { it }
+                        .eachCount()
+                        .maxByOrNull { it.value }
+                        ?.key
+                    if (topChannel != null) loadChannels(topChannel)
                 }
             }
         }
@@ -162,6 +176,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun loadChannels(baseChannelName: String) {
+        lifecycleScope.launch {
+            val results = YouTubeChannels.search(baseChannelName)
+            // 자기 자신 제외 + 유효 채널만
+            val filtered = results
+                .filter { it.name != baseChannelName && it.thumbnail.isNotEmpty() }
+                .take(10)
+            if (filtered.isEmpty()) {
+                findViewById<View>(R.id.sectionChannels).visibility = View.GONE
+                return@launch
+            }
+            findViewById<View>(R.id.sectionChannels).visibility = View.VISIBLE
+            channelAdapter.submit(filtered)
+        }
+    }
+
     private fun openPlayer(v: HomeVideo) {
         startActivity(Intent(this, PlayerActivity::class.java).apply {
             putExtra("VIDEO_ID", v.videoId)
@@ -169,5 +199,12 @@ class MainActivity : AppCompatActivity() {
             putExtra("VIDEO_CHANNEL", v.channel)
             putExtra("VIDEO_THUMB", v.thumbnail)
         })
+    }
+
+    private fun openChannel(c: ChannelItem) {
+        // 채널명으로 검색
+        RecentSearches.add(this, c.name)
+        startActivity(Intent(this, SearchActivity::class.java)
+            .putExtra("QUERY", c.name))
     }
 }
