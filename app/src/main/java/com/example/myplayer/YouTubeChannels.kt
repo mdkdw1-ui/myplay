@@ -49,19 +49,17 @@ object YouTubeChannels {
                     })
                 })
                 put("query", query)
-                // 채널만 필터
-                put("params", "EgIQAg%3D%3D")
+                // ★ params 제거 — 전체 결과에서 channelRenderer만 추출
             }
 
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
 
             val code = conn.responseCode
-            if (code !in 200..299) {
-                Log.e(TAG, "HTTP $code")
-                return@withContext emptyList()
-            }
+            Log.d(TAG, "HTTP $code")
+            if (code !in 200..299) return@withContext emptyList()
 
             val response = conn.inputStream.bufferedReader().use(BufferedReader::readText)
+            Log.d(TAG, "response len=${response.length}")
             val json = JSONObject(response)
 
             collectChannels(json, results)
