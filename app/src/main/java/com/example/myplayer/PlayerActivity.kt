@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import android.app.PictureInPictureParams
 import android.content.ComponentName
 import android.content.pm.ActivityInfo
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
@@ -14,6 +15,7 @@ import android.view.WindowInsetsController
 import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.session.MediaController
@@ -39,7 +41,17 @@ class PlayerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_player)
 
         playerView = findViewById(R.id.playerView)
-        progress = ProgressBar(this)
+
+        // 스피너 생성 + 색상 지정 (spinner 컬러 = 흰색 계열)
+        progress = ProgressBar(this).apply {
+            indeterminateTintList = ColorStateList.valueOf(
+                ContextCompat.getColor(this@PlayerActivity, R.color.spinner)
+            )
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
         (playerView.parent as? android.view.ViewGroup)?.addView(progress)
 
         val videoUri = intent.getStringExtra("VIDEO_URI")
@@ -57,7 +69,7 @@ class PlayerActivity : AppCompatActivity() {
             when {
                 videoUri != null -> playUrl(videoUri)
                 videoId != null -> extractAndPlay(videoId, videoTitle, videoChannel, videoThumb)
-                else -> Toast.makeText(this, "no video", Toast.LENGTH_SHORT).show()
+                else -> Toast.makeText(this, "재생할 영상이 없습니다", Toast.LENGTH_SHORT).show()
             }
         }, MoreExecutors.directExecutor())
 
@@ -79,9 +91,9 @@ class PlayerActivity : AppCompatActivity() {
 
             if (!result.hasAny) {
                 AlertDialog.Builder(this@PlayerActivity)
-                    .setTitle("extract failed")
+                    .setTitle("재생 실패")
                     .setMessage(result.debug)
-                    .setPositiveButton("OK", null)
+                    .setPositiveButton("확인", null)
                     .show()
                 return@launch
             }
@@ -100,8 +112,6 @@ class PlayerActivity : AppCompatActivity() {
                 channel = channel,
                 thumb = thumb
             )
-
-            Toast.makeText(this@PlayerActivity, "play", Toast.LENGTH_SHORT).show()
         }
     }
 
