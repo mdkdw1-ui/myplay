@@ -29,6 +29,11 @@
             android:label="검색" />
 
         <activity
+            android:name=".HistoryActivity"
+            android:exported="false"
+            android:label="시청 기록" />
+
+        <activity
             android:name=".PlayerActivity"
             android:exported="false"
             android:supportsPictureInPicture="true"

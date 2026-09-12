@@ -19,7 +19,6 @@ class SearchActivity : AppCompatActivity() {
     private lateinit var adapter: SearchAdapter
     private lateinit var progress: ProgressBar
     private lateinit var tvStatus: TextView
-    private lateinit var tvDebug: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,7 +26,6 @@ class SearchActivity : AppCompatActivity() {
 
         progress = findViewById(R.id.progress)
         tvStatus = findViewById(R.id.tvStatus)
-        tvDebug = findViewById(R.id.tvDebug)
         val etQuery = findViewById<EditText>(R.id.etQuery)
         val recycler = findViewById<RecyclerView>(R.id.recycler)
 
@@ -35,6 +33,8 @@ class SearchActivity : AppCompatActivity() {
             val intent = Intent(this, PlayerActivity::class.java).apply {
                 putExtra("VIDEO_ID", item.videoId)
                 putExtra("VIDEO_TITLE", item.title)
+                putExtra("VIDEO_CHANNEL", item.channel)
+                putExtra("VIDEO_THUMB", item.thumbnail)
             }
             startActivity(intent)
         }
@@ -58,10 +58,8 @@ class SearchActivity : AppCompatActivity() {
             Toast.makeText(this, "검색어를 입력하세요", Toast.LENGTH_SHORT).show()
             return
         }
-
         progress.visibility = View.VISIBLE
         tvStatus.visibility = View.VISIBLE
-        tvDebug.visibility = View.GONE
         tvStatus.text = "검색 중..."
 
         lifecycleScope.launch {
@@ -72,11 +70,6 @@ class SearchActivity : AppCompatActivity() {
             progress.visibility = View.GONE
             tvStatus.text = "결과: ${results.size}개 (${elapsed}ms)"
             adapter.submit(results)
-
-            if (results.isEmpty()) {
-                tvDebug.visibility = View.VISIBLE
-                tvDebug.text = "DEBUG:\n" + YouTubeSearch.lastResponseSnippet
-            }
         }
     }
 }
