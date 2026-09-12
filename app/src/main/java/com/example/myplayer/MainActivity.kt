@@ -7,6 +7,8 @@ import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -22,6 +24,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var historyAdapter: HorizontalVideoAdapter
     private lateinit var relatedAdapter: HorizontalVideoAdapter
+    private lateinit var etHomeSearch: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,18 +38,31 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 검색창 → SearchActivity
-        findViewById<View>(R.id.searchBar).setOnClickListener {
-            startActivity(Intent(this, SearchActivity::class.java))
+        etHomeSearch = findViewById(R.id.etHomeSearch)
+
+        // 홈 검색바: 엔터 → 바로 결과 화면
+        etHomeSearch.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                val q = etHomeSearch.text.toString().trim()
+                if (q.isEmpty()) {
+                    Toast.makeText(this, "검색어를 입력하세요", Toast.LENGTH_SHORT).show()
+                } else {
+                    RecentSearches.add(this, q)
+                    etHomeSearch.setText("")
+                    startActivity(Intent(this, SearchActivity::class.java)
+                        .putExtra("QUERY", q))
+                }
+                true
+            } else false
         }
+
         findViewById<View>(R.id.btnStartSearch).setOnClickListener {
-            startActivity(Intent(this, SearchActivity::class.java))
+            etHomeSearch.requestFocus()
         }
         findViewById<View>(R.id.tvHistoryMore).setOnClickListener {
             startActivity(Intent(this, HistoryActivity::class.java))
         }
 
-        // 어댑터
         historyAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         relatedAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
 
@@ -94,6 +110,8 @@ class MainActivity : AppCompatActivity() {
                 ).apply { marginEnd = (8 * resources.displayMetrics.density).toInt() }
                 gravity = Gravity.CENTER
                 setOnClickListener {
+                    // ★ 칩 탭 → 바로 결과 화면 (한 단계)
+                    RecentSearches.add(this@MainActivity, q)
                     startActivity(Intent(this@MainActivity, SearchActivity::class.java)
                         .putExtra("QUERY", q))
                 }
@@ -106,7 +124,6 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val db = HistoryDatabase.get(applicationContext)
             db.historyDao().getAll().collect { list ->
-                // 최근 본 동영상
                 val section = findViewById<View>(R.id.sectionHistory)
                 val emptyState = findViewById<View>(R.id.emptyState)
 
@@ -123,7 +140,6 @@ class MainActivity : AppCompatActivity() {
                     }
                     historyAdapter.submit(home)
 
-                    // 가장 최근 영상 기반 관련 동영상
                     loadRelated(list.first().videoId)
                 }
             }
