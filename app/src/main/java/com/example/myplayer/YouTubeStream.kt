@@ -1,5 +1,6 @@
 package com.example.myplayer
 
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.NewPipe
@@ -8,11 +9,17 @@ import org.schabi.newpipe.extractor.stream.StreamInfo
 
 object YouTubeStream {
 
+    private const val TAG = "YouTubeStream"
+
     data class StreamResult(
-        val url: String,
-        val title: String,
-        val isVideo: Boolean
-    )
+        val videoUrl: String?,
+        val audioUrl: String?,
+        val muxedUrl: String?,
+        val title: String
+    ) {
+        val hasAny: Boolean
+            get() = muxedUrl != null || videoUrl != null || audioUrl != null
+    }
 
     suspend fun extract(videoId: String): StreamResult? = withContext(Dispatchers.IO) {
         try {
@@ -22,39 +29,41 @@ object YouTubeStream {
             }
 
             val url = "https://www.youtube.com/watch?v=" + videoId
+            Log.d(TAG, "extract: $url")
             val info = StreamInfo.getInfo(ServiceList.YouTube, url)
             val title = info.name ?: ""
 
-            val muxed = info.videoStreams
-                .filter { it.isUrl }
-                .sortedByDescending { it.getResolution() }
-                .firstOrNull { !it.isVideoOnly }
+            Log.d(TAG, "videoStreams: ${info.videoStreams.size}, audioStreams: ${info.audioStreams.size}")
 
+            val muxed = info.videoStreams.firstOrNull { !it.isVideoOnly && it.isUrl }
             if (muxed != null) {
-                return@withContext StreamResult(muxed.content, title, true)
+                Log.d(TAG, "muxed found")
+                return@withContext StreamResult(null, null, muxed.content, title)
             }
 
-            val videoOnly = info.videoStreams
-                .filter { it.isUrl }
-                .sortedByDescending { it.getResolution() }
-                .firstOrNull()
-
-            if (videoOnly != null) {
-                return@withContext StreamResult(videoOnly.content, title, true)
-            }
+            val video = info.videoStreams
+                .filter { it.isVideoOnly && it.isUrl }
+                .maxByOrNull { it.resolution }
 
             val audio = info.audioStreams
                 .filter { it.isUrl }
-                .sortedByDescending { it.getAverageBitrate() }
-                .firstOrNull()
+                .maxByOrNull { it.averageBitrate }
 
+            Log.d(TAG, "video=${video?.resolution}, audio=${audio?.averageBitrate}")
+
+            if (video != null && audio != null) {
+                return@withContext StreamResult(video.content, audio.content, null, title)
+            }
+            if (video != null) {
+                return@withContext StreamResult(video.content, null, null, title)
+            }
             if (audio != null) {
-                return@withContext StreamResult(audio.content, title, false)
+                return@withContext StreamResult(null, audio.content, null, title)
             }
 
             null
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "extract error: ${e.message}", e)
             null
         }
     }
