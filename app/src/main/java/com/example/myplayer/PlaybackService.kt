@@ -2,6 +2,8 @@ package com.example.myplayer
 
 import android.app.PendingIntent
 import android.content.Intent
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -13,9 +15,18 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        val player = ExoPlayer.Builder(this).build()
+        // ★ 핵심: handleAudioFocus = false
+        // 다른 앱(카톡 등)이 오디오 포커스를 요청해도 덕킹/일시정지하지 않음
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA)
+            .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+            .build()
 
-        // 알림 클릭 시 PlayerActivity로 이동
+        val player = ExoPlayer.Builder(this)
+            .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ false)
+            .setHandleAudioBecomingNoisy(false)  // 이어폰 뽑혀도 멈추지 않음 (선택)
+            .build()
+
         val sessionActivity = PendingIntent.getActivity(
             this,
             0,

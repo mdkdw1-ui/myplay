@@ -9,7 +9,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 
 class HistoryAdapter(
-    private val onClick: (HistoryEntity) -> Unit
+    private val onClick: (HistoryEntity) -> Unit,
+    private val onRelatedClick: (HistoryEntity) -> Unit
 ) : RecyclerView.Adapter<HistoryAdapter.VH>() {
 
     private val items = mutableListOf<HistoryEntity>()
@@ -22,7 +23,7 @@ class HistoryAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val v = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_video, parent, false)
+            .inflate(R.layout.item_history, parent, false)
         return VH(v)
     }
 
@@ -33,6 +34,7 @@ class HistoryAdapter(
         holder.duration.text = ""
         Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
         holder.itemView.setOnClickListener { onClick(item) }
+        holder.btnRelated.setOnClickListener { onRelatedClick(item) }
     }
 
     override fun getItemCount() = items.size
@@ -42,5 +44,6 @@ class HistoryAdapter(
         val title: TextView = v.findViewById(R.id.title)
         val channel: TextView = v.findViewById(R.id.channel)
         val duration: TextView = v.findViewById(R.id.duration)
+        val btnRelated: TextView = v.findViewById(R.id.btnRelated)
     }
 }

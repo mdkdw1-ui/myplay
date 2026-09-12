@@ -18,15 +18,10 @@ class HistoryActivity : AppCompatActivity() {
         val recycler = findViewById<RecyclerView>(R.id.recycler)
         val tvEmpty = findViewById<View>(R.id.tvEmpty)
 
-        val adapter = HistoryAdapter { item ->
-            val intent = Intent(this, PlayerActivity::class.java).apply {
-                putExtra("VIDEO_ID", item.videoId)
-                putExtra("VIDEO_TITLE", item.title)
-                putExtra("VIDEO_CHANNEL", item.channel)
-                putExtra("VIDEO_THUMB", item.thumbnail)
-            }
-            startActivity(intent)
-        }
+        val adapter = HistoryAdapter(
+            onClick = { item -> playVideo(item) },
+            onRelatedClick = { item -> showRelated(item) }
+        )
         recycler.layoutManager = LinearLayoutManager(this)
         recycler.adapter = adapter
 
@@ -36,5 +31,23 @@ class HistoryActivity : AppCompatActivity() {
                 tvEmpty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
             }
         }
+    }
+
+    private fun playVideo(item: HistoryEntity) {
+        val intent = Intent(this, PlayerActivity::class.java).apply {
+            putExtra("VIDEO_ID", item.videoId)
+            putExtra("VIDEO_TITLE", item.title)
+            putExtra("VIDEO_CHANNEL", item.channel)
+            putExtra("VIDEO_THUMB", item.thumbnail)
+        }
+        startActivity(intent)
+    }
+
+    private fun showRelated(item: HistoryEntity) {
+        val intent = Intent(this, RelatedActivity::class.java).apply {
+            putExtra("VIDEO_ID", item.videoId)
+            putExtra("VIDEO_TITLE", item.title)
+        }
+        startActivity(intent)
     }
 }
