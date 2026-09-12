@@ -1,6 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
+    <color name="bg_dark">#0F0F0F</color>
+    <color name="bg_surface">#1A1A1A</color>
+    <color name="accent">#FF3B30</color>
+    <color name="accent_dark">#CC2E25</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#AAAAAA</color>
+    <color name="divider">#2A2A2A</color>
     <color name="white">#FFFFFFFF</color>
     <color name="black">#FF000000</color>
 </resources>

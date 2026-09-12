@@ -21,7 +21,9 @@ import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class PlayerActivity : AppCompatActivity() {
 
@@ -42,6 +44,9 @@ class PlayerActivity : AppCompatActivity() {
 
         val videoUri = intent.getStringExtra("VIDEO_URI")
         val videoId = intent.getStringExtra("VIDEO_ID")
+        val videoTitle = intent.getStringExtra("VIDEO_TITLE") ?: ""
+        val videoChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
+        val videoThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
 
         val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
@@ -51,7 +56,7 @@ class PlayerActivity : AppCompatActivity() {
 
             when {
                 videoUri != null -> playUrl(videoUri)
-                videoId != null -> extractAndPlay(videoId)
+                videoId != null -> extractAndPlay(videoId, videoTitle, videoChannel, videoThumb)
                 else -> Toast.makeText(this, "no video", Toast.LENGTH_SHORT).show()
             }
         }, MoreExecutors.directExecutor())
@@ -66,7 +71,7 @@ class PlayerActivity : AppCompatActivity() {
         mediaController?.playWhenReady = true
     }
 
-    private fun extractAndPlay(videoId: String) {
+    private fun extractAndPlay(videoId: String, title: String, channel: String, thumb: String) {
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
             val result = YouTubeStream.extract(videoId)
@@ -82,22 +87,40 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             when {
-                result.muxedUrl != null -> {
-                    mediaController?.setMediaItem(MediaItem.fromUri(result.muxedUrl))
-                }
-                result.videoUrl != null -> {
-                    mediaController?.setMediaItem(MediaItem.fromUri(result.videoUrl))
-                }
-                result.audioUrl != null -> {
-                    mediaController?.setMediaItem(MediaItem.fromUri(result.audioUrl))
-                }
+                result.muxedUrl != null -> mediaController?.setMediaItem(MediaItem.fromUri(result.muxedUrl))
+                result.videoUrl != null -> mediaController?.setMediaItem(MediaItem.fromUri(result.videoUrl))
+                result.audioUrl != null -> mediaController?.setMediaItem(MediaItem.fromUri(result.audioUrl))
             }
             mediaController?.prepare()
             mediaController?.playWhenReady = true
 
-            Toast.makeText(this@PlayerActivity, "play: ${result.title.take(30)}", Toast.LENGTH_SHORT).show()
+            saveHistory(
+                videoId = videoId,
+                title = if (title.isNotEmpty()) title else result.title,
+                channel = channel,
+                thumb = thumb
+            )
+
+            Toast.makeText(this@PlayerActivity, "play", Toast.LENGTH_SHORT).show()
         }
     }
+
+    private suspend fun saveHistory(videoId: String, title: String, channel: String, thumb: String) =
+        withContext(Dispatchers.IO) {
+            try {
+                HistoryDatabase.get(applicationContext).historyDao().insert(
+                    HistoryEntity(
+                        videoId = videoId,
+                        title = title,
+                        channel = channel,
+                        thumbnail = thumb,
+                        watchedAt = System.currentTimeMillis()
+                    )
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
 
     private fun toggleFullscreen() {
         val controller = window.insetsController ?: return

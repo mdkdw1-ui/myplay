@@ -21,18 +21,31 @@
         android:orientation="horizontal"
         android:padding="16dp">
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnPip"
+            style="@style/Widget.MaterialComponents.Button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="PiP" />
+            android:text="PiP"
+            android:textSize="12sp"
+            android:minWidth="0dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            app:backgroundTint="#33FFFFFF"
+            app:cornerRadius="20dp" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnFullscreen"
+            style="@style/Widget.MaterialComponents.Button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
-            android:text="Full" />
+            android:text="Full"
+            android:textSize="12sp"
+            android:minWidth="0dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            app:backgroundTint="#33FFFFFF"
+            app:cornerRadius="20dp" />
     </LinearLayout>
-
 </FrameLayout>
