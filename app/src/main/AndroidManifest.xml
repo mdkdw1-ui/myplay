@@ -1,23 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 네트워크 -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- 백그라운드 재생 권한 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <!-- 알림 (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyPlayer">
 
-        <!-- 메인 액티비티 -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -27,16 +23,19 @@
             </intent-filter>
         </activity>
 
-        <!-- 재생 액티비티: PiP + 전체화면 -->
+        <activity
+            android:name=".SearchActivity"
+            android:exported="false"
+            android:label="검색" />
+
         <activity
             android:name=".PlayerActivity"
             android:exported="false"
             android:supportsPictureInPicture="true"
             android:launchMode="singleTask"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboardHidden|uiMode"
-            android:theme="@style/Theme.MyPlayer.NoActionBar" />
+            android:theme="@style/Theme.MyPlayer" />
 
-        <!-- 백그라운드 재생 서비스 -->
         <service
             android:name=".PlaybackService"
             android:foregroundServiceType="mediaPlayback"
