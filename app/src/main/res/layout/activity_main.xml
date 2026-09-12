@@ -24,7 +24,6 @@
             android:textColor="@color/text_primary"
             android:letterSpacing="-0.02" />
 
-        <!-- 홈 검색바: 실제 입력창 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="52dp"
@@ -144,7 +143,7 @@
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
         </LinearLayout>
 
-        <!-- 관련 동영상 -->
+        <!-- 비슷한 동영상 -->
         <LinearLayout
             android:id="@+id/sectionRelated"
             android:layout_width="match_parent"
@@ -159,13 +158,44 @@
                 android:layout_height="wrap_content"
                 android:paddingStart="20dp"
                 android:paddingEnd="20dp"
-                android:text="관련 동영상"
+                android:text="비슷한 동영상"
                 android:textSize="15sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvRelated"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp"
+                android:clipToPadding="false"
+                android:orientation="horizontal"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+        </LinearLayout>
+
+        <!-- 추천 채널 -->
+        <LinearLayout
+            android:id="@+id/sectionChannels"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="24dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp"
+                android:text="추천 채널"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvChannels"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
