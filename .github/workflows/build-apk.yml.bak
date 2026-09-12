@@ -26,15 +26,6 @@ jobs:
       - name: Install Pillow
         run: pip install Pillow
 
-      - name: Debug - list files
-        run: |
-          echo "=== ls assets/www ==="
-          ls -la app/src/main/assets/www/ 2>&1 || echo "dir not found"
-          echo "=== find icon.png ==="
-          find . -name "icon.png" -type f 2>/dev/null || echo "no icon found"
-          echo "=== pwd ==="
-          pwd
-
       - name: Generate Android App Icons
         run: |
           python3 << 'PYEOF'
