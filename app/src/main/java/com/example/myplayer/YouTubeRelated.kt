@@ -24,19 +24,20 @@ object YouTubeRelated {
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty(
                 "User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                "com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip"
             )
             conn.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9")
-            conn.setRequestProperty("Origin", "https://www.youtube.com")
             conn.doOutput = true
             conn.connectTimeout = 15000
             conn.readTimeout = 15000
 
+            // ANDROID 클라이언트 → compactVideoRenderer가 안정적으로 반환됨
             val body = JSONObject().apply {
                 put("context", JSONObject().apply {
                     put("client", JSONObject().apply {
-                        put("clientName", "WEB")
-                        put("clientVersion", "2.20240101.00.00")
+                        put("clientName", "ANDROID")
+                        put("clientVersion", "19.09.37")
+                        put("androidSdkVersion", 30)
                         put("hl", "ko")
                         put("gl", "KR")
                     })
@@ -47,39 +48,44 @@ object YouTubeRelated {
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
 
             val code = conn.responseCode
-            if (code !in 200..299) {
-                Log.e(TAG, "HTTP $code")
-                return@withContext emptyList()
-            }
+            Log.d(TAG, "HTTP $code")
+            if (code !in 200..299) return@withContext emptyList()
 
             val response = conn.inputStream.bufferedReader().use(BufferedReader::readText)
+            Log.d(TAG, "response len=${response.length}")
             val json = JSONObject(response)
 
-            collectRelated(json, results, videoId)
-            Log.d(TAG, "found ${results.size} related")
+            collect(json, results, videoId)
+            Log.d(TAG, "found ${results.size}")
         } catch (e: Exception) {
-            Log.e(TAG, "error: ${e.message}", e)
+            Log.e(TAG, "err: ${e.message}", e)
         }
         results
     }
 
-    private fun collectRelated(node: Any?, out: MutableList<VideoItem>, excludeId: String) {
+    private fun collect(node: Any?, out: MutableList<VideoItem>, excludeId: String) {
         when (node) {
             is JSONObject -> {
+                // 1) compactVideoRenderer (표준 관련 영상)
                 node.optJSONObject("compactVideoRenderer")?.let { vr ->
                     parseCompact(vr, excludeId)?.let { out.add(it) }
                 }
+                // 2) lockupViewModel (신규 포맷)
+                node.optJSONObject("lockupViewModel")?.let { lv ->
+                    parseLockup(lv, excludeId)?.let { out.add(it) }
+                }
+                // 3) videoRenderer (일반)
                 node.optJSONObject("videoRenderer")?.let { vr ->
                     parseCompact(vr, excludeId)?.let { out.add(it) }
                 }
                 val keys = node.keys()
                 while (keys.hasNext()) {
-                    collectRelated(node.opt(keys.next()), out, excludeId)
+                    collect(node.opt(keys.next()), out, excludeId)
                 }
             }
             is JSONArray -> {
                 for (i in 0 until node.length()) {
-                    collectRelated(node.opt(i), out, excludeId)
+                    collect(node.opt(i), out, excludeId)
                 }
             }
         }
@@ -88,31 +94,46 @@ object YouTubeRelated {
     private fun parseCompact(v: JSONObject, excludeId: String): VideoItem? {
         val videoId = v.optString("videoId").takeIf { it.isNotEmpty() } ?: return null
         if (videoId == excludeId) return null
-
         val title = v.optJSONObject("title")
-            ?.optJSONArray("runs")
-            ?.optJSONObject(0)
-            ?.optString("text")
-            ?: v.optJSONObject("title")?.optString("simpleText")
-            ?: ""
-
+            ?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+            ?: v.optJSONObject("title")?.optString("simpleText") ?: ""
         val channel = v.optJSONObject("shortBylineText")
-            ?.optJSONArray("runs")
-            ?.optJSONObject(0)
-            ?.optString("text")
+            ?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
             ?: v.optJSONObject("longBylineText")
-                ?.optJSONArray("runs")
-                ?.optJSONObject(0)
-                ?.optString("text")
-            ?: ""
-
+                ?.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: ""
         val thumbnail = v.optJSONObject("thumbnail")
             ?.optJSONArray("thumbnails")
-            ?.let { thumbs -> thumbs.optJSONObject(thumbs.length() - 1)?.optString("url") }
+            ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
+            ?: "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
+        val duration = v.optJSONObject("lengthText")?.optString("simpleText") ?: ""
+        return VideoItem(videoId, title, channel, thumbnail, duration)
+    }
+
+    private fun parseLockup(lv: JSONObject, excludeId: String): VideoItem? {
+        val videoId = lv.optString("contentId").takeIf { it.isNotEmpty() } ?: return null
+        if (videoId == excludeId) return null
+
+        val meta = lv.optJSONObject("metadata")
+            ?.optJSONObject("lockupMetadataViewModel")
+        val title = meta?.optJSONObject("title")?.optString("content")
+            ?: meta?.optJSONObject("title")?.optString("simpleText") ?: ""
+
+        val channel = meta?.optJSONObject("metadata")
+            ?.optJSONObject("contentMetadataViewModel")
+            ?.optJSONArray("metadataRows")
+            ?.optJSONObject(0)
+            ?.optJSONArray("metadataParts")
+            ?.optJSONObject(0)
+            ?.optJSONObject("text")
+            ?.optString("content") ?: ""
+
+        val thumbnail = lv.optJSONObject("contentImage")
+            ?.optJSONObject("thumbnailViewModel")
+            ?.optJSONObject("image")
+            ?.optJSONArray("sources")
+            ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
             ?: "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
 
-        val duration = v.optJSONObject("lengthText")?.optString("simpleText") ?: ""
-
-        return VideoItem(videoId, title, channel, thumbnail, duration)
+        return VideoItem(videoId, title, channel, thumbnail, "")
     }
 }
