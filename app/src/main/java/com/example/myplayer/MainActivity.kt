@@ -1,6 +1,7 @@
 package com.example.myplayer
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -17,30 +18,32 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Android 13+ 알림 권한 요청 (백그라운드 재생 알림용)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
+                != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                    1001
-                )
+                    this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
             }
         }
 
-        val etUrl = findViewById<EditText>(R.id.etVideoUrl)
-        val btnPlay = findViewById<Button>(R.id.btnPlay)
+        findViewById<Button>(R.id.btnSearch).setOnClickListener {
+            startActivity(Intent(this, SearchActivity::class.java))
+        }
 
-        btnPlay.setOnClickListener {
-            val url = etUrl.text.toString().trim()
-            if (url.isNotEmpty()) {
-                val intent = Intent(this, PlayerActivity::class.java).apply {
-                    putExtra("VIDEO_URI", url)
+        findViewById<Button>(R.id.btnUrl).setOnClickListener {
+            val input = EditText(this)
+            AlertDialog.Builder(this)
+                .setTitle("URL 입력")
+                .setView(input)
+                .setPositiveButton("재생") { _, _ ->
+                    val url = input.text.toString().trim()
+                    if (url.isNotEmpty()) {
+                        startActivity(Intent(this, PlayerActivity::class.java)
+                            .putExtra("VIDEO_URI", url))
+                    }
                 }
-                startActivity(intent)
-            }
+                .setNegativeButton("취소", null)
+                .show()
         }
     }
 }

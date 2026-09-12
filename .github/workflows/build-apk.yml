@@ -1,0 +1,62 @@
+name: Build Android APK with Auto Icon
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install Pillow
+
+      - name: Generate Android App Icons
+        run: |
+          python -c "
+          ... (이전 내용 그대로) ...
+          "
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - run: chmod +x gradlew
+
+      - run: ./gradlew clean
+
+      - run: ./gradlew assembleDebug --stacktrace
+
+      - name: Check APK exists
+        run: |
+          if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+            echo "✅ APK 파일 생성 성공!"
+            ls -la app/build/outputs/apk/debug/
+          else
+            echo "⚠️ APK 파일이 없습니다."
+            find app/build -name "*.apk" 2>/dev/null || echo "APK 없음"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TeslaDash-Debug-APK
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 3
