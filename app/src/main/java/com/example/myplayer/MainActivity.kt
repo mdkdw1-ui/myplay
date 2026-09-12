@@ -136,40 +136,47 @@ class MainActivity : AppCompatActivity() {
                     emptyState.visibility = View.VISIBLE
                     findViewById<View>(R.id.sectionRelated).visibility = View.GONE
                     findViewById<View>(R.id.sectionChannels).visibility = View.GONE
-                } else {
-                    section.visibility = View.VISIBLE
-                    emptyState.visibility = View.GONE
-
-                    val home = list.take(10).map {
-                        HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
-                    }
-                    historyAdapter.submit(home)
-
-                    loadRelated(list.first().videoId)
-
-                    // 가장 자주 등장하는 채널명 → 채널 검색
-                    val topChannel = list.map { it.channel }
-                        .filter { it.isNotBlank() }
-                        .groupingBy { it }
-                        .eachCount()
-                        .maxByOrNull { it.value }
-                        ?.key
-                    if (topChannel != null) loadChannels(topChannel)
+                    return@collect
                 }
+
+                section.visibility = View.VISIBLE
+                emptyState.visibility = View.GONE
+
+                val home = list.take(10).map {
+                    HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
+                }
+                historyAdapter.submit(home)
+
+                // 1) 비슷한 동영상 → 최근 영상의 "채널명"으로 검색
+                val topChannel = list.map { it.channel }
+                    .filter { it.isNotBlank() }
+                    .groupingBy { it }
+                    .eachCount()
+                    .maxByOrNull { it.value }
+                    ?.key
+
+                val recentChannel = list.firstOrNull()?.channel?.takeIf { it.isNotBlank() }
+
+                val relatedQuery = recentChannel ?: topChannel
+                if (relatedQuery != null) loadRelated(relatedQuery)
+
+                // 2) 추천 채널 → 채널명 검색
+                if (topChannel != null) loadChannels(topChannel)
             }
         }
     }
 
-    private fun loadRelated(baseVideoId: String) {
+    private fun loadRelated(query: String) {
         lifecycleScope.launch {
-            val results = YouTubeRelated.fetch(baseVideoId)
-            if (results.isEmpty()) {
+            val results = YouTubeSearch.search(query)
+            val filtered = results.take(10)
+            if (filtered.isEmpty()) {
                 findViewById<View>(R.id.sectionRelated).visibility = View.GONE
                 return@launch
             }
             findViewById<View>(R.id.sectionRelated).visibility = View.VISIBLE
             relatedAdapter.submit(
-                results.take(10).map {
+                filtered.map {
                     HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
                 }
             )
@@ -179,7 +186,6 @@ class MainActivity : AppCompatActivity() {
     private fun loadChannels(baseChannelName: String) {
         lifecycleScope.launch {
             val results = YouTubeChannels.search(baseChannelName)
-            // 자기 자신 제외 + 유효 채널만
             val filtered = results
                 .filter { it.name != baseChannelName && it.thumbnail.isNotEmpty() }
                 .take(10)
@@ -202,7 +208,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openChannel(c: ChannelItem) {
-        // 채널명으로 검색
         RecentSearches.add(this, c.name)
         startActivity(Intent(this, SearchActivity::class.java)
             .putExtra("QUERY", c.name))
