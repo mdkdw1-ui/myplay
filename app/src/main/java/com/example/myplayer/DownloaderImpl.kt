@@ -47,15 +47,16 @@ class DownloaderImpl : Downloader() {
 
         val latestUrl = connection.url.toString()
 
-        connection.disconnect()
-
-        val responseHeaders = mutableMapOf<String, String>()
+        // ★ 핵심: Map<String, List<String>> 형태로 변환
+        val responseHeaders = mutableMapOf<String, List<String>>()
         connection.headerFields?.forEach { entry ->
             val key = entry.key
             if (key != null) {
-                responseHeaders[key] = entry.value?.joinToString(",") ?: ""
+                responseHeaders[key] = entry.value ?: emptyList()
             }
         }
+
+        connection.disconnect()
 
         return Response(
             responseCode,
