@@ -51,6 +51,12 @@ class SearchActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnSearch).setOnClickListener {
             performSearch(etQuery.text.toString().trim())
         }
+
+        // 홈에서 넘어온 초기 검색어
+        intent.getStringExtra("QUERY")?.takeIf { it.isNotEmpty() }?.let {
+            etQuery.setText(it)
+            performSearch(it)
+        }
     }
 
     private fun performSearch(q: String) {
@@ -58,6 +64,9 @@ class SearchActivity : AppCompatActivity() {
             Toast.makeText(this, "검색어를 입력하세요", Toast.LENGTH_SHORT).show()
             return
         }
+
+        RecentSearches.add(this, q)  // 최근 검색어 저장
+
         progress.visibility = View.VISIBLE
         tvStatus.visibility = View.VISIBLE
         tvStatus.text = "검색 중..."
@@ -68,7 +77,7 @@ class SearchActivity : AppCompatActivity() {
             val elapsed = System.currentTimeMillis() - start
 
             progress.visibility = View.GONE
-            tvStatus.text = "결과: ${results.size}개 (${elapsed}ms)"
+            tvStatus.text = "${results.size}개 · ${elapsed}ms"
             adapter.submit(results)
         }
     }
