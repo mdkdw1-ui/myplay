@@ -6,6 +6,7 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -17,12 +18,14 @@ class SearchActivity : AppCompatActivity() {
 
     private lateinit var adapter: SearchAdapter
     private lateinit var progress: ProgressBar
+    private lateinit var tvStatus: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_search)
 
         progress = findViewById(R.id.progress)
+        tvStatus = findViewById(R.id.tvStatus)
         val etQuery = findViewById<EditText>(R.id.etQuery)
         val recycler = findViewById<RecyclerView>(R.id.recycler)
 
@@ -53,13 +56,28 @@ class SearchActivity : AppCompatActivity() {
             Toast.makeText(this, "검색어를 입력하세요", Toast.LENGTH_SHORT).show()
             return
         }
+
         progress.visibility = View.VISIBLE
+        tvStatus.visibility = View.VISIBLE
+        tvStatus.text = "검색 중..."
+
         lifecycleScope.launch {
+            val start = System.currentTimeMillis()
             val results = YouTubeSearch.search(q)
+            val elapsed = System.currentTimeMillis() - start
+
             progress.visibility = View.GONE
+
+            tvStatus.text = "결과: ${results.size}개 (${elapsed}ms)"
+
             adapter.submit(results)
+
             if (results.isEmpty()) {
-                Toast.makeText(this@SearchActivity, "결과 없음", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this@SearchActivity,
+                    "결과 없음. 로그 확인 필요",
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }
     }
