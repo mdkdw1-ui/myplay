@@ -1,9 +1,11 @@
 package com.example.myplayer
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -19,6 +21,7 @@ class SearchActivity : AppCompatActivity() {
     private lateinit var adapter: SearchAdapter
     private lateinit var progress: ProgressBar
     private lateinit var tvStatus: TextView
+    private lateinit var etQuery: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,7 +29,7 @@ class SearchActivity : AppCompatActivity() {
 
         progress = findViewById(R.id.progress)
         tvStatus = findViewById(R.id.tvStatus)
-        val etQuery = findViewById<EditText>(R.id.etQuery)
+        etQuery = findViewById(R.id.etQuery)
         val recycler = findViewById<RecyclerView>(R.id.recycler)
 
         adapter = SearchAdapter { item ->
@@ -43,20 +46,29 @@ class SearchActivity : AppCompatActivity() {
 
         etQuery.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                hideKeyboard()
                 performSearch(etQuery.text.toString().trim())
                 true
             } else false
         }
 
         findViewById<View>(R.id.btnSearch).setOnClickListener {
+            hideKeyboard()
             performSearch(etQuery.text.toString().trim())
         }
 
-        // 홈에서 넘어온 초기 검색어
+        // 홈에서 넘어온 검색어 → 자동 실행 + 키보드 숨김
         intent.getStringExtra("QUERY")?.takeIf { it.isNotEmpty() }?.let {
             etQuery.setText(it)
+            hideKeyboard()
             performSearch(it)
         }
+    }
+
+    private fun hideKeyboard() {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(etQuery.windowToken, 0)
+        etQuery.clearFocus()
     }
 
     private fun performSearch(q: String) {
@@ -65,7 +77,7 @@ class SearchActivity : AppCompatActivity() {
             return
         }
 
-        RecentSearches.add(this, q)  // 최근 검색어 저장
+        RecentSearches.add(this, q)
 
         progress.visibility = View.VISIBLE
         tvStatus.visibility = View.VISIBLE

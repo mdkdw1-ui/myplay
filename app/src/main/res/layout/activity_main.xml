@@ -13,7 +13,6 @@
         android:paddingTop="32dp"
         android:paddingBottom="32dp">
 
-        <!-- 헤더 -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -25,9 +24,8 @@
             android:textColor="@color/text_primary"
             android:letterSpacing="-0.02" />
 
-        <!-- 검색창 (탭하면 검색 화면으로) -->
+        <!-- 홈 검색바: 실제 입력창 -->
         <LinearLayout
-            android:id="@+id/searchBar"
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:layout_marginStart="20dp"
@@ -35,25 +33,30 @@
             android:layout_marginTop="18dp"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingStart="18dp"
-            android:paddingEnd="18dp"
-            android:background="@drawable/bg_search_input"
-            android:clickable="true"
-            android:focusable="true">
+            android:background="@drawable/bg_search_input">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:paddingStart="18dp"
                 android:text="🔍"
                 android:textSize="16sp" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
-                android:text="동영상 검색"
-                android:textColor="@color/text_tertiary"
-                android:textSize="15sp" />
+            <EditText
+                android:id="@+id/etHomeSearch"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:hint="동영상 검색"
+                android:textColorHint="@color/text_tertiary"
+                android:textColor="@color/text_primary"
+                android:textSize="15sp"
+                android:paddingStart="10dp"
+                android:paddingEnd="18dp"
+                android:background="@android:color/transparent"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1" />
         </LinearLayout>
 
         <!-- 최근 검색어 -->
