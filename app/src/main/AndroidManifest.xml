@@ -34,6 +34,11 @@
             android:label="시청 기록" />
 
         <activity
+            android:name=".RelatedActivity"
+            android:exported="false"
+            android:label="관련 영상" />
+
+        <activity
             android:name=".PlayerActivity"
             android:exported="false"
             android:supportsPictureInPicture="true"
