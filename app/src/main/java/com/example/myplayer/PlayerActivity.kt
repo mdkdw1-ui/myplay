@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
@@ -17,7 +18,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
@@ -36,13 +39,15 @@ class PlayerActivity : AppCompatActivity() {
 
     private var isFullscreen = false
 
+    private var subtitleTracks: List<SubtitleTrack> = emptyList()
+    private var currentStreamUrl: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
 
         playerView = findViewById(R.id.playerView)
 
-        // 스피너 생성 + 색상 지정 (spinner 컬러 = 흰색 계열)
         progress = ProgressBar(this).apply {
             indeterminateTintList = ColorStateList.valueOf(
                 ContextCompat.getColor(this@PlayerActivity, R.color.spinner)
@@ -56,9 +61,9 @@ class PlayerActivity : AppCompatActivity() {
 
         val videoUri = intent.getStringExtra("VIDEO_URI")
         val videoId = intent.getStringExtra("VIDEO_ID")
-        val videoTitle = intent.getStringExtra("VIDEO_TITLE") ?: ""
-        val videoChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
-        val videoThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
+        val vTitle = intent.getStringExtra("VIDEO_TITLE") ?: ""
+        val vChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
+        val vThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
 
         val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
@@ -67,17 +72,19 @@ class PlayerActivity : AppCompatActivity() {
             playerView.player = mediaController
 
             when {
-                videoUri != null -> playUrl(videoUri)
-                videoId != null -> extractAndPlay(videoId, videoTitle, videoChannel, videoThumb)
+                videoUri != null -> playDirectUrl(videoUri)
+                videoId != null -> extractAndPlay(videoId, vTitle, vChannel, vThumb)
                 else -> Toast.makeText(this, "재생할 영상이 없습니다", Toast.LENGTH_SHORT).show()
             }
         }, MoreExecutors.directExecutor())
 
         findViewById<View>(R.id.btnFullscreen).setOnClickListener { toggleFullscreen() }
         findViewById<View>(R.id.btnPip).setOnClickListener { enterPipMode() }
+        findViewById<View>(R.id.btnCc).setOnClickListener { showSubtitleDialog() }
     }
 
-    private fun playUrl(url: String) {
+    private fun playDirectUrl(url: String) {
+        currentStreamUrl = url
         mediaController?.setMediaItem(MediaItem.fromUri(url))
         mediaController?.prepare()
         mediaController?.playWhenReady = true
@@ -98,13 +105,15 @@ class PlayerActivity : AppCompatActivity() {
                 return@launch
             }
 
-            when {
-                result.muxedUrl != null -> mediaController?.setMediaItem(MediaItem.fromUri(result.muxedUrl))
-                result.videoUrl != null -> mediaController?.setMediaItem(MediaItem.fromUri(result.videoUrl))
-                result.audioUrl != null -> mediaController?.setMediaItem(MediaItem.fromUri(result.audioUrl))
-            }
-            mediaController?.prepare()
-            mediaController?.playWhenReady = true
+            subtitleTracks = result.subtitles
+            val streamUrl = result.muxedUrl ?: result.videoUrl ?: result.audioUrl
+
+            // 자막 자동 선택: 한국어 > 영어 > 첫 번째
+            val autoSub = subtitleTracks.firstOrNull { it.languageCode.startsWith("ko") }
+                ?: subtitleTracks.firstOrNull { it.languageCode.startsWith("en") }
+                ?: subtitleTracks.firstOrNull()
+
+            applyStreamWithSubtitle(streamUrl, autoSub, null, 0L)
 
             saveHistory(
                 videoId = videoId,
@@ -113,6 +122,92 @@ class PlayerActivity : AppCompatActivity() {
                 thumb = thumb
             )
         }
+    }
+
+    private fun applyStreamWithSubtitle(
+        url: String?,
+        sub: SubtitleTrack?,
+        targetLang: String?,
+        startPosMs: Long
+    ) {
+        if (url.isNullOrBlank()) return
+        currentStreamUrl = url
+
+        val builder = MediaItem.Builder().setUri(url)
+
+        if (sub != null) {
+            val subUrl = if (targetLang != null) buildTranslatedUrl(sub.url, targetLang) else sub.url
+            val label = if (targetLang != null) "${sub.displayName} → 한국어" else sub.displayName
+            builder.setSubtitleConfigurations(
+                listOf(
+                    MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl))
+                        .setMimeType(MimeTypes.TEXT_VTT)
+                        .setLanguage(targetLang ?: sub.languageCode)
+                        .setLabel(label)
+                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                        .build()
+                )
+            )
+        }
+
+        mediaController?.setMediaItem(builder.build(), startPosMs)
+        mediaController?.prepare()
+        mediaController?.playWhenReady = true
+    }
+
+    private fun buildTranslatedUrl(originalUrl: String, targetLang: String): String {
+        return if (originalUrl.contains("tlang=")) {
+            originalUrl.replace(Regex("tlang=[a-zA-Z\\-]+"), "tlang=$targetLang")
+        } else {
+            "$originalUrl&tlang=$targetLang"
+        }
+    }
+
+    private fun showSubtitleDialog() {
+        if (subtitleTracks.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("자막")
+                .setMessage("이 영상엔 자막이 없습니다")
+                .setPositiveButton("확인", null)
+                .show()
+            return
+        }
+
+        val labels = mutableListOf<String>()
+        val callbacks = mutableListOf<() -> Unit>()
+
+        labels.add("자막 끄기")
+        callbacks.add {
+            applyStreamWithSubtitle(
+                currentStreamUrl, null, null,
+                mediaController?.currentPosition ?: 0L
+            )
+        }
+
+        for (s in subtitleTracks) {
+            val auto = if (s.isAutoGenerated) " · 자동" else ""
+            val name = "${s.displayName}$auto"
+            val pos = mediaController?.currentPosition ?: 0L
+
+            labels.add(name)
+            callbacks.add {
+                applyStreamWithSubtitle(currentStreamUrl, s, null, pos)
+            }
+
+            if (!s.languageCode.startsWith("ko")) {
+                labels.add("$name → 한국어")
+                callbacks.add {
+                    applyStreamWithSubtitle(currentStreamUrl, s, "ko", pos)
+                }
+            }
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("자막 선택")
+            .setItems(labels.toTypedArray()) { _, i ->
+                callbacks[i].invoke()
+            }
+            .show()
     }
 
     private suspend fun saveHistory(videoId: String, title: String, channel: String, thumb: String) =
