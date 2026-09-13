@@ -111,6 +111,8 @@ jobs:
         run: ./gradlew clean
 
       - name: Build Debug APK
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Check APK exists
