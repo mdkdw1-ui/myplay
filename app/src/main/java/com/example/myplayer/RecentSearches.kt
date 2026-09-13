@@ -21,11 +21,21 @@ object RecentSearches {
         list.remove(q)
         list.add(0, q)
         while (list.size > MAX) list.removeAt(list.size - 1)
-        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-            .edit().putString(KEY, list.joinToString("\u0001")).apply()
+        save(ctx, list)
+    }
+
+    fun remove(ctx: Context, query: String) {
+        val list = get(ctx).toMutableList()
+        list.remove(query)
+        save(ctx, list)
     }
 
     fun clear(ctx: Context) {
         ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().clear().apply()
+    }
+
+    private fun save(ctx: Context, list: List<String>) {
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+            .edit().putString(KEY, list.joinToString("\u0001")).apply()
     }
 }
