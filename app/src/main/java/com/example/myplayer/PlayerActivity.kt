@@ -3,13 +3,16 @@ package com.example.myplayer
 import android.app.AlertDialog
 import android.app.PictureInPictureParams
 import android.content.ComponentName
+import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
+import android.util.TypedValue
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -23,6 +26,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import com.google.android.material.button.MaterialButton
 import com.google.common.util.concurrent.ListenableFuture
@@ -36,6 +40,7 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var playerView: PlayerView
     private lateinit var progress: ProgressBar
     private lateinit var btnSpeed: MaterialButton
+    private lateinit var btnCc: MaterialButton
     private lateinit var controllerFuture: ListenableFuture<MediaController>
     private var mediaController: MediaController? = null
 
@@ -45,23 +50,24 @@ class PlayerActivity : AppCompatActivity() {
     private var subtitleTracks: List<SubtitleTrack> = emptyList()
     private var currentStreamUrl: String? = null
 
+    private val pref by lazy { getSharedPreferences("subtitle_prefs", Context.MODE_PRIVATE) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
 
         playerView = findViewById(R.id.playerView)
         btnSpeed = findViewById(R.id.btnSpeed)
+        btnCc = findViewById(R.id.btnCc)
 
         progress = ProgressBar(this).apply {
             indeterminateTintList = ColorStateList.valueOf(
                 ContextCompat.getColor(this@PlayerActivity, R.color.spinner)
             )
-            layoutParams = android.view.ViewGroup.LayoutParams(
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-            )
         }
         (playerView.parent as? android.view.ViewGroup)?.addView(progress)
+
+        applySubtitleStyle()
 
         val videoUri = intent.getStringExtra("VIDEO_URI")
         val videoId = intent.getStringExtra("VIDEO_ID")
@@ -85,13 +91,112 @@ class PlayerActivity : AppCompatActivity() {
         btnSpeed.setOnClickListener { showSpeedDialog() }
         findViewById<View>(R.id.btnFullscreen).setOnClickListener { toggleFullscreen() }
         findViewById<View>(R.id.btnPip).setOnClickListener { enterPipMode() }
-        findViewById<View>(R.id.btnCc).setOnClickListener { showSubtitleDialog() }
+        btnCc.setOnClickListener { showSubtitleDialog() }
     }
 
+    // ========== 자막 스타일 ==========
+    private fun applySubtitleStyle() {
+        val sizeSp = pref.getFloat("size_sp", 16f)
+        val textColor = pref.getInt("text_color", Color.WHITE)
+        val bgColor = pref.getInt("bg_color", 0xB3000000.toInt())
+        val edgeType = pref.getInt("edge", CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW)
+
+        val style = CaptionStyleCompat(
+            textColor,
+            bgColor,
+            Color.TRANSPARENT,
+            edgeType,
+            Color.BLACK,
+            null
+        )
+        playerView.subtitleView?.setStyle(style)
+        playerView.subtitleView?.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
+        playerView.subtitleView?.setBottomPaddingFraction(0.08f)
+    }
+
+    private fun showSubtitleStyleDialog() {
+        val items = arrayOf(
+            "크기",
+            "글자 색상",
+            "배경 색상",
+            "테두리/그림자",
+            "기본값으로 초기화"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("자막 스타일")
+            .setItems(items) { _, i ->
+                when (i) {
+                    0 -> showSizeDialog()
+                    1 -> showColorDialog("text_color", "글자 색상", Color.WHITE)
+                    2 -> showColorDialog("bg_color", "배경 색상", 0xB3000000.toInt())
+                    3 -> showEdgeDialog()
+                    4 -> {
+                        pref.edit().clear().apply()
+                        applySubtitleStyle()
+                        Toast.makeText(this, "초기화됨", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun showSizeDialog() {
+        val sizes = listOf(12f, 14f, 16f, 18f, 20f, 22f, 24f, 28f)
+        val labels = sizes.map { "${it.toInt()}sp" }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("자막 크기")
+            .setItems(labels) { _, i ->
+                pref.edit().putFloat("size_sp", sizes[i]).apply()
+                applySubtitleStyle()
+            }
+            .show()
+    }
+
+    private fun showColorDialog(key: String, title: String, default: Int) {
+        val colors = listOf(
+            "흰색" to Color.WHITE,
+            "노랑" to Color.YELLOW,
+            "시안" to Color.CYAN,
+            "연두" to Color.GREEN,
+            "주황" to 0xFFFFA500.toInt(),
+            "분홍" to 0xFFFFC0CB.toInt(),
+            "검정" to Color.BLACK,
+            "반투명 검정" to 0xB3000000.toInt(),
+            "반투명 회색" to 0x80888888.toInt(),
+            "반투명 흰색" to 0x80FFFFFF.toInt(),
+            "없음(투명)" to Color.TRANSPARENT
+        )
+        val labels = colors.map { it.first }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setItems(labels) { _, i ->
+                pref.edit().putInt(key, colors[i].second).apply()
+                applySubtitleStyle()
+            }
+            .show()
+    }
+
+    private fun showEdgeDialog() {
+        val edges = listOf(
+            "없음" to CaptionStyleCompat.EDGE_TYPE_NONE,
+            "외곽선" to CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+            "그림자" to CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW,
+            "배경 박스" to CaptionStyleCompat.EDGE_TYPE_NONE
+        )
+        val labels = edges.map { it.first }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("테두리/그림자")
+            .setItems(labels) { _, i ->
+                pref.edit().putInt("edge", edges[i].second).apply()
+                applySubtitleStyle()
+            }
+            .show()
+    }
+
+    // ========== 속도 ==========
     private fun showSpeedDialog() {
         val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
         val labels = speeds.map { "${it}x" }.toTypedArray()
-
         AlertDialog.Builder(this)
             .setTitle("재생 속도")
             .setItems(labels) { _, i ->
@@ -102,6 +207,7 @@ class PlayerActivity : AppCompatActivity() {
             .show()
     }
 
+    // ========== 재생 ==========
     private fun playDirectUrl(url: String) {
         currentStreamUrl = url
         mediaController?.setMediaItem(MediaItem.fromUri(url))
@@ -133,6 +239,7 @@ class PlayerActivity : AppCompatActivity() {
                 ?: subtitleTracks.firstOrNull()
 
             applyStreamWithSubtitle(streamUrl, autoSub, null, 0L)
+            updateCcButton(autoSub != null)
 
             saveHistory(
                 videoId = videoId,
@@ -141,6 +248,10 @@ class PlayerActivity : AppCompatActivity() {
                 thumb = thumb
             )
         }
+    }
+
+    private fun updateCcButton(active: Boolean) {
+        btnCc.alpha = if (active) 1.0f else 0.5f
     }
 
     private fun applyStreamWithSubtitle(
@@ -155,11 +266,13 @@ class PlayerActivity : AppCompatActivity() {
         val builder = MediaItem.Builder().setUri(url)
 
         if (sub != null) {
-            val subUrl = if (targetLang != null) buildTranslatedUrl(sub.url, targetLang) else sub.url
+            val rawUrl = if (targetLang != null) buildTranslatedUrl(sub.url, targetLang) else sub.url
+            val vttUrl = ensureVttFormat(rawUrl)
             val label = if (targetLang != null) "${sub.displayName} → 한국어" else sub.displayName
+
             builder.setSubtitleConfigurations(
                 listOf(
-                    MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl))
+                    MediaItem.SubtitleConfiguration.Builder(Uri.parse(vttUrl))
                         .setMimeType(MimeTypes.TEXT_VTT)
                         .setLanguage(targetLang ?: sub.languageCode)
                         .setLabel(label)
@@ -173,13 +286,26 @@ class PlayerActivity : AppCompatActivity() {
         mediaController?.prepare()
         mediaController?.playWhenReady = true
         mediaController?.setPlaybackSpeed(currentSpeed)
+
+        // 자막 스타일 다시 적용 (재생 후 subtitleView 초기화 방지)
+        playerView.post { applySubtitleStyle() }
+    }
+
+    // ★ 핵심: fmt=vtt 추가
+    private fun ensureVttFormat(url: String): String {
+        return if (url.contains("fmt=")) {
+            url.replace(Regex("fmt=[a-zA-Z0-9]+"), "fmt=vtt")
+        } else {
+            if (url.contains("?")) "$url&fmt=vtt" else "$url?fmt=vtt"
+        }
     }
 
     private fun buildTranslatedUrl(originalUrl: String, targetLang: String): String {
         return if (originalUrl.contains("tlang=")) {
             originalUrl.replace(Regex("tlang=[a-zA-Z\\-]+"), "tlang=$targetLang")
         } else {
-            "$originalUrl&tlang=$targetLang"
+            if (originalUrl.contains("?")) "$originalUrl&tlang=$targetLang"
+            else "$originalUrl?tlang=$targetLang"
         }
     }
 
@@ -189,6 +315,7 @@ class PlayerActivity : AppCompatActivity() {
                 .setTitle("자막")
                 .setMessage("이 영상엔 자막이 없습니다")
                 .setPositiveButton("확인", null)
+                .setNeutralButton("자막 스타일") { _, _ -> showSubtitleStyleDialog() }
                 .show()
             return
         }
@@ -202,6 +329,7 @@ class PlayerActivity : AppCompatActivity() {
                 currentStreamUrl, null, null,
                 mediaController?.currentPosition ?: 0L
             )
+            updateCcButton(false)
         }
 
         for (s in subtitleTracks) {
@@ -212,15 +340,20 @@ class PlayerActivity : AppCompatActivity() {
             labels.add(name)
             callbacks.add {
                 applyStreamWithSubtitle(currentStreamUrl, s, null, pos)
+                updateCcButton(true)
             }
 
             if (!s.languageCode.startsWith("ko")) {
                 labels.add("$name → 한국어")
                 callbacks.add {
                     applyStreamWithSubtitle(currentStreamUrl, s, "ko", pos)
+                    updateCcButton(true)
                 }
             }
         }
+
+        labels.add("⚙️ 자막 스타일")
+        callbacks.add { showSubtitleStyleDialog() }
 
         AlertDialog.Builder(this)
             .setTitle("자막 선택")
