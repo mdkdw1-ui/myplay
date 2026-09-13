@@ -147,36 +147,50 @@ class MainActivity : AppCompatActivity() {
                 }
                 historyAdapter.submit(home)
 
-                // 1) 비슷한 동영상 → 최근 영상의 "채널명"으로 검색
+                // 최근 영상의 "관련 동영상" (next 엔드포인트)
+                val latest = list.first()
+                loadRelated(latest.videoId, latest.title, latest.channel)
+
+                // 자주 본 채널
                 val topChannel = list.map { it.channel }
                     .filter { it.isNotBlank() }
                     .groupingBy { it }
                     .eachCount()
                     .maxByOrNull { it.value }
                     ?.key
-
-                val recentChannel = list.firstOrNull()?.channel?.takeIf { it.isNotBlank() }
-
-                val relatedQuery = recentChannel ?: topChannel
-                if (relatedQuery != null) loadRelated(relatedQuery)
-
-                // 2) 추천 채널 → 채널명 검색
                 if (topChannel != null) loadChannels(topChannel)
             }
         }
     }
 
-    private fun loadRelated(query: String) {
+    /**
+     * 1) YouTube "next" 엔드포인트로 진짜 관련 동영상
+     * 2) 실패 시 제목 키워드로 검색 (폴백)
+     */
+    private fun loadRelated(baseVideoId: String, baseTitle: String, baseChannel: String) {
         lifecycleScope.launch {
-            val results = YouTubeSearch.search(query)
-            val filtered = results.take(10)
-            if (filtered.isEmpty()) {
+            var results = YouTubeRelated.fetch(baseVideoId)
+
+            // 폴백: 제목 첫 4단어로 검색
+            if (results.size < 3) {
+                val keyword = baseTitle.split(" ")
+                    .filter { it.isNotBlank() }
+                    .take(4)
+                    .joinToString(" ")
+                if (keyword.isNotEmpty()) {
+                    results = YouTubeSearch.search(keyword)
+                        .filter { it.videoId != baseVideoId }
+                }
+            }
+
+            if (results.isEmpty()) {
                 findViewById<View>(R.id.sectionRelated).visibility = View.GONE
                 return@launch
             }
+
             findViewById<View>(R.id.sectionRelated).visibility = View.VISIBLE
             relatedAdapter.submit(
-                filtered.map {
+                results.take(10).map {
                     HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
                 }
             )
