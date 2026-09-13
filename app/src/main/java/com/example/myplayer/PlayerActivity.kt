@@ -24,6 +24,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
+import com.google.android.material.button.MaterialButton
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Dispatchers
@@ -34,10 +35,12 @@ class PlayerActivity : AppCompatActivity() {
 
     private lateinit var playerView: PlayerView
     private lateinit var progress: ProgressBar
+    private lateinit var btnSpeed: MaterialButton
     private lateinit var controllerFuture: ListenableFuture<MediaController>
     private var mediaController: MediaController? = null
 
     private var isFullscreen = false
+    private var currentSpeed = 1.0f
 
     private var subtitleTracks: List<SubtitleTrack> = emptyList()
     private var currentStreamUrl: String? = null
@@ -47,6 +50,7 @@ class PlayerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_player)
 
         playerView = findViewById(R.id.playerView)
+        btnSpeed = findViewById(R.id.btnSpeed)
 
         progress = ProgressBar(this).apply {
             indeterminateTintList = ColorStateList.valueOf(
@@ -78,9 +82,24 @@ class PlayerActivity : AppCompatActivity() {
             }
         }, MoreExecutors.directExecutor())
 
+        btnSpeed.setOnClickListener { showSpeedDialog() }
         findViewById<View>(R.id.btnFullscreen).setOnClickListener { toggleFullscreen() }
         findViewById<View>(R.id.btnPip).setOnClickListener { enterPipMode() }
         findViewById<View>(R.id.btnCc).setOnClickListener { showSubtitleDialog() }
+    }
+
+    private fun showSpeedDialog() {
+        val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+        val labels = speeds.map { "${it}x" }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("재생 속도")
+            .setItems(labels) { _, i ->
+                currentSpeed = speeds[i]
+                mediaController?.setPlaybackSpeed(currentSpeed)
+                btnSpeed.text = "${currentSpeed}x"
+            }
+            .show()
     }
 
     private fun playDirectUrl(url: String) {
@@ -88,6 +107,7 @@ class PlayerActivity : AppCompatActivity() {
         mediaController?.setMediaItem(MediaItem.fromUri(url))
         mediaController?.prepare()
         mediaController?.playWhenReady = true
+        mediaController?.setPlaybackSpeed(currentSpeed)
     }
 
     private fun extractAndPlay(videoId: String, title: String, channel: String, thumb: String) {
@@ -108,7 +128,6 @@ class PlayerActivity : AppCompatActivity() {
             subtitleTracks = result.subtitles
             val streamUrl = result.muxedUrl ?: result.videoUrl ?: result.audioUrl
 
-            // 자막 자동 선택: 한국어 > 영어 > 첫 번째
             val autoSub = subtitleTracks.firstOrNull { it.languageCode.startsWith("ko") }
                 ?: subtitleTracks.firstOrNull { it.languageCode.startsWith("en") }
                 ?: subtitleTracks.firstOrNull()
@@ -153,6 +172,7 @@ class PlayerActivity : AppCompatActivity() {
         mediaController?.setMediaItem(builder.build(), startPosMs)
         mediaController?.prepare()
         mediaController?.playWhenReady = true
+        mediaController?.setPlaybackSpeed(currentSpeed)
     }
 
     private fun buildTranslatedUrl(originalUrl: String, targetLang: String): String {
