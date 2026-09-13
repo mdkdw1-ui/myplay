@@ -17,6 +17,7 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -41,6 +42,8 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var btnSpeed: MaterialButton
     private lateinit var btnCc: MaterialButton
+    private lateinit var infoScroll: View
+    private lateinit var videoContainer: View
     private lateinit var controllerFuture: ListenableFuture<MediaController>
     private var mediaController: MediaController? = null
 
@@ -59,6 +62,8 @@ class PlayerActivity : AppCompatActivity() {
         playerView = findViewById(R.id.playerView)
         btnSpeed = findViewById(R.id.btnSpeed)
         btnCc = findViewById(R.id.btnCc)
+        infoScroll = findViewById(R.id.infoScroll)
+        videoContainer = findViewById(R.id.videoContainer)
 
         progress = ProgressBar(this).apply {
             indeterminateTintList = ColorStateList.valueOf(
@@ -74,6 +79,10 @@ class PlayerActivity : AppCompatActivity() {
         val vTitle = intent.getStringExtra("VIDEO_TITLE") ?: ""
         val vChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
         val vThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
+
+        (findViewById<TextView>(R.id.tvTitle)).text = vTitle
+        (findViewById<TextView>(R.id.tvChannel)).text = vChannel
+        (findViewById<TextView>(R.id.tvDescription)).text = "불러오는 중..."
 
         val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
@@ -94,126 +103,85 @@ class PlayerActivity : AppCompatActivity() {
         btnCc.setOnClickListener { showSubtitleDialog() }
     }
 
-    // ========== 자막 스타일 ==========
     private fun applySubtitleStyle() {
         val sizeSp = pref.getFloat("size_sp", 16f)
         val textColor = pref.getInt("text_color", Color.WHITE)
         val bgColor = pref.getInt("bg_color", 0xB3000000.toInt())
         val edgeType = pref.getInt("edge", CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW)
-
-        val style = CaptionStyleCompat(
-            textColor,
-            bgColor,
-            Color.TRANSPARENT,
-            edgeType,
-            Color.BLACK,
-            null
-        )
+        val style = CaptionStyleCompat(textColor, bgColor, Color.TRANSPARENT, edgeType, Color.BLACK, null)
         playerView.subtitleView?.setStyle(style)
         playerView.subtitleView?.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
         playerView.subtitleView?.setBottomPaddingFraction(0.08f)
     }
 
     private fun showSubtitleStyleDialog() {
-        val items = arrayOf(
-            "크기",
-            "글자 색상",
-            "배경 색상",
-            "테두리/그림자",
-            "기본값으로 초기화"
-        )
-        AlertDialog.Builder(this)
-            .setTitle("자막 스타일")
+        val items = arrayOf("크기", "글자 색상", "배경 색상", "테두리/그림자", "기본값으로 초기화")
+        AlertDialog.Builder(this).setTitle("자막 스타일")
             .setItems(items) { _, i ->
                 when (i) {
                     0 -> showSizeDialog()
-                    1 -> showColorDialog("text_color", "글자 색상", Color.WHITE)
-                    2 -> showColorDialog("bg_color", "배경 색상", 0xB3000000.toInt())
+                    1 -> showColorDialog("text_color", "글자 색상")
+                    2 -> showColorDialog("bg_color", "배경 색상")
                     3 -> showEdgeDialog()
-                    4 -> {
-                        pref.edit().clear().apply()
-                        applySubtitleStyle()
-                        Toast.makeText(this, "초기화됨", Toast.LENGTH_SHORT).show()
-                    }
+                    4 -> { pref.edit().clear().apply(); applySubtitleStyle() }
                 }
-            }
-            .show()
+            }.show()
     }
 
     private fun showSizeDialog() {
         val sizes = listOf(12f, 14f, 16f, 18f, 20f, 22f, 24f, 28f)
-        val labels = sizes.map { "${it.toInt()}sp" }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("자막 크기")
-            .setItems(labels) { _, i ->
+        AlertDialog.Builder(this).setTitle("자막 크기")
+            .setItems(sizes.map { "${it.toInt()}sp" }.toTypedArray()) { _, i ->
                 pref.edit().putFloat("size_sp", sizes[i]).apply()
                 applySubtitleStyle()
-            }
-            .show()
+            }.show()
     }
 
-    private fun showColorDialog(key: String, title: String, default: Int) {
+    private fun showColorDialog(key: String, title: String) {
         val colors = listOf(
-            "흰색" to Color.WHITE,
-            "노랑" to Color.YELLOW,
-            "시안" to Color.CYAN,
-            "연두" to Color.GREEN,
-            "주황" to 0xFFFFA500.toInt(),
-            "분홍" to 0xFFFFC0CB.toInt(),
-            "검정" to Color.BLACK,
-            "반투명 검정" to 0xB3000000.toInt(),
-            "반투명 회색" to 0x80888888.toInt(),
-            "반투명 흰색" to 0x80FFFFFF.toInt(),
+            "흰색" to Color.WHITE, "노랑" to Color.YELLOW, "시안" to Color.CYAN,
+            "연두" to Color.GREEN, "주황" to 0xFFFFA500.toInt(), "분홍" to 0xFFFFC0CB.toInt(),
+            "검정" to Color.BLACK, "반투명 검정" to 0xB3000000.toInt(),
+            "반투명 회색" to 0x80888888.toInt(), "반투명 흰색" to 0x80FFFFFF.toInt(),
             "없음(투명)" to Color.TRANSPARENT
         )
-        val labels = colors.map { it.first }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(title)
-            .setItems(labels) { _, i ->
+        AlertDialog.Builder(this).setTitle(title)
+            .setItems(colors.map { it.first }.toTypedArray()) { _, i ->
                 pref.edit().putInt(key, colors[i].second).apply()
                 applySubtitleStyle()
-            }
-            .show()
+            }.show()
     }
 
     private fun showEdgeDialog() {
         val edges = listOf(
             "없음" to CaptionStyleCompat.EDGE_TYPE_NONE,
             "외곽선" to CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-            "그림자" to CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW,
-            "배경 박스" to CaptionStyleCompat.EDGE_TYPE_NONE
+            "그림자" to CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
         )
-        val labels = edges.map { it.first }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("테두리/그림자")
-            .setItems(labels) { _, i ->
+        AlertDialog.Builder(this).setTitle("테두리/그림자")
+            .setItems(edges.map { it.first }.toTypedArray()) { _, i ->
                 pref.edit().putInt("edge", edges[i].second).apply()
                 applySubtitleStyle()
-            }
-            .show()
+            }.show()
     }
 
-    // ========== 속도 ==========
     private fun showSpeedDialog() {
         val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
-        val labels = speeds.map { "${it}x" }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("재생 속도")
-            .setItems(labels) { _, i ->
+        AlertDialog.Builder(this).setTitle("재생 속도")
+            .setItems(speeds.map { "${it}x" }.toTypedArray()) { _, i ->
                 currentSpeed = speeds[i]
                 mediaController?.setPlaybackSpeed(currentSpeed)
                 btnSpeed.text = "${currentSpeed}x"
-            }
-            .show()
+            }.show()
     }
 
-    // ========== 재생 ==========
     private fun playDirectUrl(url: String) {
         currentStreamUrl = url
         mediaController?.setMediaItem(MediaItem.fromUri(url))
         mediaController?.prepare()
         mediaController?.playWhenReady = true
         mediaController?.setPlaybackSpeed(currentSpeed)
+        (findViewById<TextView>(R.id.tvDescription)).text = "(URL 직접 재생)"
     }
 
     private fun extractAndPlay(videoId: String, title: String, channel: String, thumb: String) {
@@ -231,6 +199,11 @@ class PlayerActivity : AppCompatActivity() {
                 return@launch
             }
 
+            (findViewById<TextView>(R.id.tvTitle)).text = result.title.ifEmpty { title }
+            (findViewById<TextView>(R.id.tvChannel)).text = result.channelName.ifEmpty { channel }
+            (findViewById<TextView>(R.id.tvDescription)).text =
+                result.description.ifEmpty { "(설명 없음)" }
+
             subtitleTracks = result.subtitles
             val streamUrl = result.muxedUrl ?: result.videoUrl ?: result.audioUrl
 
@@ -241,35 +214,21 @@ class PlayerActivity : AppCompatActivity() {
             applyStreamWithSubtitle(streamUrl, autoSub, null, 0L)
             updateCcButton(autoSub != null)
 
-            saveHistory(
-                videoId = videoId,
-                title = if (title.isNotEmpty()) title else result.title,
-                channel = channel,
-                thumb = thumb
-            )
+            saveHistory(videoId, result.title.ifEmpty { title }, result.channelName.ifEmpty { channel }, thumb)
         }
     }
 
-    private fun updateCcButton(active: Boolean) {
-        btnCc.alpha = if (active) 1.0f else 0.5f
-    }
+    private fun updateCcButton(active: Boolean) { btnCc.alpha = if (active) 1.0f else 0.5f }
 
-    private fun applyStreamWithSubtitle(
-        url: String?,
-        sub: SubtitleTrack?,
-        targetLang: String?,
-        startPosMs: Long
-    ) {
+    private fun applyStreamWithSubtitle(url: String?, sub: SubtitleTrack?, targetLang: String?, startPosMs: Long) {
         if (url.isNullOrBlank()) return
         currentStreamUrl = url
-
         val builder = MediaItem.Builder().setUri(url)
 
         if (sub != null) {
             val rawUrl = if (targetLang != null) buildTranslatedUrl(sub.url, targetLang) else sub.url
             val vttUrl = ensureVttFormat(rawUrl)
             val label = if (targetLang != null) "${sub.displayName} → 한국어" else sub.displayName
-
             builder.setSubtitleConfigurations(
                 listOf(
                     MediaItem.SubtitleConfiguration.Builder(Uri.parse(vttUrl))
@@ -286,33 +245,21 @@ class PlayerActivity : AppCompatActivity() {
         mediaController?.prepare()
         mediaController?.playWhenReady = true
         mediaController?.setPlaybackSpeed(currentSpeed)
-
-        // 자막 스타일 다시 적용 (재생 후 subtitleView 초기화 방지)
         playerView.post { applySubtitleStyle() }
     }
 
-    // ★ 핵심: fmt=vtt 추가
-    private fun ensureVttFormat(url: String): String {
-        return if (url.contains("fmt=")) {
-            url.replace(Regex("fmt=[a-zA-Z0-9]+"), "fmt=vtt")
-        } else {
-            if (url.contains("?")) "$url&fmt=vtt" else "$url?fmt=vtt"
-        }
-    }
+    private fun ensureVttFormat(url: String): String =
+        if (url.contains("fmt=")) url.replace(Regex("fmt=[a-zA-Z0-9]+"), "fmt=vtt")
+        else if (url.contains("?")) "$url&fmt=vtt" else "$url?fmt=vtt"
 
-    private fun buildTranslatedUrl(originalUrl: String, targetLang: String): String {
-        return if (originalUrl.contains("tlang=")) {
-            originalUrl.replace(Regex("tlang=[a-zA-Z\\-]+"), "tlang=$targetLang")
-        } else {
-            if (originalUrl.contains("?")) "$originalUrl&tlang=$targetLang"
-            else "$originalUrl?tlang=$targetLang"
-        }
-    }
+    private fun buildTranslatedUrl(originalUrl: String, targetLang: String): String =
+        if (originalUrl.contains("tlang=")) originalUrl.replace(Regex("tlang=[a-zA-Z\\-]+"), "tlang=$targetLang")
+        else if (originalUrl.contains("?")) "$originalUrl&tlang=$targetLang"
+        else "$originalUrl?tlang=$targetLang"
 
     private fun showSubtitleDialog() {
         if (subtitleTracks.isEmpty()) {
-            AlertDialog.Builder(this)
-                .setTitle("자막")
+            AlertDialog.Builder(this).setTitle("자막")
                 .setMessage("이 영상엔 자막이 없습니다")
                 .setPositiveButton("확인", null)
                 .setNeutralButton("자막 스타일") { _, _ -> showSubtitleStyleDialog() }
@@ -325,10 +272,7 @@ class PlayerActivity : AppCompatActivity() {
 
         labels.add("자막 끄기")
         callbacks.add {
-            applyStreamWithSubtitle(
-                currentStreamUrl, null, null,
-                mediaController?.currentPosition ?: 0L
-            )
+            applyStreamWithSubtitle(currentStreamUrl, null, null, mediaController?.currentPosition ?: 0L)
             updateCcButton(false)
         }
 
@@ -336,30 +280,18 @@ class PlayerActivity : AppCompatActivity() {
             val auto = if (s.isAutoGenerated) " · 자동" else ""
             val name = "${s.displayName}$auto"
             val pos = mediaController?.currentPosition ?: 0L
-
             labels.add(name)
-            callbacks.add {
-                applyStreamWithSubtitle(currentStreamUrl, s, null, pos)
-                updateCcButton(true)
-            }
-
+            callbacks.add { applyStreamWithSubtitle(currentStreamUrl, s, null, pos); updateCcButton(true) }
             if (!s.languageCode.startsWith("ko")) {
                 labels.add("$name → 한국어")
-                callbacks.add {
-                    applyStreamWithSubtitle(currentStreamUrl, s, "ko", pos)
-                    updateCcButton(true)
-                }
+                callbacks.add { applyStreamWithSubtitle(currentStreamUrl, s, "ko", pos); updateCcButton(true) }
             }
         }
-
         labels.add("⚙️ 자막 스타일")
         callbacks.add { showSubtitleStyleDialog() }
 
-        AlertDialog.Builder(this)
-            .setTitle("자막 선택")
-            .setItems(labels.toTypedArray()) { _, i ->
-                callbacks[i].invoke()
-            }
+        AlertDialog.Builder(this).setTitle("자막 선택")
+            .setItems(labels.toTypedArray()) { _, i -> callbacks[i].invoke() }
             .show()
     }
 
@@ -367,58 +299,50 @@ class PlayerActivity : AppCompatActivity() {
         withContext(Dispatchers.IO) {
             try {
                 HistoryDatabase.get(applicationContext).historyDao().insert(
-                    HistoryEntity(
-                        videoId = videoId,
-                        title = title,
-                        channel = channel,
-                        thumbnail = thumb,
-                        watchedAt = System.currentTimeMillis()
-                    )
+                    HistoryEntity(videoId, title, channel, thumb, System.currentTimeMillis())
                 )
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            } catch (e: Exception) { e.printStackTrace() }
         }
 
     private fun toggleFullscreen() {
         val controller = window.insetsController ?: return
         if (!isFullscreen) {
             controller.hide(WindowInsets.Type.systemBars())
-            controller.systemBarsBehavior =
-                WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            infoScroll.visibility = View.GONE
+            val lp = videoContainer.layoutParams
+            lp.height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            videoContainer.layoutParams = lp
             isFullscreen = true
         } else {
             controller.show(WindowInsets.Type.systemBars())
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            infoScroll.visibility = View.VISIBLE
+            val lp = videoContainer.layoutParams
+            lp.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            videoContainer.layoutParams = lp
             isFullscreen = false
         }
     }
 
     private fun enterPipMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val params = PictureInPictureParams.Builder()
-                .setAspectRatio(Rational(16, 9))
-                .build()
+            val params = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()
             setPictureInPictureParams(params)
             enterPictureInPictureMode(params)
         }
     }
 
-    override fun onPictureInPictureModeChanged(
-        isInPictureInPictureMode: Boolean,
-        newConfig: Configuration
-    ) {
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        findViewById<View>(R.id.controlBar).visibility =
-            if (isInPictureInPictureMode) View.GONE else View.VISIBLE
+        findViewById<View>(R.id.controlBar).visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
+        infoScroll.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
     }
 
     override fun onStop() {
         super.onStop()
-        if (!isInPictureInPictureMode) {
-            mediaController?.pause()
-        }
+        if (!isInPictureInPictureMode) mediaController?.pause()
     }
 
     override fun onDestroy() {
