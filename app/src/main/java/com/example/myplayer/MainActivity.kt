@@ -1,6 +1,7 @@
 package com.example.myplayer
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -18,7 +19,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
@@ -40,7 +43,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         etHomeSearch = findViewById(R.id.etHomeSearch)
-
         etHomeSearch.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 val q = etHomeSearch.text.toString().trim()
@@ -49,35 +51,45 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     RecentSearches.add(this, q)
                     etHomeSearch.setText("")
-                    startActivity(Intent(this, SearchActivity::class.java)
-                        .putExtra("QUERY", q))
+                    startActivity(Intent(this, SearchActivity::class.java).putExtra("QUERY", q))
                 }
                 true
             } else false
         }
-
-        findViewById<View>(R.id.btnStartSearch).setOnClickListener {
-            etHomeSearch.requestFocus()
-        }
+        findViewById<View>(R.id.btnStartSearch).setOnClickListener { etHomeSearch.requestFocus() }
         findViewById<View>(R.id.tvHistoryMore).setOnClickListener {
             startActivity(Intent(this, HistoryActivity::class.java))
+        }
+
+        // ★ 전체 삭제 버튼
+        findViewById<View>(R.id.tvClearSearches).setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("최근 검색어")
+                .setMessage("모두 삭제할까요?")
+                .setPositiveButton("삭제") { _, _ ->
+                    RecentSearches.clear(this)
+                    loadRecentSearches()
+                }
+                .setNegativeButton("취소", null)
+                .show()
         }
 
         historyAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         relatedAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         channelAdapter = ChannelAdapter { c -> openChannel(c) }
 
-        val rvHistory = findViewById<RecyclerView>(R.id.rvHistory)
-        rvHistory.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        rvHistory.adapter = historyAdapter
-
-        val rvRelated = findViewById<RecyclerView>(R.id.rvRelated)
-        rvRelated.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        rvRelated.adapter = relatedAdapter
-
-        val rvChannels = findViewById<RecyclerView>(R.id.rvChannels)
-        rvChannels.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        rvChannels.adapter = channelAdapter
+        findViewById<RecyclerView>(R.id.rvHistory).apply {
+            layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
+            adapter = historyAdapter
+        }
+        findViewById<RecyclerView>(R.id.rvRelated).apply {
+            layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
+            adapter = relatedAdapter
+        }
+        findViewById<RecyclerView>(R.id.rvChannels).apply {
+            layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
+            adapter = channelAdapter
+        }
 
         loadRecentSearches()
         loadHistory()
@@ -95,10 +107,7 @@ class MainActivity : AppCompatActivity() {
         container.removeAllViews()
 
         val list = RecentSearches.get(this)
-        if (list.isEmpty()) {
-            section.visibility = View.GONE
-            return
-        }
+        if (list.isEmpty()) { section.visibility = View.GONE; return }
         section.visibility = View.VISIBLE
 
         for (q in list) {
@@ -114,10 +123,24 @@ class MainActivity : AppCompatActivity() {
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply { marginEnd = (8 * resources.displayMetrics.density).toInt() }
                 gravity = Gravity.CENTER
+
                 setOnClickListener {
                     RecentSearches.add(this@MainActivity, q)
-                    startActivity(Intent(this@MainActivity, SearchActivity::class.java)
-                        .putExtra("QUERY", q))
+                    startActivity(Intent(this@MainActivity, SearchActivity::class.java).putExtra("QUERY", q))
+                }
+
+                // ★ 롱프레스 → 삭제 확인
+                setOnLongClickListener {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("검색어 삭제")
+                        .setMessage("\"$q\" 삭제할까요?")
+                        .setPositiveButton("삭제") { _, _ ->
+                            RecentSearches.remove(this@MainActivity, q)
+                            loadRecentSearches()
+                        }
+                        .setNegativeButton("취소", null)
+                        .show()
+                    true
                 }
             }
             container.addView(chip)
@@ -126,8 +149,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadHistory() {
         lifecycleScope.launch {
-            val db = HistoryDatabase.get(applicationContext)
-            db.historyDao().getAll().collect { list ->
+            HistoryDatabase.get(applicationContext).historyDao().getAll().collect { list ->
                 val section = findViewById<View>(R.id.sectionHistory)
                 val emptyState = findViewById<View>(R.id.emptyState)
 
@@ -142,57 +164,70 @@ class MainActivity : AppCompatActivity() {
                 section.visibility = View.VISIBLE
                 emptyState.visibility = View.GONE
 
-                val home = list.take(10).map {
+                historyAdapter.submit(list.take(10).map {
                     HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
-                }
-                historyAdapter.submit(home)
+                })
 
-                // 최근 영상의 "관련 동영상" (next 엔드포인트)
-                val latest = list.first()
-                loadRelated(latest.videoId, latest.title, latest.channel)
+                loadRecommended(list)
 
-                // 자주 본 채널
                 val topChannel = list.map { it.channel }
                     .filter { it.isNotBlank() }
-                    .groupingBy { it }
-                    .eachCount()
-                    .maxByOrNull { it.value }
-                    ?.key
+                    .groupingBy { it }.eachCount()
+                    .maxByOrNull { it.value }?.key
                 if (topChannel != null) loadChannels(topChannel)
             }
         }
     }
 
-    /**
-     * 1) YouTube "next" 엔드포인트로 진짜 관련 동영상
-     * 2) 실패 시 제목 키워드로 검색 (폴백)
-     */
-    private fun loadRelated(baseVideoId: String, baseTitle: String, baseChannel: String) {
-        lifecycleScope.launch {
-            var results = YouTubeRelated.fetch(baseVideoId)
+    private suspend fun buildRecommendations(history: List<HistoryEntity>): List<VideoItem> =
+        withContext(Dispatchers.IO) {
+            val seeds = history.take(5)
+            val watchedIds = history.map { it.videoId }.toSet()
 
-            // 폴백: 제목 첫 4단어로 검색
-            if (results.size < 3) {
-                val keyword = baseTitle.split(" ")
-                    .filter { it.isNotBlank() }
-                    .take(4)
-                    .joinToString(" ")
-                if (keyword.isNotEmpty()) {
-                    results = YouTubeSearch.search(keyword)
-                        .filter { it.videoId != baseVideoId }
-                }
+            val channelWeight = history.map { it.channel }
+                .filter { it.isNotBlank() }
+                .groupingBy { it }.eachCount()
+
+            val scoreMap = mutableMapOf<String, Pair<VideoItem, Int>>()
+
+            for (seed in seeds) {
+                try {
+                    var related = YouTubeRelated.fetch(seed.videoId)
+                    if (related.size < 3) {
+                        val keyword = seed.title.split(" ")
+                            .filter { it.isNotBlank() }.take(4).joinToString(" ")
+                        if (keyword.isNotEmpty()) {
+                            related = YouTubeSearch.search(keyword)
+                        }
+                    }
+                    for (v in related) {
+                        if (v.videoId in watchedIds) continue
+                        if (v.videoId == seed.videoId) continue
+
+                        val existing = scoreMap[v.videoId]
+                        val bonus = (channelWeight[v.channel] ?: 0)
+                        val addScore = 1 + bonus
+
+                        scoreMap[v.videoId] = if (existing != null)
+                            existing.copy(second = existing.second + addScore)
+                        else Pair(v, addScore)
+                    }
+                } catch (e: Exception) { e.printStackTrace() }
             }
 
-            if (results.isEmpty()) {
+            scoreMap.values.sortedByDescending { it.second }.map { it.first }
+        }
+
+    private fun loadRecommended(history: List<HistoryEntity>) {
+        lifecycleScope.launch {
+            val recs = buildRecommendations(history)
+            if (recs.isEmpty()) {
                 findViewById<View>(R.id.sectionRelated).visibility = View.GONE
                 return@launch
             }
-
             findViewById<View>(R.id.sectionRelated).visibility = View.VISIBLE
             relatedAdapter.submit(
-                results.take(10).map {
-                    HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
-                }
+                recs.take(10).map { HomeVideo(it.videoId, it.title, it.channel, it.thumbnail) }
             )
         }
     }
@@ -200,9 +235,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadChannels(baseChannelName: String) {
         lifecycleScope.launch {
             val results = YouTubeChannels.search(baseChannelName)
-            val filtered = results
-                .filter { it.name != baseChannelName && it.thumbnail.isNotEmpty() }
-                .take(10)
+            val filtered = results.filter { it.name != baseChannelName && it.thumbnail.isNotEmpty() }.take(10)
             if (filtered.isEmpty()) {
                 findViewById<View>(R.id.sectionChannels).visibility = View.GONE
                 return@launch
@@ -223,7 +256,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun openChannel(c: ChannelItem) {
         RecentSearches.add(this, c.name)
-        startActivity(Intent(this, SearchActivity::class.java)
-            .putExtra("QUERY", c.name))
+        startActivity(Intent(this, SearchActivity::class.java).putExtra("QUERY", c.name))
     }
 }
