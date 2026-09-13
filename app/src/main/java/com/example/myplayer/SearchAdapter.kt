@@ -14,10 +14,17 @@ class SearchAdapter(
 
     private val items = mutableListOf<VideoItem>()
 
-    fun submit(newItems: List<VideoItem>) {
+    fun submit(list: List<VideoItem>) {
         items.clear()
-        items.addAll(newItems)
+        items.addAll(list)
         notifyDataSetChanged()
+    }
+
+    fun append(list: List<VideoItem>) {
+        if (list.isEmpty()) return
+        val start = items.size
+        items.addAll(list)
+        notifyItemRangeInserted(start, list.size)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {

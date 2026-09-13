@@ -53,7 +53,6 @@
         android:paddingBottom="8dp"
         android:textSize="12sp"
         android:textColor="@color/text_tertiary"
-        android:letterSpacing="0.02"
         android:visibility="gone" />
 
     <ProgressBar
@@ -61,17 +60,29 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:layout_marginTop="20dp"
+        android:layout_marginTop="12dp"
         android:indeterminateTint="@color/spinner"
         android:visibility="gone" />
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recycler"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:paddingStart="14dp"
-        android:paddingEnd="14dp"
-        android:paddingBottom="16dp"
-        android:clipToPadding="false" />
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recycler"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:paddingBottom="16dp"
+            android:clipToPadding="false" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvSuggest"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/bg_dark"
+            android:visibility="gone" />
+    </FrameLayout>
 </LinearLayout>
