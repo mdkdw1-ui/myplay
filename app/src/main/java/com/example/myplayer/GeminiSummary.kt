@@ -13,9 +13,9 @@ import kotlinx.coroutines.withContext
 object GeminiSummary {
 
     private const val TAG = "GeminiSummary"
-    private const val MODEL = "gemini-2.5-flash"
-    private const val ENDPOINT =
-        "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
+    // ★ v1 엔드포인트 (v1beta 대신) + 안정적인 별칭 사용
+    private const val MODEL = "gemini-flash-latest"
+    private const val ENDPOINT = "https://generativelanguage.googleapis.com/v1/models/$MODEL:generateContent"
 
     private fun stripHtml(input: String): String {
         if (input.isBlank()) return ""
@@ -39,8 +39,12 @@ object GeminiSummary {
 
     suspend fun summarize(title: String, transcript: String): String = withContext(Dispatchers.IO) {
         val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isBlank()) return@withContext "⚠️ API 키가 설정되지 않았습니다."
-        if (transcript.isBlank()) return@withContext ""
+        if (apiKey.isBlank()) {
+            return@withContext "⚠️ API 키가 설정되지 않았습니다."
+        }
+        if (transcript.isBlank()) {
+            return@withContext ""
+        }
 
         try {
             val clean = stripHtml(transcript).take(30000)
@@ -87,22 +91,28 @@ $clean
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
 
             val code = conn.responseCode
+            Log.d(TAG, "HTTP $code")
             if (code !in 200..299) {
                 val err = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText)
+                Log.e(TAG, "err body: $err")
                 return@withContext "요약 실패 (HTTP $code)"
             }
 
             val response = conn.inputStream.bufferedReader().use(BufferedReader::readText)
             val json = JSONObject(response)
 
-            json.optJSONArray("candidates")
+            val text = json.optJSONArray("candidates")
                 ?.optJSONObject(0)
                 ?.optJSONObject("content")
                 ?.optJSONArray("parts")
                 ?.optJSONObject(0)
                 ?.optString("text")
                 ?.trim() ?: ""
+
+            Log.d(TAG, "summary len=${text.length}")
+            text
         } catch (e: Exception) {
+            Log.e(TAG, "exception: ${e.message}", e)
             "요약 실패: ${e.message}"
         }
     }
