@@ -22,16 +22,31 @@
         android:padding="16dp">
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSpeed"
+            style="@style/Widget.MaterialComponents.Button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="1.0x"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:minWidth="0dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            app:backgroundTint="#33FFFFFF"
+            app:cornerRadius="20dp" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCc"
             style="@style/Widget.MaterialComponents.Button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
             android:text="CC"
             android:textSize="12sp"
             android:textStyle="bold"
             android:minWidth="0dp"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
             app:backgroundTint="#33FFFFFF"
             app:cornerRadius="20dp" />
 
@@ -44,8 +59,8 @@
             android:text="PiP"
             android:textSize="12sp"
             android:minWidth="0dp"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
             app:backgroundTint="#33FFFFFF"
             app:cornerRadius="20dp" />
 
@@ -58,8 +73,8 @@
             android:text="Full"
             android:textSize="12sp"
             android:minWidth="0dp"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
             app:backgroundTint="#33FFFFFF"
             app:cornerRadius="20dp" />
     </LinearLayout>
