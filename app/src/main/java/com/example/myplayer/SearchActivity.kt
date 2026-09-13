@@ -3,8 +3,6 @@ package com.example.myplayer
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
@@ -34,6 +32,7 @@ class SearchActivity : AppCompatActivity() {
     private var nextContinuation: String? = null
     private var loadingMore = false
     private var suggestJob: Job? = null
+    private var suppressSuggest = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,7 +44,6 @@ class SearchActivity : AppCompatActivity() {
         rvSuggest = findViewById(R.id.rvSuggest)
         val recycler = findViewById<RecyclerView>(R.id.recycler)
 
-        // 결과 어댑터
         adapter = SearchAdapter { item ->
             val intent = Intent(this, PlayerActivity::class.java).apply {
                 putExtra("VIDEO_ID", item.videoId)
@@ -58,7 +56,6 @@ class SearchActivity : AppCompatActivity() {
         recycler.layoutManager = LinearLayoutManager(this)
         recycler.adapter = adapter
 
-        // 무한 스크롤
         recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
                 if (dy <= 0) return
@@ -71,10 +68,15 @@ class SearchActivity : AppCompatActivity() {
             }
         })
 
-        // 자동완성 어댑터
         suggestAdapter = SuggestAdapter { picked ->
+            // ★ 핵심: 자동완성 탭 → 즉시 검색
+            suppressSuggest = true
             etQuery.setText(picked)
             etQuery.setSelection(picked.length)
+            suppressSuggest = false
+
+            suggestJob?.cancel()
+            suggestAdapter.clear()
             rvSuggest.visibility = View.GONE
             hideKeyboard()
             performSearch(picked)
@@ -82,11 +84,11 @@ class SearchActivity : AppCompatActivity() {
         rvSuggest.layoutManager = LinearLayoutManager(this)
         rvSuggest.adapter = suggestAdapter
 
-        // 텍스트 입력 → 자동완성
         etQuery.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun afterTextChanged(s: Editable?) {
+                if (suppressSuggest) return  // ★ 프로그램적 변경은 무시
                 val q = s?.toString()?.trim() ?: ""
                 if (q.length < 1) {
                     rvSuggest.visibility = View.GONE
@@ -95,9 +97,10 @@ class SearchActivity : AppCompatActivity() {
                 }
                 suggestJob?.cancel()
                 suggestJob = lifecycleScope.launch {
-                    delay(220)  // 디바운스
+                    delay(220)
+                    if (suppressSuggest) return@launch
                     val list = YouTubeSuggest.suggest(q)
-                    if (list.isEmpty()) {
+                    if (list.isEmpty() || suppressSuggest) {
                         rvSuggest.visibility = View.GONE
                     } else {
                         suggestAdapter.submit(list)
@@ -109,6 +112,7 @@ class SearchActivity : AppCompatActivity() {
 
         etQuery.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                suggestJob?.cancel()
                 rvSuggest.visibility = View.GONE
                 hideKeyboard()
                 performSearch(etQuery.text.toString().trim())
@@ -117,14 +121,17 @@ class SearchActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.btnSearch).setOnClickListener {
+            suggestJob?.cancel()
             rvSuggest.visibility = View.GONE
             hideKeyboard()
             performSearch(etQuery.text.toString().trim())
         }
 
         intent.getStringExtra("QUERY")?.takeIf { it.isNotEmpty() }?.let {
+            suppressSuggest = true
             etQuery.setText(it)
             etQuery.setSelection(it.length)
+            suppressSuggest = false
             hideKeyboard()
             performSearch(it)
         }
