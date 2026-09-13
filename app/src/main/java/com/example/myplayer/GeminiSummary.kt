@@ -15,7 +15,7 @@ object GeminiSummary {
     private const val TAG = "GeminiSummary"
 
     // 안정 버전 (목록에서 확인됨)
-    private const val MODEL = "gemini-2.5-flash"
+    private const val MODEL = "gemini-3.6-flash"
     private const val BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
     private fun stripHtml(input: String): String {
