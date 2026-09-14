@@ -5,10 +5,15 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [HistoryEntity::class], version = 1, exportSchema = false)
+@Database(
+    entities = [HistoryEntity::class, BookmarkEntity::class],
+    version = 2,
+    exportSchema = false
+)
 abstract class HistoryDatabase : RoomDatabase() {
 
     abstract fun historyDao(): HistoryDao
+    abstract fun bookmarkDao(): BookmarkDao
 
     companion object {
         @Volatile
@@ -20,7 +25,10 @@ abstract class HistoryDatabase : RoomDatabase() {
                     context.applicationContext,
                     HistoryDatabase::class.java,
                     "history.db"
-                ).build().also { INSTANCE = it }
+                )
+                    .fallbackToDestructiveMigration()   // 기존 DB 삭제 후 재생성
+                    .build()
+                    .also { INSTANCE = it }
             }
         }
     }
