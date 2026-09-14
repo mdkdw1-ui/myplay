@@ -69,7 +69,6 @@ class SearchActivity : AppCompatActivity() {
         })
 
         suggestAdapter = SuggestAdapter { picked ->
-            // ★ 핵심: 자동완성 탭 → 즉시 검색
             suppressSuggest = true
             etQuery.setText(picked)
             etQuery.setSelection(picked.length)
@@ -88,7 +87,7 @@ class SearchActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                if (suppressSuggest) return  // ★ 프로그램적 변경은 무시
+                if (suppressSuggest) return
                 val q = s?.toString()?.trim() ?: ""
                 if (q.length < 1) {
                     rvSuggest.visibility = View.GONE
@@ -174,6 +173,16 @@ class SearchActivity : AppCompatActivity() {
             progress.visibility = View.GONE
             nextContinuation = page.continuation
             tvStatus.text = "${page.videos.size}개 · ${elapsed}ms"
+
+            // ★ 임시 디버그: 첫 결과의 파싱 상태 확인
+            page.videos.firstOrNull()?.let { v ->
+                Toast.makeText(
+                    this@SearchActivity,
+                    "views='${v.viewCount}' date='${v.uploadDate}' dur='${v.duration}'",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+
             adapter.submit(page.videos)
         }
     }
