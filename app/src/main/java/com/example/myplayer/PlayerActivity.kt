@@ -18,6 +18,11 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.Html
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.TextPaint
+import android.text.method.LinkMovementMethod
+import android.text.style.ClickableSpan
 import android.util.Rational
 import android.util.TypedValue
 import android.view.GestureDetector
@@ -37,17 +42,20 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.regex.Pattern
 
 class PlayerActivity : AppCompatActivity() {
 
@@ -64,6 +72,9 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var tvSummaryBadge: TextView
     private lateinit var seekOverlayLeft: View
     private lateinit var seekOverlayRight: View
+    private lateinit var autoNextOverlay: View
+    private lateinit var tvNextCountdown: TextView
+    private lateinit var swAutoNext: SwitchMaterial
     private lateinit var controllerFuture: ListenableFuture<MediaController>
     private var mediaController: MediaController? = null
 
@@ -78,8 +89,20 @@ class PlayerActivity : AppCompatActivity() {
     private var currentChannel: String = ""
     private var currentThumb: String = ""
 
+    private var autoNextEnabled: Boolean = false
+    private var countdownJob: kotlinx.coroutines.Job? = null
+
     private val pref by lazy { getSharedPreferences("subtitle_prefs", Context.MODE_PRIVATE) }
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    // ★ 재생 상태 리스너
+    private val playerListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED) {
+                onVideoEnded()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,6 +120,20 @@ class PlayerActivity : AppCompatActivity() {
         tvSummaryBadge = findViewById(R.id.tvSummaryBadge)
         seekOverlayLeft = findViewById(R.id.seekOverlayLeft)
         seekOverlayRight = findViewById(R.id.seekOverlayRight)
+        autoNextOverlay = findViewById(R.id.autoNextOverlay)
+        tvNextCountdown = findViewById(R.id.tvNextCountdown)
+        swAutoNext = findViewById(R.id.swAutoNext)
+
+        autoNextEnabled = pref.getBoolean("auto_next", false)
+        swAutoNext.isChecked = autoNextEnabled
+        swAutoNext.setOnCheckedChangeListener { _, checked ->
+            autoNextEnabled = checked
+            pref.edit().putBoolean("auto_next", checked).apply()
+        }
+
+        findViewById<MaterialButton>(R.id.btnCancelAutoNext).setOnClickListener {
+            cancelAutoNext()
+        }
 
         progress = ProgressBar(this).apply {
             indeterminateTintList = ColorStateList.valueOf(
@@ -127,6 +164,7 @@ class PlayerActivity : AppCompatActivity() {
         controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
         controllerFuture.addListener({
             mediaController = controllerFuture.get()
+            mediaController?.addListener(playerListener)   // ★ 리스너 등록
             playerView.player = mediaController
 
             when {
@@ -146,26 +184,124 @@ class PlayerActivity : AppCompatActivity() {
         btnShare.setOnClickListener { showShareDialog() }
     }
 
-    // ========== 제스처: 더블탭 시크 ==========
+    // ========== 🔗 타임스탬프 인식 ==========
+    private val tsPattern = Pattern.compile("(?<![\\d:])(?:\\d{1,2}:)?\\d{1,2}:\\d{2}(?![\\d:])")
+
+    private fun makeTimestampsClickable(textView: TextView, text: String) {
+        if (text.isBlank()) {
+            textView.text = text
+            return
+        }
+        val spannable = SpannableString(text)
+        val matcher = tsPattern.matcher(text)
+        val accent = ContextCompat.getColor(this, R.color.accent)
+
+        while (matcher.find()) {
+            val start = matcher.start()
+            val end = matcher.end()
+            val ts = text.substring(start, end)
+            val ms = parseTimestamp(ts)
+            if (ms <= 0) continue
+
+            spannable.setSpan(
+                object : ClickableSpan() {
+                    override fun onClick(widget: View) {
+                        mediaController?.seekTo(ms)
+                        Toast.makeText(
+                            this@PlayerActivity,
+                            "$ts 로 이동",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    override fun updateDrawState(ds: TextPaint) {
+                        ds.color = accent
+                        ds.isUnderlineText = false
+                        ds.isFakeBoldText = true
+                    }
+                },
+                start, end,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+        textView.movementMethod = LinkMovementMethod.getInstance()
+        textView.text = spannable
+    }
+
+    private fun parseTimestamp(ts: String): Long {
+        val parts = ts.split(":").mapNotNull { it.toLongOrNull() }
+        return when (parts.size) {
+            2 -> (parts[0] * 60 + parts[1]) * 1000
+            3 -> (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000
+            else -> 0L
+        }
+    }
+
+    // ========== ▶ 자동 다음 동영상 ==========
+    private fun onVideoEnded() {
+        if (!autoNextEnabled) return
+        // 카운트다운 시작
+        cancelAutoNext()
+        autoNextOverlay.visibility = View.VISIBLE
+        tvNextCountdown.text = "5"
+
+        countdownJob = lifecycleScope.launch {
+            for (i in 5 downTo 1) {
+                tvNextCountdown.text = i.toString()
+                kotlinx.coroutines.delay(1000)
+            }
+            autoNextOverlay.visibility = View.GONE
+            playNextRelated()
+        }
+    }
+
+    private fun cancelAutoNext() {
+        countdownJob?.cancel()
+        countdownJob = null
+        autoNextOverlay.visibility = View.GONE
+    }
+
+    private fun playNextRelated() {
+        val vid = currentVideoId
+        if (vid.isBlank()) return
+
+        lifecycleScope.launch {
+            // 1) next 엔드포인트
+            var list = YouTubeRelated.fetch(vid)
+            // 2) 폴백: 제목 키워드 검색
+            if (list.isEmpty()) {
+                val kw = currentTitle.split(" ")
+                    .filter { it.isNotBlank() }.take(4).joinToString(" ")
+                if (kw.isNotEmpty()) {
+                    list = YouTubeSearch.search(kw).filter { it.videoId != vid }
+                }
+            }
+            val next = list.firstOrNull() ?: return@launch
+
+            // ★ 같은 Activity에서 다음 영상 재생
+            currentVideoId = next.videoId
+            currentTitle = next.title
+            currentChannel = next.channel
+            currentThumb = next.thumbnail
+
+            extractAndPlay(next.videoId, next.title, next.channel, next.thumbnail, 0L)
+        }
+    }
+
+    // ========== 제스처 ==========
     private fun setupGestures() {
         val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 val width = playerView.width
                 if (width <= 0) return false
                 val x = e.x
-
                 when {
-                    // 왼쪽 1/3 → 10초 뒤로
                     x < width / 3f -> seekBy(-10_000L, true)
-                    // 오른쪽 1/3 → 10초 앞으로
                     x > width * 2 / 3f -> seekBy(10_000L, false)
-                    // 가운데 → 재생/일시정지
                     else -> togglePlayPause()
                 }
                 return true
             }
         })
-
         playerView.setOnTouchListener { _, event ->
             gestureDetector.onTouchEvent(event)
             false
@@ -176,16 +312,11 @@ class PlayerActivity : AppCompatActivity() {
         val mc = mediaController ?: return
         val dur = mc.duration
         if (dur <= 0) return
-
         val newPos = (mc.currentPosition + deltaMs).coerceIn(0L, dur)
         mc.seekTo(newPos)
-
-        // 오버레이 표시 (0.5초)
         val overlay = if (isLeft) seekOverlayLeft else seekOverlayRight
         overlay.visibility = View.VISIBLE
-        mainHandler.postDelayed({
-            overlay.visibility = View.GONE
-        }, 500)
+        mainHandler.postDelayed({ overlay.visibility = View.GONE }, 500)
     }
 
     private fun togglePlayPause() {
@@ -193,23 +324,20 @@ class PlayerActivity : AppCompatActivity() {
         if (mc.isPlaying) mc.pause() else mc.play()
     }
 
-    // ========== 📤 공유 ==========
+    // ========== 공유 ==========
     private fun showShareDialog() {
         if (currentVideoId.isBlank()) {
             Toast.makeText(this, "공유할 수 없는 영상입니다", Toast.LENGTH_SHORT).show()
             return
         }
         val youtubeUrl = "https://www.youtube.com/watch?v=$currentVideoId"
-
         val items = arrayOf(
             "📱 공유하기",
             "▶ YouTube 앱에서 열기",
             "🔗 URL 복사",
             "🌐 브라우저에서 열기"
         )
-
-        AlertDialog.Builder(this)
-            .setTitle("공유")
+        AlertDialog.Builder(this).setTitle("공유")
             .setItems(items) { _, i ->
                 when (i) {
                     0 -> shareViaIntent(youtubeUrl)
@@ -217,8 +345,7 @@ class PlayerActivity : AppCompatActivity() {
                     2 -> copyToClipboard(youtubeUrl)
                     3 -> openBrowser(youtubeUrl)
                 }
-            }
-            .show()
+            }.show()
     }
 
     private fun shareViaIntent(url: String) {
@@ -231,14 +358,8 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun openYouTubeApp(url: String) {
-        // YouTube 앱으로 시도
         val ytAppIntent = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$currentVideoId"))
-        try {
-            startActivity(ytAppIntent)
-        } catch (e: ActivityNotFoundException) {
-            // 앱 없으면 브라우저로
-            openBrowser(url)
-        }
+        try { startActivity(ytAppIntent) } catch (e: ActivityNotFoundException) { openBrowser(url) }
     }
 
     private fun copyToClipboard(url: String) {
@@ -248,14 +369,11 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun openBrowser(url: String) {
-        try {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        } catch (e: Exception) {
-            Toast.makeText(this, "브라우저를 열 수 없습니다", Toast.LENGTH_SHORT).show()
-        }
+        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+        catch (e: Exception) { Toast.makeText(this, "브라우저를 열 수 없습니다", Toast.LENGTH_SHORT).show() }
     }
 
-    // ========== ⭐ 북마크 ==========
+    // ========== 북마크 ==========
     private fun refreshBookmarkState(videoId: String) {
         if (videoId.isBlank()) return
         lifecycleScope.launch {
@@ -287,10 +405,8 @@ class PlayerActivity : AppCompatActivity() {
                     withContext(Dispatchers.IO) {
                         db.bookmarkDao().insert(
                             BookmarkEntity(
-                                videoId = currentVideoId,
-                                title = currentTitle,
-                                channel = currentChannel,
-                                thumbnail = currentThumb,
+                                videoId = currentVideoId, title = currentTitle,
+                                channel = currentChannel, thumbnail = currentThumb,
                                 savedAt = System.currentTimeMillis()
                             )
                         )
@@ -304,7 +420,7 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    // ========== ⏱ 이어보기 ==========
+    // ========== 이어보기 ==========
     private fun formatTime(ms: Long): String {
         val sec = ms / 1000
         val h = sec / 3600
@@ -325,11 +441,8 @@ class PlayerActivity : AppCompatActivity() {
             val dur = saved?.durationMs ?: 0L
             val canResume = pos > 30_000L && (dur == 0L || dur - pos > 30_000L)
 
-            if (canResume) {
-                showResumeDialog(videoId, title, channel, thumb, pos, dur)
-            } else {
-                extractAndPlay(videoId, title, channel, thumb, 0L)
-            }
+            if (canResume) showResumeDialog(videoId, title, channel, thumb, pos, dur)
+            else extractAndPlay(videoId, title, channel, thumb, 0L)
         }
     }
 
@@ -341,7 +454,6 @@ class PlayerActivity : AppCompatActivity() {
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
         dialog.setContentView(R.layout.dialog_resume)
         dialog.setCancelable(false)
-
         dialog.window?.apply {
             setBackgroundDrawableResource(android.R.color.transparent)
             setLayout(
@@ -349,9 +461,7 @@ class PlayerActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
-
         dialog.findViewById<TextView>(R.id.tvResumeTime).text = formatTime(posMs)
-
         if (durMs > 0) {
             val percent = ((posMs * 100) / durMs).toInt().coerceIn(0, 100)
             val fill = dialog.findViewById<View>(R.id.vProgressFill)
@@ -363,17 +473,14 @@ class PlayerActivity : AppCompatActivity() {
                 fill.layoutParams = lp
             }
         }
-
         dialog.findViewById<MaterialButton>(R.id.btnResume).setOnClickListener {
             dialog.dismiss()
             extractAndPlay(videoId, title, channel, thumb, posMs)
         }
-
         dialog.findViewById<MaterialButton>(R.id.btnStartOver).setOnClickListener {
             dialog.dismiss()
             extractAndPlay(videoId, title, channel, thumb, 0L)
         }
-
         dialog.show()
     }
 
@@ -544,7 +651,9 @@ class PlayerActivity : AppCompatActivity() {
                     result.description.replace(Regex("<[^>]+>"), " ")
                 }.replace(Regex("\\s+"), " ").trim()
             } else "(설명 없음)"
-            (findViewById<TextView>(R.id.tvDescription)).text = descText
+
+            // ★ 타임스탬프 클릭 가능하게
+            makeTimestampsClickable(findViewById(R.id.tvDescription), descText)
 
             subtitleTracks = result.subtitles
             val streamUrl = result.muxedUrl ?: result.videoUrl ?: result.audioUrl
@@ -689,11 +798,13 @@ class PlayerActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         savePosition()
+        cancelAutoNext()
         if (!isInPictureInPictureMode) mediaController?.pause()
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        mediaController?.removeListener(playerListener)
         MediaController.releaseFuture(controllerFuture)
     }
 }
