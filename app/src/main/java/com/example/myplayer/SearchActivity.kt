@@ -12,6 +12,7 @@ import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -28,11 +29,18 @@ class SearchActivity : AppCompatActivity() {
     private lateinit var tvStatus: TextView
     private lateinit var etQuery: EditText
     private lateinit var rvSuggest: RecyclerView
+    private lateinit var scrollFilters: View
+    private lateinit var chipSort: TextView
+    private lateinit var chipDate: TextView
+    private lateinit var chipDuration: TextView
 
     private var nextContinuation: String? = null
     private var loadingMore = false
     private var suggestJob: Job? = null
     private var suppressSuggest = false
+
+    private var lastQuery: String = ""
+    private var filter = SearchFilter()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +50,10 @@ class SearchActivity : AppCompatActivity() {
         tvStatus = findViewById(R.id.tvStatus)
         etQuery = findViewById(R.id.etQuery)
         rvSuggest = findViewById(R.id.rvSuggest)
+        scrollFilters = findViewById(R.id.scrollFilters)
+        chipSort = findViewById(R.id.chipSort)
+        chipDate = findViewById(R.id.chipDate)
+        chipDuration = findViewById(R.id.chipDuration)
         val recycler = findViewById<RecyclerView>(R.id.recycler)
 
         adapter = SearchAdapter { item ->
@@ -73,7 +85,6 @@ class SearchActivity : AppCompatActivity() {
             etQuery.setText(picked)
             etQuery.setSelection(picked.length)
             suppressSuggest = false
-
             suggestJob?.cancel()
             suggestAdapter.clear()
             rvSuggest.visibility = View.GONE
@@ -99,9 +110,8 @@ class SearchActivity : AppCompatActivity() {
                     delay(220)
                     if (suppressSuggest) return@launch
                     val list = YouTubeSuggest.suggest(q)
-                    if (list.isEmpty() || suppressSuggest) {
-                        rvSuggest.visibility = View.GONE
-                    } else {
+                    if (list.isEmpty() || suppressSuggest) rvSuggest.visibility = View.GONE
+                    else {
                         suggestAdapter.submit(list)
                         rvSuggest.visibility = View.VISIBLE
                     }
@@ -126,6 +136,11 @@ class SearchActivity : AppCompatActivity() {
             performSearch(etQuery.text.toString().trim())
         }
 
+        // ★ 필터 칩
+        chipSort.setOnClickListener { showSortDialog() }
+        chipDate.setOnClickListener { showDateDialog() }
+        chipDuration.setOnClickListener { showDurationDialog() }
+
         intent.getStringExtra("QUERY")?.takeIf { it.isNotEmpty() }?.let {
             suppressSuggest = true
             etQuery.setText(it)
@@ -134,6 +149,50 @@ class SearchActivity : AppCompatActivity() {
             hideKeyboard()
             performSearch(it)
         }
+    }
+
+    private fun updateChips() {
+        chipSort.text = "${filter.sort.label} ▾"
+        chipDate.text = if (filter.uploadDate == SearchFilter.UploadDate.ALL) "업로드 날짜 ▾"
+                        else "${filter.uploadDate.label} ▾"
+        chipDuration.text = if (filter.duration == SearchFilter.Duration.ALL) "길이 ▾"
+                            else "${filter.duration.label} ▾"
+    }
+
+    private fun showSortDialog() {
+        val items = SearchFilter.SortBy.values().map { it.label }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("정렬")
+            .setItems(items) { _, i ->
+                filter = filter.copy(sort = SearchFilter.SortBy.values()[i])
+                updateChips()
+                if (lastQuery.isNotEmpty()) performSearch(lastQuery)
+            }
+            .show()
+    }
+
+    private fun showDateDialog() {
+        val items = SearchFilter.UploadDate.values().map { it.label }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("업로드 날짜")
+            .setItems(items) { _, i ->
+                filter = filter.copy(uploadDate = SearchFilter.UploadDate.values()[i])
+                updateChips()
+                if (lastQuery.isNotEmpty()) performSearch(lastQuery)
+            }
+            .show()
+    }
+
+    private fun showDurationDialog() {
+        val items = SearchFilter.Duration.values().map { it.label }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("길이")
+            .setItems(items) { _, i ->
+                filter = filter.copy(duration = SearchFilter.Duration.values()[i])
+                updateChips()
+                if (lastQuery.isNotEmpty()) performSearch(lastQuery)
+            }
+            .show()
     }
 
     private fun loadMore() {
@@ -159,7 +218,11 @@ class SearchActivity : AppCompatActivity() {
             return
         }
 
+        lastQuery = q
         RecentSearches.add(this, q)
+
+        scrollFilters.visibility = View.VISIBLE
+        updateChips()
 
         progress.visibility = View.VISIBLE
         tvStatus.visibility = View.VISIBLE
@@ -167,7 +230,7 @@ class SearchActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val start = System.currentTimeMillis()
-            val page = YouTubeSearch.searchPage(q)
+            val page = YouTubeSearch.searchPage(q, filter)
             val elapsed = System.currentTimeMillis() - start
 
             progress.visibility = View.GONE
