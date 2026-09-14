@@ -64,6 +64,7 @@ class HistoryActivity : AppCompatActivity() {
         val intent = Intent(this, RelatedActivity::class.java).apply {
             putExtra("VIDEO_ID", item.videoId)
             putExtra("VIDEO_TITLE", item.title)
+            putExtra("VIDEO_CHANNEL", item.channel)   // ★ 채널 정보 전달
         }
         startActivity(intent)
     }
