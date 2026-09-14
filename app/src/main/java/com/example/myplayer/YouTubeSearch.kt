@@ -14,7 +14,9 @@ data class VideoItem(
     val title: String,
     val channel: String,
     val thumbnail: String,
-    val duration: String = ""
+    val duration: String = "",
+    val viewCount: String = "",
+    val uploadDate: String = ""
 )
 
 data class SearchPage(
@@ -45,12 +47,10 @@ object YouTubeSearch {
                 })
                 put("query", query)
             }
-
             val response = post(ENDPOINT, body.toString()) ?: return@withContext SearchPage(emptyList(), null)
             val json = JSONObject(response)
             collectVideos(json, videos)
             cont = findContinuation(json)
-            Log.d(TAG, "search '$query' -> ${videos.size}, cont=${cont != null}")
         } catch (e: Exception) {
             Log.e(TAG, "err: ${e.message}", e)
         }
@@ -72,12 +72,10 @@ object YouTubeSearch {
                 })
                 put("continuation", continuation)
             }
-
             val response = post(ENDPOINT, body.toString()) ?: return@withContext SearchPage(emptyList(), null)
             val json = JSONObject(response)
             collectVideos(json, videos)
             cont = findContinuation(json)
-            Log.d(TAG, "more -> ${videos.size}, cont=${cont != null}")
         } catch (e: Exception) {
             Log.e(TAG, "err: ${e.message}", e)
         }
@@ -152,6 +150,9 @@ object YouTubeSearch {
             ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
             ?: "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
         val duration = v.optJSONObject("lengthText")?.optString("simpleText") ?: ""
-        return VideoItem(videoId, title, channel, thumbnail, duration)
+        val viewCount = v.optJSONObject("viewCountText")?.optString("simpleText")
+            ?: v.optJSONObject("shortViewCountText")?.optString("simpleText") ?: ""
+        val uploadDate = v.optJSONObject("publishedTimeText")?.optString("simpleText") ?: ""
+        return VideoItem(videoId, title, channel, thumbnail, duration, viewCount, uploadDate)
     }
 }
