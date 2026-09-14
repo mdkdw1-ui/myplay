@@ -173,16 +173,6 @@ class SearchActivity : AppCompatActivity() {
             progress.visibility = View.GONE
             nextContinuation = page.continuation
             tvStatus.text = "${page.videos.size}개 · ${elapsed}ms"
-
-            // ★ 임시 디버그: 첫 결과의 파싱 상태 확인
-            page.videos.firstOrNull()?.let { v ->
-                Toast.makeText(
-                    this@SearchActivity,
-                    "views='${v.viewCount}' date='${v.uploadDate}' dur='${v.duration}'",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-
             adapter.submit(page.videos)
         }
     }
