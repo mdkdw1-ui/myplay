@@ -43,6 +43,20 @@
                 app:cornerRadius="20dp" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnShare"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="📤"
+                android:textSize="14sp"
+                android:minWidth="0dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                app:backgroundTint="#33FFFFFF"
+                app:cornerRadius="20dp" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSpeed"
                 style="@style/Widget.MaterialComponents.Button"
                 android:layout_width="wrap_content"
@@ -100,6 +114,43 @@
                 app:backgroundTint="#33FFFFFF"
                 app:cornerRadius="20dp" />
         </LinearLayout>
+
+        <!-- 더블탭 시 표시될 시크 피드백 오버레이 -->
+        <FrameLayout
+            android:id="@+id/seekOverlayLeft"
+            android:layout_width="120dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="start|center_vertical"
+            android:background="#66000000"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="◀◀ 10"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/seekOverlayRight"
+            android:layout_width="120dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="end|center_vertical"
+            android:background="#66000000"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="10 ▶▶"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+        </FrameLayout>
     </FrameLayout>
 
     <androidx.core.widget.NestedScrollView
