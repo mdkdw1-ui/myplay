@@ -47,10 +47,12 @@ object YouTubeSearch {
                 })
                 put("query", query)
             }
-            val response = post(ENDPOINT, body.toString()) ?: return@withContext SearchPage(emptyList(), null)
+            val response = post(ENDPOINT, body.toString())
+                ?: return@withContext SearchPage(emptyList(), null)
             val json = JSONObject(response)
             collectVideos(json, videos)
             cont = findContinuation(json)
+            Log.d(TAG, "search '$query' -> ${videos.size} videos")
         } catch (e: Exception) {
             Log.e(TAG, "err: ${e.message}", e)
         }
@@ -72,7 +74,8 @@ object YouTubeSearch {
                 })
                 put("continuation", continuation)
             }
-            val response = post(ENDPOINT, body.toString()) ?: return@withContext SearchPage(emptyList(), null)
+            val response = post(ENDPOINT, body.toString())
+                ?: return@withContext SearchPage(emptyList(), null)
             val json = JSONObject(response)
             collectVideos(json, videos)
             cont = findContinuation(json)
@@ -136,23 +139,35 @@ object YouTubeSearch {
         return null
     }
 
+    private fun extractText(obj: JSONObject?): String {
+        if (obj == null) return ""
+        val simple = obj.optString("simpleText")
+        if (simple.isNotBlank()) return simple
+        return obj.optJSONArray("runs")
+            ?.optJSONObject(0)
+            ?.optString("text") ?: ""
+    }
+
     private fun parseVideo(v: JSONObject): VideoItem? {
         val videoId = v.optString("videoId").takeIf { it.isNotEmpty() } ?: return null
-        val title = v.optJSONObject("title")
-            ?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
-            ?: v.optJSONObject("title")?.optString("simpleText") ?: ""
-        val channel = v.optJSONObject("ownerText")
-            ?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
-            ?: v.optJSONObject("longBylineText")
-                ?.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: ""
+
+        val title = extractText(v.optJSONObject("title"))
+        val channel = extractText(v.optJSONObject("ownerText"))
+            .ifBlank { extractText(v.optJSONObject("longBylineText")) }
+            .ifBlank { extractText(v.optJSONObject("shortBylineText")) }
+
         val thumbnail = v.optJSONObject("thumbnail")
             ?.optJSONArray("thumbnails")
             ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
             ?: "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
-        val duration = v.optJSONObject("lengthText")?.optString("simpleText") ?: ""
-        val viewCount = v.optJSONObject("viewCountText")?.optString("simpleText")
-            ?: v.optJSONObject("shortViewCountText")?.optString("simpleText") ?: ""
-        val uploadDate = v.optJSONObject("publishedTimeText")?.optString("simpleText") ?: ""
+
+        val duration = extractText(v.optJSONObject("lengthText"))
+
+        val viewCount = extractText(v.optJSONObject("viewCountText"))
+            .ifBlank { extractText(v.optJSONObject("shortViewCountText")) }
+
+        val uploadDate = extractText(v.optJSONObject("publishedTimeText"))
+
         return VideoItem(videoId, title, channel, thumbnail, duration, viewCount, uploadDate)
     }
 }
