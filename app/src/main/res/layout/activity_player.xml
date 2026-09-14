@@ -115,7 +115,6 @@
                 app:cornerRadius="20dp" />
         </LinearLayout>
 
-        <!-- 더블탭 시 표시될 시크 피드백 오버레이 -->
         <FrameLayout
             android:id="@+id/seekOverlayLeft"
             android:layout_width="120dp"
@@ -151,6 +150,45 @@
                 android:textSize="16sp"
                 android:textStyle="bold" />
         </FrameLayout>
+
+        <!-- 자동 다음 동영상 알림 오버레이 -->
+        <LinearLayout
+            android:id="@+id/autoNextOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="#CC000000"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="다음 동영상"
+                android:textColor="#AAAAAA"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvNextCountdown"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="5"
+                android:textColor="#FFFFFF"
+                android:textSize="56sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCancelAutoNext"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="취소"
+                android:textColor="#FFFFFF"
+                app:strokeColor="#FFFFFF"
+                app:cornerRadius="20dp" />
+        </LinearLayout>
     </FrameLayout>
 
     <androidx.core.widget.NestedScrollView
@@ -183,6 +221,33 @@
                 android:layout_marginTop="8dp"
                 android:textSize="13sp"
                 android:textColor="@color/accent" />
+
+            <!-- 자동 다음 동영상 토글 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="자동 다음 동영상"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_secondary" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/swAutoNext"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:thumbTint="@color/accent"
+                    app:trackTint="@color/accent_glow"
+                    app:useMaterialThemeColors="false" />
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/summaryCard"
