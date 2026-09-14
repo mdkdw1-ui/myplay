@@ -28,6 +28,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var historyAdapter: HorizontalVideoAdapter
     private lateinit var relatedAdapter: HorizontalVideoAdapter
     private lateinit var channelAdapter: ChannelAdapter
+    private lateinit var bookmarkAdapter: HorizontalVideoAdapter
     private lateinit var etHomeSearch: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,8 +61,6 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.tvHistoryMore).setOnClickListener {
             startActivity(Intent(this, HistoryActivity::class.java))
         }
-
-        // ★ 전체 삭제 버튼
         findViewById<View>(R.id.tvClearSearches).setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle("최근 검색어")
@@ -77,6 +76,7 @@ class MainActivity : AppCompatActivity() {
         historyAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         relatedAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         channelAdapter = ChannelAdapter { c -> openChannel(c) }
+        bookmarkAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
 
         findViewById<RecyclerView>(R.id.rvHistory).apply {
             layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
@@ -90,14 +90,20 @@ class MainActivity : AppCompatActivity() {
             layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
             adapter = channelAdapter
         }
+        findViewById<RecyclerView>(R.id.rvBookmarks).apply {
+            layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
+            adapter = bookmarkAdapter
+        }
 
         loadRecentSearches()
+        loadBookmarks()
         loadHistory()
     }
 
     override fun onResume() {
         super.onResume()
         loadRecentSearches()
+        loadBookmarks()
         loadHistory()
     }
 
@@ -123,13 +129,10 @@ class MainActivity : AppCompatActivity() {
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply { marginEnd = (8 * resources.displayMetrics.density).toInt() }
                 gravity = Gravity.CENTER
-
                 setOnClickListener {
                     RecentSearches.add(this@MainActivity, q)
                     startActivity(Intent(this@MainActivity, SearchActivity::class.java).putExtra("QUERY", q))
                 }
-
-                // ★ 롱프레스 → 삭제 확인
                 setOnLongClickListener {
                     AlertDialog.Builder(this@MainActivity)
                         .setTitle("검색어 삭제")
@@ -144,6 +147,26 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             container.addView(chip)
+        }
+    }
+
+    private fun loadBookmarks() {
+        lifecycleScope.launch {
+            val section = findViewById<View>(R.id.sectionBookmarks)
+            try {
+                HistoryDatabase.get(applicationContext).bookmarkDao().getAll().collect { list ->
+                    if (list.isEmpty()) {
+                        section.visibility = View.GONE
+                    } else {
+                        section.visibility = View.VISIBLE
+                        bookmarkAdapter.submit(list.take(10).map {
+                            HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
+                        })
+                    }
+                }
+            } catch (e: Exception) {
+                section.visibility = View.GONE
+            }
         }
     }
 
@@ -183,11 +206,9 @@ class MainActivity : AppCompatActivity() {
         withContext(Dispatchers.IO) {
             val seeds = history.take(5)
             val watchedIds = history.map { it.videoId }.toSet()
-
             val channelWeight = history.map { it.channel }
                 .filter { it.isNotBlank() }
                 .groupingBy { it }.eachCount()
-
             val scoreMap = mutableMapOf<String, Pair<VideoItem, Int>>()
 
             for (seed in seeds) {
@@ -196,25 +217,20 @@ class MainActivity : AppCompatActivity() {
                     if (related.size < 3) {
                         val keyword = seed.title.split(" ")
                             .filter { it.isNotBlank() }.take(4).joinToString(" ")
-                        if (keyword.isNotEmpty()) {
-                            related = YouTubeSearch.search(keyword)
-                        }
+                        if (keyword.isNotEmpty()) related = YouTubeSearch.search(keyword)
                     }
                     for (v in related) {
                         if (v.videoId in watchedIds) continue
                         if (v.videoId == seed.videoId) continue
-
                         val existing = scoreMap[v.videoId]
                         val bonus = (channelWeight[v.channel] ?: 0)
                         val addScore = 1 + bonus
-
                         scoreMap[v.videoId] = if (existing != null)
                             existing.copy(second = existing.second + addScore)
                         else Pair(v, addScore)
                     }
                 } catch (e: Exception) { e.printStackTrace() }
             }
-
             scoreMap.values.sortedByDescending { it.second }.map { it.first }
         }
 
@@ -226,9 +242,9 @@ class MainActivity : AppCompatActivity() {
                 return@launch
             }
             findViewById<View>(R.id.sectionRelated).visibility = View.VISIBLE
-            relatedAdapter.submit(
-                recs.take(10).map { HomeVideo(it.videoId, it.title, it.channel, it.thumbnail) }
-            )
+            relatedAdapter.submit(recs.take(10).map {
+                HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
+            })
         }
     }
 

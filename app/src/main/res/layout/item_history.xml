@@ -72,6 +72,22 @@
                 android:maxLines="1"
                 android:ellipsize="end" />
 
+            <!-- ★ 진행률 바 -->
+            <FrameLayout
+                android:id="@+id/progressTrack"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_progress_track"
+                android:visibility="gone">
+
+                <View
+                    android:id="@+id/progressFill"
+                    android:layout_width="0dp"
+                    android:layout_height="4dp"
+                    android:background="@drawable/bg_progress_fill" />
+            </FrameLayout>
+
             <TextView
                 android:id="@+id/btnRelated"
                 android:layout_width="wrap_content"

@@ -1,6 +1,6 @@
 package com.example.myplayer
 
-import android.app.AlertDialog
+import android.app.Dialog
 import android.app.PictureInPictureParams
 import android.content.ComponentName
 import android.content.Context
@@ -15,11 +15,14 @@ import android.text.Html
 import android.util.Rational
 import android.util.TypedValue
 import android.view.View
+import android.view.ViewGroup
+import android.view.Window
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -34,6 +37,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -58,7 +62,6 @@ class PlayerActivity : AppCompatActivity() {
     private var subtitleTracks: List<SubtitleTrack> = emptyList()
     private var currentStreamUrl: String? = null
 
-    // ★ 현재 영상 정보 (북마크/이어보기용)
     private var currentVideoId: String = ""
     private var currentTitle: String = ""
     private var currentChannel: String = ""
@@ -85,7 +88,7 @@ class PlayerActivity : AppCompatActivity() {
                 ContextCompat.getColor(this@PlayerActivity, R.color.spinner)
             )
         }
-        (playerView.parent as? android.view.ViewGroup)?.addView(progress)
+        (playerView.parent as? ViewGroup)?.addView(progress)
 
         applySubtitleStyle()
 
@@ -116,8 +119,7 @@ class PlayerActivity : AppCompatActivity() {
                 else -> Toast.makeText(this, "재생할 영상이 없습니다", Toast.LENGTH_SHORT).show()
             }
 
-            // ★ 북마크 상태 반영
-            if (videoId != null) refreshBookmarkState(videoId)
+            if (!videoId.isNullOrBlank()) refreshBookmarkState(videoId)
         }, MoreExecutors.directExecutor())
 
         btnSpeed.setOnClickListener { showSpeedDialog() }
@@ -152,9 +154,7 @@ class PlayerActivity : AppCompatActivity() {
                     db.bookmarkDao().isBookmarked(currentVideoId)
                 }
                 if (exists) {
-                    withContext(Dispatchers.IO) {
-                        db.bookmarkDao().delete(currentVideoId)
-                    }
+                    withContext(Dispatchers.IO) { db.bookmarkDao().delete(currentVideoId) }
                     btnBookmark.text = "☆"
                     Toast.makeText(this@PlayerActivity, "북마크 해제", Toast.LENGTH_SHORT).show()
                 } else {
@@ -197,26 +197,58 @@ class PlayerActivity : AppCompatActivity() {
             }
             val pos = saved?.positionMs ?: 0L
             val dur = saved?.durationMs ?: 0L
-
-            // 30초 이상 봤고, 끝나지 않은 경우만 이어보기 제안
             val canResume = pos > 30_000L && (dur == 0L || dur - pos > 30_000L)
 
             if (canResume) {
-                AlertDialog.Builder(this@PlayerActivity)
-                    .setTitle("이어보기")
-                    .setMessage("${formatTime(pos)}부터 이어보시겠어요?")
-                    .setCancelable(false)
-                    .setPositiveButton("이어보기") { _, _ ->
-                        extractAndPlay(videoId, title, channel, thumb, pos)
-                    }
-                    .setNegativeButton("처음부터") { _, _ ->
-                        extractAndPlay(videoId, title, channel, thumb, 0L)
-                    }
-                    .show()
+                showResumeDialog(videoId, title, channel, thumb, pos, dur)
             } else {
                 extractAndPlay(videoId, title, channel, thumb, 0L)
             }
         }
+    }
+
+    private fun showResumeDialog(
+        videoId: String, title: String, channel: String, thumb: String,
+        posMs: Long, durMs: Long
+    ) {
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_resume)
+        dialog.setCancelable(false)
+
+        dialog.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setLayout(
+                (resources.displayMetrics.widthPixels * 0.85f).toInt(),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        dialog.findViewById<TextView>(R.id.tvResumeTime).text = formatTime(posMs)
+
+        if (durMs > 0) {
+            val percent = ((posMs * 100) / durMs).toInt().coerceIn(0, 100)
+            val fill = dialog.findViewById<View>(R.id.vProgressFill)
+            fill.post {
+                val parent = fill.parent as View
+                val w = (parent.width * percent / 100f).toInt()
+                val lp = fill.layoutParams
+                lp.width = w
+                fill.layoutParams = lp
+            }
+        }
+
+        dialog.findViewById<MaterialButton>(R.id.btnResume).setOnClickListener {
+            dialog.dismiss()
+            extractAndPlay(videoId, title, channel, thumb, posMs)
+        }
+
+        dialog.findViewById<MaterialButton>(R.id.btnStartOver).setOnClickListener {
+            dialog.dismiss()
+            extractAndPlay(videoId, title, channel, thumb, 0L)
+        }
+
+        dialog.show()
     }
 
     private fun savePosition() {
@@ -226,14 +258,11 @@ class PlayerActivity : AppCompatActivity() {
         val dur = mc.duration
         if (pos <= 0) return
         val durationMs = if (dur > 0) dur else 0L
-
-        // 백그라운드에서 조용히 저장
         val appCtx = applicationContext
         val vid = currentVideoId
-        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+        GlobalScope.launch(Dispatchers.IO) {
             try {
-                HistoryDatabase.get(appCtx).historyDao()
-                    .updatePosition(vid, pos, durationMs)
+                HistoryDatabase.get(appCtx).historyDao().updatePosition(vid, pos, durationMs)
             } catch (e: Exception) { }
         }
     }
@@ -268,7 +297,7 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    // ========== 자막 스타일 ==========
+    // ========== 자막 ==========
     private fun applySubtitleStyle() {
         val sizeSp = pref.getFloat("size_sp", 16f)
         val textColor = pref.getInt("text_color", Color.WHITE)
@@ -400,10 +429,7 @@ class PlayerActivity : AppCompatActivity() {
 
             applyStreamWithSubtitle(streamUrl, autoSub, null, startPosMs)
             updateCcButton(autoSub != null)
-
             buildSummary(videoId, finalTitle, result.description)
-
-            // 기록 저장 (이미 있으면 update)
             saveHistory(videoId, finalTitle, finalChannel, thumb, startPosMs)
         }
     }
@@ -414,7 +440,6 @@ class PlayerActivity : AppCompatActivity() {
         if (url.isNullOrBlank()) return
         currentStreamUrl = url
         val builder = MediaItem.Builder().setUri(url)
-
         if (sub != null) {
             val rawUrl = if (targetLang != null) buildTranslatedUrl(sub.url, targetLang) else sub.url
             val vttUrl = ensureVttFormat(rawUrl)
@@ -430,7 +455,6 @@ class PlayerActivity : AppCompatActivity() {
                 )
             )
         }
-
         mediaController?.setMediaItem(builder.build(), startPosMs)
         mediaController?.prepare()
         mediaController?.playWhenReady = true
@@ -487,13 +511,9 @@ class PlayerActivity : AppCompatActivity() {
         try {
             HistoryDatabase.get(applicationContext).historyDao().insert(
                 HistoryEntity(
-                    videoId = videoId,
-                    title = title,
-                    channel = channel,
-                    thumbnail = thumb,
+                    videoId = videoId, title = title, channel = channel, thumbnail = thumb,
                     watchedAt = System.currentTimeMillis(),
-                    positionMs = startPosMs,
-                    durationMs = 0L
+                    positionMs = startPosMs, durationMs = 0L
                 )
             )
         } catch (e: Exception) { e.printStackTrace() }
@@ -507,7 +527,7 @@ class PlayerActivity : AppCompatActivity() {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             infoScroll.visibility = View.GONE
             val lp = videoContainer.layoutParams
-            lp.height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            lp.height = ViewGroup.LayoutParams.MATCH_PARENT
             videoContainer.layoutParams = lp
             isFullscreen = true
         } else {
@@ -515,7 +535,7 @@ class PlayerActivity : AppCompatActivity() {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             infoScroll.visibility = View.VISIBLE
             val lp = videoContainer.layoutParams
-            lp.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            lp.height = ViewGroup.LayoutParams.WRAP_CONTENT
             videoContainer.layoutParams = lp
             isFullscreen = false
         }
