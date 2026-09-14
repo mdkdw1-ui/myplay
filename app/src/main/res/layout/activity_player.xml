@@ -30,10 +30,24 @@
             android:padding="12dp">
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnBookmark"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="☆"
+                android:textSize="16sp"
+                android:minWidth="0dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                app:backgroundTint="#33FFFFFF"
+                app:cornerRadius="20dp" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSpeed"
                 style="@style/Widget.MaterialComponents.Button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
                 android:text="1.0x"
                 android:textSize="11sp"
                 android:textStyle="bold"

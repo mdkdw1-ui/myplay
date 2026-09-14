@@ -43,6 +43,7 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var btnSpeed: MaterialButton
     private lateinit var btnCc: MaterialButton
+    private lateinit var btnBookmark: MaterialButton
     private lateinit var infoScroll: View
     private lateinit var videoContainer: View
     private lateinit var summaryCard: View
@@ -57,6 +58,12 @@ class PlayerActivity : AppCompatActivity() {
     private var subtitleTracks: List<SubtitleTrack> = emptyList()
     private var currentStreamUrl: String? = null
 
+    // ★ 현재 영상 정보 (북마크/이어보기용)
+    private var currentVideoId: String = ""
+    private var currentTitle: String = ""
+    private var currentChannel: String = ""
+    private var currentThumb: String = ""
+
     private val pref by lazy { getSharedPreferences("subtitle_prefs", Context.MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,6 +73,7 @@ class PlayerActivity : AppCompatActivity() {
         playerView = findViewById(R.id.playerView)
         btnSpeed = findViewById(R.id.btnSpeed)
         btnCc = findViewById(R.id.btnCc)
+        btnBookmark = findViewById(R.id.btnBookmark)
         infoScroll = findViewById(R.id.infoScroll)
         videoContainer = findViewById(R.id.videoContainer)
         summaryCard = findViewById(R.id.summaryCard)
@@ -87,6 +95,11 @@ class PlayerActivity : AppCompatActivity() {
         val vChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
         val vThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
 
+        currentVideoId = videoId ?: ""
+        currentTitle = vTitle
+        currentChannel = vChannel
+        currentThumb = vThumb
+
         (findViewById<TextView>(R.id.tvTitle)).text = vTitle
         (findViewById<TextView>(R.id.tvChannel)).text = vChannel
         (findViewById<TextView>(R.id.tvDescription)).text = "불러오는 중..."
@@ -99,36 +112,145 @@ class PlayerActivity : AppCompatActivity() {
 
             when {
                 videoUri != null -> playDirectUrl(videoUri)
-                videoId != null -> extractAndPlay(videoId, vTitle, vChannel, vThumb)
+                videoId != null -> checkResumeAndPlay(videoId, vTitle, vChannel, vThumb)
                 else -> Toast.makeText(this, "재생할 영상이 없습니다", Toast.LENGTH_SHORT).show()
             }
+
+            // ★ 북마크 상태 반영
+            if (videoId != null) refreshBookmarkState(videoId)
         }, MoreExecutors.directExecutor())
 
         btnSpeed.setOnClickListener { showSpeedDialog() }
         findViewById<View>(R.id.btnFullscreen).setOnClickListener { toggleFullscreen() }
         findViewById<View>(R.id.btnPip).setOnClickListener { enterPipMode() }
         btnCc.setOnClickListener { showSubtitleDialog() }
+        btnBookmark.setOnClickListener { toggleBookmark() }
     }
 
-    // ========== ✨ Gemini AI 요약 ==========
+    // ========== ⭐ 북마크 ==========
+    private fun refreshBookmarkState(videoId: String) {
+        if (videoId.isBlank()) return
+        lifecycleScope.launch {
+            val exists = withContext(Dispatchers.IO) {
+                try {
+                    HistoryDatabase.get(applicationContext).bookmarkDao().isBookmarked(videoId)
+                } catch (e: Exception) { false }
+            }
+            btnBookmark.text = if (exists) "★" else "☆"
+        }
+    }
+
+    private fun toggleBookmark() {
+        if (currentVideoId.isBlank()) {
+            Toast.makeText(this, "저장할 수 없는 영상입니다", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                val db = HistoryDatabase.get(applicationContext)
+                val exists = withContext(Dispatchers.IO) {
+                    db.bookmarkDao().isBookmarked(currentVideoId)
+                }
+                if (exists) {
+                    withContext(Dispatchers.IO) {
+                        db.bookmarkDao().delete(currentVideoId)
+                    }
+                    btnBookmark.text = "☆"
+                    Toast.makeText(this@PlayerActivity, "북마크 해제", Toast.LENGTH_SHORT).show()
+                } else {
+                    withContext(Dispatchers.IO) {
+                        db.bookmarkDao().insert(
+                            BookmarkEntity(
+                                videoId = currentVideoId,
+                                title = currentTitle,
+                                channel = currentChannel,
+                                thumbnail = currentThumb,
+                                savedAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                    btnBookmark.text = "★"
+                    Toast.makeText(this@PlayerActivity, "북마크 저장", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@PlayerActivity, "실패: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // ========== ⏱ 이어보기 ==========
+    private fun formatTime(ms: Long): String {
+        val sec = ms / 1000
+        val h = sec / 3600
+        val m = (sec % 3600) / 60
+        val s = sec % 60
+        return if (h > 0) String.format("%d:%02d:%02d", h, m, s)
+        else String.format("%d:%02d", m, s)
+    }
+
+    private fun checkResumeAndPlay(videoId: String, title: String, channel: String, thumb: String) {
+        lifecycleScope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                try {
+                    HistoryDatabase.get(applicationContext).historyDao().getById(videoId)
+                } catch (e: Exception) { null }
+            }
+            val pos = saved?.positionMs ?: 0L
+            val dur = saved?.durationMs ?: 0L
+
+            // 30초 이상 봤고, 끝나지 않은 경우만 이어보기 제안
+            val canResume = pos > 30_000L && (dur == 0L || dur - pos > 30_000L)
+
+            if (canResume) {
+                AlertDialog.Builder(this@PlayerActivity)
+                    .setTitle("이어보기")
+                    .setMessage("${formatTime(pos)}부터 이어보시겠어요?")
+                    .setCancelable(false)
+                    .setPositiveButton("이어보기") { _, _ ->
+                        extractAndPlay(videoId, title, channel, thumb, pos)
+                    }
+                    .setNegativeButton("처음부터") { _, _ ->
+                        extractAndPlay(videoId, title, channel, thumb, 0L)
+                    }
+                    .show()
+            } else {
+                extractAndPlay(videoId, title, channel, thumb, 0L)
+            }
+        }
+    }
+
+    private fun savePosition() {
+        val mc = mediaController ?: return
+        if (currentVideoId.isBlank()) return
+        val pos = mc.currentPosition
+        val dur = mc.duration
+        if (pos <= 0) return
+        val durationMs = if (dur > 0) dur else 0L
+
+        // 백그라운드에서 조용히 저장
+        val appCtx = applicationContext
+        val vid = currentVideoId
+        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+            try {
+                HistoryDatabase.get(appCtx).historyDao()
+                    .updatePosition(vid, pos, durationMs)
+            } catch (e: Exception) { }
+        }
+    }
+
+    // ========== AI 요약 ==========
     private fun buildSummary(videoId: String, title: String, description: String) {
         summaryCard.visibility = View.VISIBLE
         tvSummaryBadge.text = "AI 요약 중..."
         tvSummary.text = "잠시만 기다려주세요..."
-
         lifecycleScope.launch {
             var transcript = ""
             val preferred = subtitleTracks.firstOrNull { it.languageCode.startsWith("ko") }
                 ?: subtitleTracks.firstOrNull { it.languageCode.startsWith("en") }
                 ?: subtitleTracks.firstOrNull()
-
-            if (preferred != null) {
-                transcript = YouTubeTranscript.fetchText(preferred.url)
-            }
-
+            if (preferred != null) transcript = YouTubeTranscript.fetchText(preferred.url)
             val source = if (transcript.isNotBlank()) {
-                tvSummaryBadge.text = if (preferred?.isAutoGenerated == true)
-                    "AI 요약 · 자동 자막" else "AI 요약 · 자막"
+                tvSummaryBadge.text = if (preferred?.isAutoGenerated == true) "AI 요약 · 자동 자막" else "AI 요약 · 자막"
                 transcript
             } else if (description.isNotBlank()) {
                 tvSummaryBadge.text = "AI 요약 · 설명"
@@ -137,14 +259,11 @@ class PlayerActivity : AppCompatActivity() {
                 tvSummaryBadge.text = "AI 요약"
                 ""
             }
-
             if (source.isBlank()) {
                 tvSummary.text = "요약할 내용이 없습니다."
                 return@launch
             }
-
             val summary = GeminiSummary.summarize(title, source)
-
             tvSummary.text = if (summary.isBlank()) "요약을 생성할 수 없습니다." else summary
         }
     }
@@ -231,7 +350,9 @@ class PlayerActivity : AppCompatActivity() {
         (findViewById<TextView>(R.id.tvDescription)).text = "(URL 직접 재생)"
     }
 
-    private fun extractAndPlay(videoId: String, title: String, channel: String, thumb: String) {
+    private fun extractAndPlay(
+        videoId: String, title: String, channel: String, thumb: String, startPosMs: Long = 0L
+    ) {
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
             val result = YouTubeStream.extract(videoId)
@@ -249,10 +370,13 @@ class PlayerActivity : AppCompatActivity() {
             val finalTitle = result.title.ifEmpty { title }
             val finalChannel = result.channelName.ifEmpty { channel }
 
+            currentTitle = finalTitle
+            currentChannel = finalChannel
+            currentThumb = thumb
+
             (findViewById<TextView>(R.id.tvTitle)).text = finalTitle
             (findViewById<TextView>(R.id.tvChannel)).text = finalChannel
 
-            // ★ HTML 태그 제거 후 설명 표시
             val descText = if (result.description.isNotBlank()) {
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -264,9 +388,7 @@ class PlayerActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     result.description.replace(Regex("<[^>]+>"), " ")
                 }.replace(Regex("\\s+"), " ").trim()
-            } else {
-                "(설명 없음)"
-            }
+            } else "(설명 없음)"
             (findViewById<TextView>(R.id.tvDescription)).text = descText
 
             subtitleTracks = result.subtitles
@@ -276,13 +398,13 @@ class PlayerActivity : AppCompatActivity() {
                 ?: subtitleTracks.firstOrNull { it.languageCode.startsWith("en") }
                 ?: subtitleTracks.firstOrNull()
 
-            applyStreamWithSubtitle(streamUrl, autoSub, null, 0L)
+            applyStreamWithSubtitle(streamUrl, autoSub, null, startPosMs)
             updateCcButton(autoSub != null)
 
-            // ★ Gemini AI 요약
             buildSummary(videoId, finalTitle, result.description)
 
-            saveHistory(videoId, finalTitle, finalChannel, thumb)
+            // 기록 저장 (이미 있으면 update)
+            saveHistory(videoId, finalTitle, finalChannel, thumb, startPosMs)
         }
     }
 
@@ -334,16 +456,13 @@ class PlayerActivity : AppCompatActivity() {
                 .show()
             return
         }
-
         val labels = mutableListOf<String>()
         val callbacks = mutableListOf<() -> Unit>()
-
         labels.add("자막 끄기")
         callbacks.add {
             applyStreamWithSubtitle(currentStreamUrl, null, null, mediaController?.currentPosition ?: 0L)
             updateCcButton(false)
         }
-
         for (s in subtitleTracks) {
             val auto = if (s.isAutoGenerated) " · 자동" else ""
             val name = "${s.displayName}$auto"
@@ -357,20 +476,28 @@ class PlayerActivity : AppCompatActivity() {
         }
         labels.add("⚙️ 자막 스타일")
         callbacks.add { showSubtitleStyleDialog() }
-
         AlertDialog.Builder(this).setTitle("자막 선택")
             .setItems(labels.toTypedArray()) { _, i -> callbacks[i].invoke() }
             .show()
     }
 
-    private suspend fun saveHistory(videoId: String, title: String, channel: String, thumb: String) =
-        withContext(Dispatchers.IO) {
-            try {
-                HistoryDatabase.get(applicationContext).historyDao().insert(
-                    HistoryEntity(videoId, title, channel, thumb, System.currentTimeMillis())
+    private suspend fun saveHistory(
+        videoId: String, title: String, channel: String, thumb: String, startPosMs: Long = 0L
+    ) = withContext(Dispatchers.IO) {
+        try {
+            HistoryDatabase.get(applicationContext).historyDao().insert(
+                HistoryEntity(
+                    videoId = videoId,
+                    title = title,
+                    channel = channel,
+                    thumbnail = thumb,
+                    watchedAt = System.currentTimeMillis(),
+                    positionMs = startPosMs,
+                    durationMs = 0L
                 )
-            } catch (e: Exception) { e.printStackTrace() }
-        }
+            )
+        } catch (e: Exception) { e.printStackTrace() }
+    }
 
     private fun toggleFullscreen() {
         val controller = window.insetsController ?: return
@@ -408,8 +535,14 @@ class PlayerActivity : AppCompatActivity() {
         infoScroll.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
     }
 
+    override fun onPause() {
+        super.onPause()
+        savePosition()
+    }
+
     override fun onStop() {
         super.onStop()
+        savePosition()
         if (!isInPictureInPictureMode) mediaController?.pause()
     }
 
