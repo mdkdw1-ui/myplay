@@ -38,6 +38,18 @@ class SearchAdapter(
         holder.title.text = item.title
         holder.channel.text = item.channel
         holder.duration.text = item.duration
+
+        val metaParts = mutableListOf<String>()
+        if (item.viewCount.isNotBlank()) metaParts.add(item.viewCount)
+        if (item.uploadDate.isNotBlank()) metaParts.add(item.uploadDate)
+
+        if (metaParts.isNotEmpty()) {
+            holder.meta.text = metaParts.joinToString(" · ")
+            holder.meta.visibility = View.VISIBLE
+        } else {
+            holder.meta.visibility = View.GONE
+        }
+
         Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
         holder.itemView.setOnClickListener { onClick(item) }
     }
@@ -49,5 +61,6 @@ class SearchAdapter(
         val title: TextView = v.findViewById(R.id.title)
         val channel: TextView = v.findViewById(R.id.channel)
         val duration: TextView = v.findViewById(R.id.duration)
+        val meta: TextView = v.findViewById(R.id.meta)
     }
 }
