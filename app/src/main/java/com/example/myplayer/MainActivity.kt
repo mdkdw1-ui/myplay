@@ -193,11 +193,13 @@ class MainActivity : AppCompatActivity() {
 
                 loadRecommended(list)
 
-                val topChannel = list.map { it.channel }
+                // ★ 상위 5개 서로 다른 채널로 다양화
+                val topChannels = list.map { it.channel }
                     .filter { it.isNotBlank() }
                     .groupingBy { it }.eachCount()
-                    .maxByOrNull { it.value }?.key
-                if (topChannel != null) loadChannels(topChannel)
+                    .entries.sortedByDescending { it.value }
+                    .take(5).map { it.key }
+                if (topChannels.isNotEmpty()) loadChannelsMulti(topChannels)
             }
         }
     }
@@ -248,13 +250,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadChannels(baseChannelName: String) {
+    private fun loadChannelsMulti(baseChannelNames: List<String>) {
         lifecycleScope.launch {
-            val results = YouTubeChannels.search(baseChannelName)
-            val filtered = results
-                .filter { it.name.isNotBlank() && it.channelId.isNotBlank() }
-                .distinctBy { it.channelId }
-                .take(10)
+            // 각 채널명마다 검색 → 결과 병합 + 중복 제거
+            val all = mutableListOf<ChannelItem>()
+            val seen = mutableSetOf<String>()
+            val knownNames = baseChannelNames.toSet()
+
+            for (name in baseChannelNames) {
+                val res = YouTubeChannels.search(name)
+                for (c in res) {
+                    if (c.channelId.isBlank()) continue
+                    if (c.channelId in seen) continue
+                    seen.add(c.channelId)
+                    all.add(c)
+                    if (all.size >= 15) break
+                }
+                if (all.size >= 15) break
+            }
+
+            // 이미 아는 채널도 포함 (아바타 없어도)
+            val filtered = all.distinctBy { it.channelId }.take(10)
             if (filtered.isEmpty()) {
                 findViewById<View>(R.id.sectionChannels).visibility = View.GONE
                 return@launch

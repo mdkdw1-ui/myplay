@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="200dp"
+    android:layout_width="170dp"
     android:layout_height="wrap_content"
-    android:layout_marginEnd="12dp"
+    android:layout_marginEnd="10dp"
     app:cardBackgroundColor="@color/bg_surface"
-    app:cardCornerRadius="14dp"
+    app:cardCornerRadius="12dp"
     app:cardElevation="0dp">
 
     <LinearLayout
@@ -17,7 +17,7 @@
         <ImageView
             android:id="@+id/thumb"
             android:layout_width="match_parent"
-            android:layout_height="112dp"
+            android:layout_height="96dp"
             android:scaleType="centerCrop"
             android:background="@color/bg_elevated" />
 
@@ -25,13 +25,13 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="10dp">
+            android:padding="8dp">
 
             <TextView
                 android:id="@+id/title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="13sp"
+                android:textSize="12sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary"
                 android:maxLines="2"
@@ -41,8 +41,8 @@
                 android:id="@+id/channel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:textSize="11sp"
+                android:layout_marginTop="3dp"
+                android:textSize="10sp"
                 android:textColor="@color/text_secondary"
                 android:maxLines="1"
                 android:ellipsize="end" />
