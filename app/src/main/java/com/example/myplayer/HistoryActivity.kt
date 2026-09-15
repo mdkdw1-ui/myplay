@@ -12,23 +12,36 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 class HistoryActivity : AppCompatActivity() {
+
+    private enum class SortMode(val label: String) {
+        NEWEST("최신순"),
+        OLDEST("오래된순"),
+        TITLE("제목순"),
+        CHANNEL("채널순"),
+        PROGRESS("진행률순")
+    }
+
+    private var sortMode = SortMode.NEWEST
+    private var currentList: List<HistoryEntity> = emptyList()
+    private var currentQuery: String = ""
+    private lateinit var adapter: HistoryAdapter
+    private lateinit var tvEmpty: View
+    private lateinit var tvClear: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_history)
 
         val recycler = findViewById<RecyclerView>(R.id.recycler)
-        val tvEmpty = findViewById<View>(R.id.tvEmpty)
-        val tvClear = findViewById<TextView>(R.id.tvClearHistory)
+        tvEmpty = findViewById(R.id.tvEmpty)
+        tvClear = findViewById(R.id.tvClearHistory)
+        val btnSort = findViewById<TextView>(R.id.btnSort)
         val etSearch = findViewById<EditText>(R.id.etSearch)
 
-        val adapter = HistoryAdapter(
+        adapter = HistoryAdapter(
             onClick = { item -> playVideo(item) },
             onRelatedClick = { item -> showRelated(item) }
         )
@@ -48,20 +61,12 @@ class HistoryActivity : AppCompatActivity() {
                 .show()
         }
 
-        // 검색어 흐름
-        var currentQuery = ""
-        var collectJob: Job? = null
+        btnSort.setOnClickListener { showSortDialog() }
 
-        fun reload(q: String) {
-            collectJob?.cancel()
-            collectJob = lifecycleScope.launch {
-                val dao = HistoryDatabase.get(applicationContext).historyDao()
-                val flow = if (q.isBlank()) dao.getAll() else dao.search(q)
-                flow.collect { list ->
-                    adapter.submit(list)
-                    tvEmpty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
-                    tvClear.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE
-                }
+        lifecycleScope.launch {
+            HistoryDatabase.get(applicationContext).historyDao().getAll().collect { list ->
+                currentList = list
+                render()
             }
         }
 
@@ -69,15 +74,47 @@ class HistoryActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                val q = s?.toString()?.trim() ?: ""
-                if (q != currentQuery) {
-                    currentQuery = q
-                    reload(q)
-                }
+                currentQuery = s?.toString()?.trim() ?: ""
+                render()
             }
         })
 
-        reload("")
+        updateSortLabel()
+    }
+
+    private fun render() {
+        val filtered = if (currentQuery.isBlank()) currentList
+            else currentList.filter {
+                it.title.contains(currentQuery, ignoreCase = true) ||
+                it.channel.contains(currentQuery, ignoreCase = true)
+            }
+        val sorted = when (sortMode) {
+            SortMode.NEWEST -> filtered.sortedByDescending { it.watchedAt }
+            SortMode.OLDEST -> filtered.sortedBy { it.watchedAt }
+            SortMode.TITLE -> filtered.sortedBy { it.title }
+            SortMode.CHANNEL -> filtered.sortedBy { it.channel }
+            SortMode.PROGRESS -> filtered.sortedByDescending { it.progressPercent }
+        }
+        adapter.submit(sorted)
+        tvEmpty.visibility = if (sorted.isEmpty()) View.VISIBLE else View.GONE
+        tvClear.visibility = if (currentList.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    private fun showSortDialog() {
+        val modes = SortMode.values()
+        val labels = modes.map { it.label }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("정렬")
+            .setItems(labels) { _, i ->
+                sortMode = modes[i]
+                updateSortLabel()
+                render()
+            }
+            .show()
+    }
+
+    private fun updateSortLabel() {
+        findViewById<TextView>(R.id.btnSort).text = "⇅ ${sortMode.label}"
     }
 
     private fun playVideo(item: HistoryEntity) {
