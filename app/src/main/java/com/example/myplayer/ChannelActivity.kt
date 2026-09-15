@@ -61,14 +61,14 @@ class ChannelActivity : AppCompatActivity() {
         })
 
         if (channelId.isBlank()) {
-            tvStatus.text = "채널 정보를 불러올 수 없습니다"
+            tvStatus.text = "채널 ID 없음"
             tvStatus.visibility = View.VISIBLE
             return
         }
 
         progress.visibility = View.VISIBLE
         tvStatus.visibility = View.VISIBLE
-        tvStatus.text = "채널 정보 불러오는 중..."
+        tvStatus.text = "채널 정보 불러오는 중... (id=$channelId)"
 
         lifecycleScope.launch {
             val (info, page) = YouTubeChannel.fetch(channelId)
@@ -77,16 +77,17 @@ class ChannelActivity : AppCompatActivity() {
             if (info != null) {
                 tvChannelName.text = info.name.ifBlank { fallbackName }
                 tvSubscribers.text = listOf(info.subscribers, info.videoCount)
-                    .filter { it.isNotBlank() }
-                    .joinToString(" · ")
+                    .filter { it.isNotBlank() }.joinToString(" · ")
                 if (info.avatar.isNotBlank()) {
                     Glide.with(ivAvatar).load(info.avatar).circleCrop().into(ivAvatar)
                 }
             }
 
             nextContinuation = page.continuation
-            tvStatus.text = if (page.videos.isEmpty()) "영상이 없습니다"
-                             else "${page.videos.size}개"
+            val dbg = YouTubeChannel.lastDebug
+            tvStatus.text = if (page.videos.isEmpty())
+                "영상 없음 ($dbg)"
+            else "${page.videos.size}개 · $dbg"
             adapter.submit(page.videos)
         }
     }
