@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
 object GeminiSummary {
 
     private const val TAG = "AiSummary"
-    private const val MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+    private const val MODEL = "openai/gpt-oss-120b"
     private const val ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 
     private fun stripHtml(input: String): String {
