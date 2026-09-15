@@ -10,9 +10,10 @@ import androidx.room.RoomDatabase
         HistoryEntity::class,
         BookmarkEntity::class,
         DownloadEntity::class,
-        SubscriptionEntity::class
+        SubscriptionEntity::class,
+        VideoNoteEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class HistoryDatabase : RoomDatabase() {
@@ -21,6 +22,7 @@ abstract class HistoryDatabase : RoomDatabase() {
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun downloadDao(): DownloadDao
     abstract fun subscriptionDao(): SubscriptionDao
+    abstract fun videoNoteDao(): VideoNoteDao
 
     companion object {
         @Volatile
