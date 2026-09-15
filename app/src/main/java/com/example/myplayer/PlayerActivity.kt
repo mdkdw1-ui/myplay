@@ -30,6 +30,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.view.WindowManager
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.ProgressBar
@@ -72,6 +73,7 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var btnDownload: MaterialButton
     private lateinit var btnShare: MaterialButton
     private lateinit var btnLock: MaterialButton
+    private lateinit var btnMore: MaterialButton
     private lateinit var lockOverlay: View
     private var isLocked = false
     private var pipAspect: Float = 16f / 9f
@@ -131,6 +133,7 @@ class PlayerActivity : AppCompatActivity() {
         btnBookmark = findViewById(R.id.btnBookmark)
         btnShare = findViewById(R.id.btnShare)
         btnLock = findViewById(R.id.btnLock)
+        btnMore = findViewById(R.id.btnMore)
         lockOverlay = findViewById(R.id.lockOverlay)
         btnDownload = findViewById(R.id.btnDownload)
         infoScroll = findViewById(R.id.infoScroll)
@@ -243,6 +246,7 @@ class PlayerActivity : AppCompatActivity() {
         btnBookmark.setOnClickListener { toggleBookmark() }
         btnShare.setOnClickListener { showShareDialog() }
         btnLock.setOnClickListener { toggleLock() }
+        btnMore.setOnClickListener { showMoreMenu() }
         lockOverlay.setOnClickListener { toggleLock() }
         btnDownload.setOnClickListener { startDownload() }
     }
@@ -1027,6 +1031,63 @@ class PlayerActivity : AppCompatActivity() {
 
 
     // ========== 🔒 잠금 모드 ==========
+
+    // ========== 🔁 반복 재생 ==========
+    private fun toggleRepeat() {
+        val mc = mediaController ?: return
+        val next = when (mc.repeatMode) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
+        mc.repeatMode = next
+        Toast.makeText(
+            this,
+            if (next == Player.REPEAT_MODE_ONE) "🔁 같은 영상 반복 ON" else "반복 OFF",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    // ========== 💡 화면 항상 켜짐 ==========
+    private fun toggleKeepScreenOn() {
+        val on = (window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0
+        if (on) {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            Toast.makeText(this, "화면 자동 꺼짐 방지 OFF", Toast.LENGTH_SHORT).show()
+        } else {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            Toast.makeText(this, "화면 자동 꺼짐 방지 ON", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // ========== ⋯ 더보기 메뉴 ==========
+    private fun showMoreMenu() {
+        val items = arrayOf(
+            "🔁 반복 재생 (같은 영상)",
+            "💡 화면 항상 켜짐",
+            "📤 공유",
+            "📥 다운로드",
+            "📝 자막 검색",
+            "📋 재생 대기열",
+            "📐 PIP 크기",
+            "⚙️ 자막 스타일"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("더보기")
+            .setItems(items) { _, i ->
+                when (i) {
+                    0 -> toggleRepeat()
+                    1 -> toggleKeepScreenOn()
+                    2 -> showShareDialog()
+                    3 -> startDownload()
+                    4 -> openTranscript()
+                    5 -> startActivity(Intent(this, QueueActivity::class.java))
+                    6 -> showPipSizeDialog()
+                    7 -> showSubtitleStyleDialog()
+                }
+            }
+            .show()
+    }
+
     private fun toggleLock() {
         isLocked = !isLocked
         if (isLocked) {
