@@ -31,7 +31,9 @@ class ChannelAdapter(
         holder.name.text = item.name
         holder.subs.text = item.subscribers
         if (item.thumbnail.isNotEmpty()) {
-            Glide.with(holder.avatar).load(item.thumbnail).into(holder.avatar)
+            Glide.with(holder.avatar).load(item.thumbnail).circleCrop().into(holder.avatar)
+        } else {
+            holder.avatar.setImageResource(android.R.color.darker_gray)
         }
         holder.itemView.setOnClickListener { onClick(item) }
     }

@@ -39,6 +39,11 @@
             android:label="관련 영상" />
 
         <activity
+            android:name=".ChannelActivity"
+            android:exported="false"
+            android:label="채널" />
+
+        <activity
             android:name=".PlayerActivity"
             android:exported="false"
             android:supportsPictureInPicture="true"
