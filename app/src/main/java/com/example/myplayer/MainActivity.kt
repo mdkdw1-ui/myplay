@@ -251,7 +251,10 @@ class MainActivity : AppCompatActivity() {
     private fun loadChannels(baseChannelName: String) {
         lifecycleScope.launch {
             val results = YouTubeChannels.search(baseChannelName)
-            val filtered = results.filter { it.name != baseChannelName && it.thumbnail.isNotEmpty() }.take(10)
+            val filtered = results
+                .filter { it.name != baseChannelName && it.name.isNotBlank() }
+                .distinctBy { it.channelId }
+                .take(10)
             if (filtered.isEmpty()) {
                 findViewById<View>(R.id.sectionChannels).visibility = View.GONE
                 return@launch

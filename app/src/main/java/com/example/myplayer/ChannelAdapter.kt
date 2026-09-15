@@ -30,11 +30,18 @@ class ChannelAdapter(
         val item = items[position]
         holder.name.text = item.name
         holder.subs.text = item.subscribers
+
         if (item.thumbnail.isNotEmpty()) {
+            holder.avatar.visibility = View.VISIBLE
+            holder.initial.visibility = View.GONE
             Glide.with(holder.avatar).load(item.thumbnail).circleCrop().into(holder.avatar)
         } else {
-            holder.avatar.setImageResource(android.R.color.darker_gray)
+            // 아바타 없음 → 이니셜 표시
+            holder.avatar.visibility = View.GONE
+            holder.initial.visibility = View.VISIBLE
+            holder.initial.text = item.name.firstOrNull()?.toString() ?: "?"
         }
+
         holder.itemView.setOnClickListener { onClick(item) }
     }
 
@@ -42,6 +49,7 @@ class ChannelAdapter(
 
     class VH(v: View) : RecyclerView.ViewHolder(v) {
         val avatar: ImageView = v.findViewById(R.id.avatar)
+        val initial: TextView = v.findViewById(R.id.initial)
         val name: TextView = v.findViewById(R.id.name)
         val subs: TextView = v.findViewById(R.id.subs)
     }
