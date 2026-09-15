@@ -251,6 +251,11 @@ class MainActivity : AppCompatActivity() {
     private fun loadChannels(baseChannelName: String) {
         lifecycleScope.launch {
             val results = YouTubeChannels.search(baseChannelName)
+            android.widget.Toast.makeText(
+                this@MainActivity,
+                "채널 검색 결과: ${results.size}개 (${YouTubeChannels.lastDebug})",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
             val filtered = results
                 .filter { it.name != baseChannelName && it.name.isNotBlank() }
                 .distinctBy { it.channelId }

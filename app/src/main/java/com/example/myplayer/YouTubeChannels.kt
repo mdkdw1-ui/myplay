@@ -21,6 +21,7 @@ object YouTubeChannels {
     private const val TAG = "YouTubeChannels"
     private const val API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
     private const val ENDPOINT = "https://www.youtube.com/youtubei/v1/search"
+    var lastDebug: String = ""
 
     suspend fun search(query: String): List<ChannelItem> = withContext(Dispatchers.IO) {
         val results = mutableListOf<ChannelItem>()
@@ -59,7 +60,8 @@ object YouTubeChannels {
             val response = conn.inputStream.bufferedReader().use(BufferedReader::readText)
             val json = JSONObject(response)
             collectChannels(json, results, query)
-            Log.d(TAG, "found ${results.size} channels for '$query'")
+            lastDebug = "HTTP $code, found ${results.size} for '$query'"
+            Log.d(TAG, lastDebug)
         } catch (e: Exception) {
             Log.e(TAG, "err: ${e.message}", e)
         }
