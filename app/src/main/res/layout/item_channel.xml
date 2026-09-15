@@ -16,12 +16,28 @@
         android:padding="16dp"
         android:background="?android:attr/selectableItemBackground">
 
-        <ImageView
-            android:id="@+id/avatar"
+        <FrameLayout
             android:layout_width="72dp"
-            android:layout_height="72dp"
-            android:scaleType="centerCrop"
-            android:background="@color/bg_elevated" />
+            android:layout_height="72dp">
+
+            <ImageView
+                android:id="@+id/avatar"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:scaleType="centerCrop"
+                android:background="@color/bg_elevated" />
+
+            <TextView
+                android:id="@+id/initial"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:gravity="center"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:textColor="@color/accent"
+                android:background="@color/bg_elevated"
+                android:visibility="gone" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/name"
