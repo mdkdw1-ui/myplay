@@ -293,6 +293,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val all = mutableListOf<ChannelItem>()
             val seen = mutableSetOf<String>()
+            val knownNames = baseChannelNames.toSet()
 
             // ===== 1) 내가 본 채널 (최대 5개) =====
             for (name in baseChannelNames) {
@@ -306,28 +307,44 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // ===== 2) 연관 채널 (관련 영상의 채널명 활용) =====
+            // ===== 2) 연관 채널 (관련 영상 + 제목 키워드) =====
             try {
-                // 시청 기록에서 최근 3개 영상의 관련 영상 채널 수집
-                val history = HistoryDatabase.get(applicationContext).historyDao()
-                    .getAll().first()
-
-                val relatedChannelNames = mutableSetOf<String>()
-                for (h in history.take(3)) {
-                    if (all.size >= 10) break
-                    val related = YouTubeRelated.fetch(h.videoId)
-                    for (v in related) {
-                        if (v.channel.isNotBlank()) relatedChannelNames.add(v.channel)
-                        if (relatedChannelNames.size >= 15) break
-                    }
-                    if (relatedChannelNames.size >= 15) break
+                val history = withContext(Dispatchers.IO) {
+                    HistoryDatabase.get(applicationContext).historyDao().getAll().first()
                 }
 
-                // 이미 본 채널 제외
-                val knownNames = baseChannelNames.toSet()
-                val candidates = relatedChannelNames
+                val relatedNames = mutableSetOf<String>()
+
+                // (a) 관련 영상 (next) 의 채널
+                for (h in history.take(5)) {
+                    if (relatedNames.size >= 20) break
+                    val related = YouTubeRelated.fetch(h.videoId)
+                    for (v in related) {
+                        if (v.channel.isNotBlank()) relatedNames.add(v.channel)
+                    }
+                }
+
+                // (b) ★ next가 부족하면 제목 키워드 검색
+                if (relatedNames.size < 10) {
+                    for (h in history.take(5)) {
+                        if (relatedNames.size >= 20) break
+                        val kw = h.title.split(" ")
+                            .filter { it.isNotBlank() && it.length >= 2 }
+                            .take(3).joinToString(" ")
+                        if (kw.isBlank()) continue
+                        try {
+                            val res = YouTubeSearch.search(kw)
+                            for (v in res) {
+                                if (v.channel.isNotBlank()) relatedNames.add(v.channel)
+                            }
+                        } catch (e: Exception) { }
+                    }
+                }
+
+                // (c) 이미 본 채널 제외 + 검색
+                val candidates = relatedNames
                     .filter { it !in knownNames }
-                    .take(5)
+                    .take(10)
 
                 for (name in candidates) {
                     if (all.size >= 10) break
