@@ -12,6 +12,7 @@ import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -111,6 +112,9 @@ class PlayerActivity : AppCompatActivity() {
 
     private val pref by lazy { getSharedPreferences("subtitle_prefs", Context.MODE_PRIVATE) }
     private val mainHandler = Handler(Looper.getMainLooper())
+    private lateinit var audioManager: AudioManager
+    private var gestureOverlay: View? = null
+    private val gestureHideRunnable = Runnable { gestureOverlay?.visibility = View.GONE }
 
     // ★ 재생 상태 리스너
     private val playerListener = object : Player.Listener {
@@ -195,6 +199,8 @@ class PlayerActivity : AppCompatActivity() {
         }
         (playerView.parent as? ViewGroup)?.addView(progress)
 
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        gestureOverlay = findViewById(R.id.gestureOverlay)
         applySubtitleStyle()
         setupGestures()
 
@@ -382,10 +388,63 @@ class PlayerActivity : AppCompatActivity() {
                 return true
             }
         })
+
+        var downY = 0f
+        var startVol = 0
+        var startBright = 0f
+        var isVolume = false
+        var gestureActive = false
+        val threshold = 40f
+
         playerView.setOnTouchListener { _, event ->
             gestureDetector.onTouchEvent(event)
+
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    downY = event.y
+                    startVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                    startBright = window.attributes.screenBrightness.let {
+                        if (it < 0) 0.5f else it
+                    }
+                    isVolume = event.x < playerView.width / 2f
+                    gestureActive = false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dy = downY - event.y // 위로 = +
+                    if (!gestureActive && Math.abs(dy) > threshold) {
+                        gestureActive = true
+                    }
+                    if (gestureActive) {
+                        val ratio = dy / playerView.height
+                        if (isVolume) {
+                            val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                            val newVol = (startVol + ratio * max).toInt().coerceIn(0, max)
+                            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVol, 0)
+                            val pct = (newVol * 100f / max).toInt()
+                            showGestureFeedback(if (newVol == 0) "🔇 음소거" else "🔊 $pct%")
+                        } else {
+                            val newBright = (startBright + ratio).coerceIn(0.05f, 1f)
+                            window.attributes = window.attributes.apply { screenBrightness = newBright }
+                            showGestureFeedback("☀️ ${(newBright * 100).toInt()}%")
+                        }
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (gestureActive) {
+                        gestureActive = false
+                        mainHandler.postDelayed(gestureHideRunnable, 400)
+                    }
+                }
+            }
             false
         }
+    }
+
+    private fun showGestureFeedback(text: String) {
+        val g = gestureOverlay ?: return
+        (g as? TextView)?.text = text
+        g.visibility = View.VISIBLE
+        mainHandler.removeCallbacks(gestureHideRunnable)
     }
 
     private fun seekBy(deltaMs: Long, isLeft: Boolean) {

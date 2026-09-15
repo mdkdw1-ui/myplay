@@ -228,6 +228,19 @@
 
         <!-- 자동 다음 동영상 알림 오버레이 -->
         <!-- 잠금 오버레이 -->
+        <TextView
+            android:id="@+id/gestureOverlay"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:padding="20dp"
+            android:background="#99000000"
+            android:text="🔊 50%"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
         <LinearLayout
             android:id="@+id/lockOverlay"
             android:layout_width="match_parent"

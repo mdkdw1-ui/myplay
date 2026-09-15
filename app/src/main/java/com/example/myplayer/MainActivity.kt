@@ -31,6 +31,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var channelAdapter: ChannelAdapter
     private lateinit var bookmarkAdapter: HorizontalVideoAdapter
     private lateinit var downloadsAdapter: HorizontalVideoAdapter
+    private lateinit var trendingAdapter: HorizontalVideoAdapter
     private lateinit var etHomeSearch: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,6 +70,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.tvDownloadsMore).setOnClickListener {
             startActivity(Intent(this, DownloadsActivity::class.java))
         }
+        findViewById<View>(R.id.tvTrendingMore).setOnClickListener {
+            loadTrending()
+        }
         findViewById<View>(R.id.tvClearSearches).setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle("최근 검색어")
@@ -86,6 +90,7 @@ class MainActivity : AppCompatActivity() {
         channelAdapter = ChannelAdapter { c -> openChannel(c) }
         bookmarkAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         downloadsAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
+        trendingAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
 
         findViewById<RecyclerView>(R.id.rvHistory).apply {
             layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
@@ -111,10 +116,15 @@ class MainActivity : AppCompatActivity() {
             layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
             adapter = downloadsAdapter
         }
+        findViewById<RecyclerView>(R.id.rvTrending).apply {
+            layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
+            adapter = trendingAdapter
+        }
 
         loadRecentSearches()
         loadBookmarks()
         loadDownloads()
+        loadTrending()
         loadHistory()
     }
 
@@ -124,6 +134,26 @@ class MainActivity : AppCompatActivity() {
         loadBookmarks()
         loadDownloads()
         loadHistory()
+    }
+
+
+    private fun loadTrending() {
+        lifecycleScope.launch {
+            val section = findViewById<View>(R.id.sectionTrending)
+            try {
+                val list = YouTubeTrending.fetch()
+                if (list.isEmpty()) {
+                    section.visibility = View.GONE
+                } else {
+                    section.visibility = View.VISIBLE
+                    trendingAdapter.submit(list.take(15).map {
+                        HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
+                    })
+                }
+            } catch (e: Exception) {
+                section.visibility = View.GONE
+            }
+        }
     }
 
     private fun loadDownloads() {
