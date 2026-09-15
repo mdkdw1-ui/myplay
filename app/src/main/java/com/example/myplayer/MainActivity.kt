@@ -270,8 +270,12 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    // ★ 채널 페이지로 이동
     private fun openChannel(c: ChannelItem) {
-        RecentSearches.add(this, c.name)
-        startActivity(Intent(this, SearchActivity::class.java).putExtra("QUERY", c.name))
+        val intent = Intent(this, ChannelActivity::class.java).apply {
+            putExtra("CHANNEL_ID", c.channelId)
+            putExtra("CHANNEL_NAME", c.name)
+        }
+        startActivity(intent)
     }
 }
