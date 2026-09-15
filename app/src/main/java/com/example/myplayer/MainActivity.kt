@@ -32,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bookmarkAdapter: HorizontalVideoAdapter
     private lateinit var downloadsAdapter: HorizontalVideoAdapter
     private lateinit var trendingAdapter: HorizontalVideoAdapter
+    private lateinit var subAdapter: ChannelAdapter
     private lateinit var etHomeSearch: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,6 +92,7 @@ class MainActivity : AppCompatActivity() {
         bookmarkAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         downloadsAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         trendingAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
+        subAdapter = ChannelAdapter { c -> openChannel(c) }
 
         findViewById<RecyclerView>(R.id.rvHistory).apply {
             layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
@@ -120,10 +122,18 @@ class MainActivity : AppCompatActivity() {
             layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
             adapter = trendingAdapter
         }
+        findViewById<RecyclerView>(R.id.rvSubscriptions).apply {
+            layoutManager = androidx.recyclerview.widget.GridLayoutManager(
+                this@MainActivity, 2,
+                androidx.recyclerview.widget.GridLayoutManager.HORIZONTAL, false
+            )
+            adapter = subAdapter
+        }
 
         loadRecentSearches()
         loadBookmarks()
         loadDownloads()
+        loadSubscriptions()
         loadTrending()
         loadHistory()
     }
@@ -136,6 +146,27 @@ class MainActivity : AppCompatActivity() {
         loadHistory()
     }
 
+
+
+    private fun loadSubscriptions() {
+        lifecycleScope.launch {
+            val section = findViewById<View>(R.id.sectionSubscriptions)
+            try {
+                HistoryDatabase.get(applicationContext).subscriptionDao().getAll().collect { list ->
+                    if (list.isEmpty()) {
+                        section.visibility = View.GONE
+                    } else {
+                        section.visibility = View.VISIBLE
+                        subAdapter.submit(list.map {
+                            ChannelItem(it.channelId, it.name, it.avatar, it.subscribers)
+                        })
+                    }
+                }
+            } catch (e: Exception) {
+                section.visibility = View.GONE
+            }
+        }
+    }
 
     private fun loadTrending() {
         lifecycleScope.launch {

@@ -6,8 +6,13 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [HistoryEntity::class, BookmarkEntity::class, DownloadEntity::class],
-    version = 3,
+    entities = [
+        HistoryEntity::class,
+        BookmarkEntity::class,
+        DownloadEntity::class,
+        SubscriptionEntity::class
+    ],
+    version = 4,
     exportSchema = false
 )
 abstract class HistoryDatabase : RoomDatabase() {
@@ -15,6 +20,7 @@ abstract class HistoryDatabase : RoomDatabase() {
     abstract fun historyDao(): HistoryDao
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun downloadDao(): DownloadDao
+    abstract fun subscriptionDao(): SubscriptionDao
 
     companion object {
         @Volatile

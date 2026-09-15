@@ -6,12 +6,16 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import com.google.android.material.button.MaterialButton
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ChannelActivity : AppCompatActivity() {
 
@@ -19,13 +23,16 @@ class ChannelActivity : AppCompatActivity() {
     private var nextContinuation: String? = null
     private var loadingMore = false
     private var channelId: String = ""
+    private var channelName: String = ""
+    private var channelAvatar: String = ""
+    private var channelSubs: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_channel)
 
         channelId = intent.getStringExtra("CHANNEL_ID") ?: ""
-        val fallbackName = intent.getStringExtra("CHANNEL_NAME") ?: ""
+        channelName = intent.getStringExtra("CHANNEL_NAME") ?: ""
 
         val ivAvatar = findViewById<ImageView>(R.id.ivAvatar)
         val tvChannelName = findViewById<TextView>(R.id.tvChannelName)
@@ -33,9 +40,9 @@ class ChannelActivity : AppCompatActivity() {
         val progress = findViewById<ProgressBar>(R.id.progress)
         val tvStatus = findViewById<TextView>(R.id.tvStatus)
         val recycler = findViewById<RecyclerView>(R.id.recycler)
+        val btnSubscribe = findViewById<MaterialButton>(R.id.btnSubscribe)
 
-        tvChannelName.text = fallbackName
-        tvSubscribers.text = ""
+        tvChannelName.text = channelName
 
         adapter = SearchAdapter { item ->
             startActivity(Intent(this, PlayerActivity::class.java).apply {
@@ -45,13 +52,13 @@ class ChannelActivity : AppCompatActivity() {
                 putExtra("VIDEO_THUMB", item.thumbnail)
             })
         }
-        recycler.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 2)
+        recycler.layoutManager = GridLayoutManager(this, 2)
         recycler.adapter = adapter
 
         recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
                 if (dy <= 0) return
-                val lm = rv.layoutManager as LinearLayoutManager
+                val lm = rv.layoutManager as GridLayoutManager
                 val lastVisible = lm.findLastVisibleItemPosition()
                 val total = adapter.itemCount
                 if (!loadingMore && nextContinuation != null && lastVisible >= total - 3) {
@@ -63,19 +70,30 @@ class ChannelActivity : AppCompatActivity() {
         if (channelId.isBlank()) {
             tvStatus.text = "채널 ID 없음"
             tvStatus.visibility = View.VISIBLE
+            btnSubscribe.visibility = View.GONE
             return
+        }
+
+        // 구독 상태 반영
+        refreshSubscribeButton(btnSubscribe)
+
+        btnSubscribe.setOnClickListener {
+            toggleSubscribe()
         }
 
         progress.visibility = View.VISIBLE
         tvStatus.visibility = View.VISIBLE
-        tvStatus.text = "채널 정보 불러오는 중... (id=$channelId)"
+        tvStatus.text = "채널 정보 불러오는 중..."
 
         lifecycleScope.launch {
-            val (info, page) = YouTubeChannel.fetch(channelId, fallbackName)
+            val (info, page) = YouTubeChannel.fetch(channelId, channelName)
             progress.visibility = View.GONE
 
             if (info != null) {
-                tvChannelName.text = info.name.ifBlank { fallbackName }
+                channelName = info.name.ifBlank { channelName }
+                channelAvatar = info.avatar
+                channelSubs = info.subscribers
+                tvChannelName.text = channelName
                 tvSubscribers.text = listOf(info.subscribers, info.videoCount)
                     .filter { it.isNotBlank() }.joinToString(" · ")
                 if (info.avatar.isNotBlank()) {
@@ -84,11 +102,61 @@ class ChannelActivity : AppCompatActivity() {
             }
 
             nextContinuation = page.continuation
-            val dbg = YouTubeChannel.lastDebug
-            tvStatus.text = if (page.videos.isEmpty())
-                "영상 없음 ($dbg)"
-            else "${page.videos.size}개 · $dbg"
+            tvStatus.text = if (page.videos.isEmpty()) "영상 없음"
+                             else "${page.videos.size}개"
             adapter.submit(page.videos)
+        }
+    }
+
+    private fun refreshSubscribeButton(btn: MaterialButton) {
+        if (channelId.isBlank()) return
+        lifecycleScope.launch {
+            val sub = withContext(Dispatchers.IO) {
+                try {
+                    HistoryDatabase.get(applicationContext).subscriptionDao()
+                        .isSubscribed(channelId)
+                } catch (e: Exception) { false }
+            }
+            if (sub) {
+                btn.text = "구독중 ✓"
+                btn.setBackgroundColor(0xFF26262A.toInt())
+                btn.setTextColor(0xFFAAAAAA.toInt())
+            } else {
+                btn.text = "구독"
+                btn.setBackgroundColor(0xFFFF2D55.toInt())
+                btn.setTextColor(0xFFFFFFFF.toInt())
+            }
+        }
+    }
+
+    private fun toggleSubscribe() {
+        if (channelId.isBlank()) return
+        val btn = findViewById<MaterialButton>(R.id.btnSubscribe)
+        lifecycleScope.launch {
+            try {
+                val dao = HistoryDatabase.get(applicationContext).subscriptionDao()
+                val sub = withContext(Dispatchers.IO) { dao.isSubscribed(channelId) }
+                if (sub) {
+                    withContext(Dispatchers.IO) { dao.delete(channelId) }
+                    Toast.makeText(this@ChannelActivity, "구독 해제", Toast.LENGTH_SHORT).show()
+                } else {
+                    withContext(Dispatchers.IO) {
+                        dao.insert(
+                            SubscriptionEntity(
+                                channelId = channelId,
+                                name = channelName,
+                                avatar = channelAvatar,
+                                subscribers = channelSubs,
+                                subscribedAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                    Toast.makeText(this@ChannelActivity, "구독! 홈에서 확인하세요", Toast.LENGTH_SHORT).show()
+                }
+                refreshSubscribeButton(btn)
+            } catch (e: Exception) {
+                Toast.makeText(this@ChannelActivity, "실패: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
