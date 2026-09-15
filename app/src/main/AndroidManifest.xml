@@ -44,6 +44,11 @@
             android:label="채널" />
 
         <activity
+            android:name=".StatsActivity"
+            android:exported="false"
+            android:label="통계" />
+
+        <activity
             android:name=".PlayerActivity"
             android:exported="false"
             android:supportsPictureInPicture="true"
