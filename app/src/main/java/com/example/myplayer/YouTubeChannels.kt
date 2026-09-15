@@ -110,7 +110,15 @@ object YouTubeChannels {
             ?.takeIf { it.isNotEmpty() }
             ?: return null
 
-        return ChannelItem(channelId, name, "", "")
+        // ★ 채널 아바타 추출 (channelThumbnailSupportedRenderers)
+        val avatar = v.optJSONObject("channelThumbnailSupportedRenderers")
+            ?.optJSONObject("channelThumbnailWithLinkRenderer")
+            ?.optJSONObject("thumbnail")
+            ?.optJSONArray("thumbnails")
+            ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
+            ?: ""
+
+        return ChannelItem(channelId, name, avatar, "")
     }
 
     private fun extractText(obj: JSONObject?): String? {
