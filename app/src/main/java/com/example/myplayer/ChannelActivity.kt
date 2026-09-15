@@ -45,7 +45,7 @@ class ChannelActivity : AppCompatActivity() {
                 putExtra("VIDEO_THUMB", item.thumbnail)
             })
         }
-        recycler.layoutManager = LinearLayoutManager(this)
+        recycler.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 2)
         recycler.adapter = adapter
 
         recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
