@@ -52,6 +52,9 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -81,6 +84,11 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var autoNextOverlay: View
     private lateinit var tvNextCountdown: TextView
     private lateinit var swAutoNext: SwitchMaterial
+    private lateinit var swSponsorBlock: SwitchMaterial
+    private var sbEnabled: Boolean = true
+    private var sbCategories: List<String> = SponsorBlock.DEFAULT_CATEGORIES
+    private var sponsorSegments: List<SkipSegment> = emptyList()
+    private var sbCheckJob: Job? = null
     private lateinit var controllerFuture: ListenableFuture<MediaController>
     private var mediaController: MediaController? = null
 
@@ -139,6 +147,28 @@ class PlayerActivity : AppCompatActivity() {
         swAutoNext.setOnCheckedChangeListener { _, checked ->
             autoNextEnabled = checked
             pref.edit().putBoolean("auto_next", checked).apply()
+        }
+
+        swSponsorBlock = findViewById(R.id.swSponsorBlock)
+        sbEnabled = pref.getBoolean("sb_enabled", true)
+        val savedCats = pref.getString("sb_categories", null)
+        sbCategories = if (savedCats.isNullOrBlank())
+            SponsorBlock.DEFAULT_CATEGORIES
+        else savedCats.split(",").filter { it.isNotBlank() }
+
+        swSponsorBlock.isChecked = sbEnabled
+        swSponsorBlock.setOnCheckedChangeListener { _, checked ->
+            sbEnabled = checked
+            pref.edit().putBoolean("sb_enabled", checked).apply()
+            if (checked && currentVideoId.isNotBlank()) {
+                loadSponsorSegments(currentVideoId)
+            } else if (!checked) {
+                sponsorSegments = emptyList()
+            }
+        }
+        swSponsorBlock.setOnLongClickListener {
+            showSbCategoryDialog()
+            true
         }
 
         findViewById<MaterialButton>(R.id.btnCancelAutoNext).setOnClickListener {
@@ -684,6 +714,7 @@ class PlayerActivity : AppCompatActivity() {
 
             applyStreamWithSubtitle(streamUrl, autoSub, null, startPosMs)
             updateCcButton(autoSub != null)
+            loadSponsorSegments(videoId)
             buildSummary(videoId, finalTitle, result.description)
             saveHistory(videoId, finalTitle, finalChannel, thumb, startPosMs)
         }
@@ -882,6 +913,70 @@ class PlayerActivity : AppCompatActivity() {
         private const val REQ_TRANSCRIPT = 1001
     }
 
+
+    // ========== 🚫 SponsorBlock ==========
+    private fun loadSponsorSegments(videoId: String) {
+        sbCheckJob?.cancel()
+        sponsorSegments = emptyList()
+        if (!sbEnabled || videoId.isBlank()) return
+
+        lifecycleScope.launch {
+            sponsorSegments = SponsorBlock.fetch(videoId, sbCategories)
+            if (sponsorSegments.isNotEmpty()) {
+                Toast.makeText(
+                    this@PlayerActivity,
+                    "스폰서 구간 ${sponsorSegments.size}개 감지",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+
+        sbCheckJob = lifecycleScope.launch {
+            while (isActive) {
+                checkAndSkip()
+                delay(500)
+            }
+        }
+    }
+
+    private fun checkAndSkip() {
+        if (!sbEnabled) return
+        val pos = mediaController?.currentPosition ?: return
+        for (seg in sponsorSegments) {
+            if (pos >= seg.startMs && pos < seg.endMs - 200) {
+                mediaController?.seekTo(seg.endMs)
+                Toast.makeText(
+                    this@PlayerActivity,
+                    "⏭ ${seg.categoryLabel} 건너뜀",
+                    Toast.LENGTH_SHORT
+                ).show()
+                break
+            }
+        }
+    }
+
+    private fun showSbCategoryDialog() {
+        val labels = SponsorBlock.ALL_CATEGORIES.map { SponsorBlock.labelOf(it) }.toTypedArray()
+        val checked = SponsorBlock.ALL_CATEGORIES.map { it in sbCategories }.toBooleanArray()
+        val tempSet = sbCategories.toMutableSet()
+
+        AlertDialog.Builder(this)
+            .setTitle("건너뛸 카테고리")
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                val cat = SponsorBlock.ALL_CATEGORIES[which]
+                if (isChecked) tempSet.add(cat) else tempSet.remove(cat)
+            }
+            .setPositiveButton("적용") { _, _ ->
+                sbCategories = tempSet.toList()
+                pref.edit().putString("sb_categories", sbCategories.joinToString(",")).apply()
+                if (currentVideoId.isNotBlank() && sbEnabled) {
+                    loadSponsorSegments(currentVideoId)
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
     private fun toggleFullscreen() {
         val controller = window.insetsController ?: return
         if (!isFullscreen) {
@@ -971,6 +1066,7 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        sbCheckJob?.cancel()
         savePosition()
         cancelAutoNext()
         if (!isInPictureInPictureMode) mediaController?.pause()
@@ -991,6 +1087,7 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        sbCheckJob?.cancel()
         mediaController?.removeListener(playerListener)
         MediaController.releaseFuture(controllerFuture)
     }
