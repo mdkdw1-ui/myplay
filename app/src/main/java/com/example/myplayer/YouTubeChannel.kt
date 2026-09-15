@@ -47,7 +47,6 @@ object YouTubeChannel {
                         })
                     })
                     put("browseId", channelId)
-                    // params 제거 — 기본 탭에서 모든 영상 추출
                 }
                 val response = post(BROWSE, body.toString())
                 if (response == null) {
@@ -60,6 +59,16 @@ object YouTubeChannel {
                 collectVideos(json, videos)
                 cont = findContinuation(json)
                 lastDebug = "info=${info?.name ?: "null"}, videos=${videos.size}, cont=${cont != null}"
+
+                // ★ 초기 응답에 영상이 없고 continuation이 있으면 즉시 로드
+                if (videos.isEmpty() && cont != null) {
+                    Log.d(TAG, "initial empty, following continuation")
+                    val page2 = fetchMore(cont)
+                    videos.addAll(page2.videos)
+                    cont = page2.continuation
+                    lastDebug += " → +${page2.videos.size} after cont"
+                }
+
                 Log.d(TAG, lastDebug)
             } catch (e: Exception) {
                 lastDebug = "err: ${e.message}"
@@ -128,7 +137,7 @@ object YouTubeChannel {
         val header = root.optJSONObject("header")
             ?: root.optJSONObject("headerRenderer")
 
-        // 1) c4TabbedHeaderRenderer (WEB)
+        // 1) c4TabbedHeaderRenderer
         header?.optJSONObject("c4TabbedHeaderRenderer")?.let { c4 ->
             val name = extractText(c4.optJSONObject("title"))
             val avatar = c4.optJSONObject("avatar")?.optJSONObject("thumbnails")
@@ -138,7 +147,7 @@ object YouTubeChannel {
             return ChannelInfo(channelId, name, avatar, subs)
         }
 
-        // 2) pageHeaderRenderer (신규)
+        // 2) pageHeaderRenderer
         header?.optJSONObject("pageHeaderRenderer")?.let { ph ->
             val vm = ph.optJSONObject("pageHeaderViewModel") ?: return@let
             val name = extractText(
@@ -160,26 +169,37 @@ object YouTubeChannel {
             return ChannelInfo(channelId, name, avatar, subs)
         }
 
+        // 3) metadata.channelMetadataRenderer (폴백)
+        root.optJSONObject("metadata")
+            ?.optJSONObject("channelMetadataRenderer")?.let { cm ->
+                val name = cm.optString("title")
+                val avatar = cm.optJSONObject("avatar")
+                    ?.optJSONObject("thumbnails")
+                    ?.optJSONArray("thumbnails")
+                    ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
+                    ?: cm.optJSONObject("avatar")
+                        ?.optJSONArray("thumbnails")
+                        ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
+                    ?: ""
+                val desc = cm.optString("description")
+                return ChannelInfo(channelId, name, avatar, "", "", desc)
+            }
+
         return null
     }
 
-    /** videoRenderer + gridVideoRenderer + richItemRenderer 모두 수집 */
     private fun collectVideos(node: Any?, out: MutableList<VideoItem>) {
         when (node) {
             is JSONObject -> {
-                // 1) videoRenderer
                 node.optJSONObject("videoRenderer")?.let {
                     parseVideo(it)?.let { v -> out.add(v) }
                 }
-                // 2) gridVideoRenderer
                 node.optJSONObject("gridVideoRenderer")?.let {
                     parseVideo(it)?.let { v -> out.add(v) }
                 }
-                // 3) richItemRenderer.content.videoRenderer
                 node.optJSONObject("richItemRenderer")?.let { ri ->
                     ri.optJSONObject("content")?.let { collectVideos(it, out) }
                 }
-                // 4) 재귀
                 val keys = node.keys()
                 while (keys.hasNext()) {
                     val key = keys.next()
@@ -198,6 +218,16 @@ object YouTubeChannel {
                     val token = cir.optJSONObject("continuationEndpoint")
                         ?.optJSONObject("continuationCommand")?.optString("token")
                     if (!token.isNullOrEmpty()) return token
+                }
+                // continuationItemRenderer는 array 안에 있기도 함
+                node.optJSONArray("continuationItemRenderer")?.let { arr ->
+                    for (i in 0 until arr.length()) {
+                        val token = arr.optJSONObject(i)
+                            ?.optJSONObject("continuationEndpoint")
+                            ?.optJSONObject("continuationCommand")
+                            ?.optString("token")
+                        if (!token.isNullOrEmpty()) return token
+                    }
                 }
                 val keys = node.keys()
                 while (keys.hasNext()) {

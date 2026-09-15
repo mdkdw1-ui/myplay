@@ -18,7 +18,7 @@
 
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="190dp">
+            android:layout_height="160dp">
 
             <ImageView
                 android:id="@+id/thumb"
