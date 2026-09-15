@@ -71,7 +71,7 @@ class ChannelActivity : AppCompatActivity() {
         tvStatus.text = "채널 정보 불러오는 중... (id=$channelId)"
 
         lifecycleScope.launch {
-            val (info, page) = YouTubeChannel.fetch(channelId)
+            val (info, page) = YouTubeChannel.fetch(channelId, fallbackName)
             progress.visibility = View.GONE
 
             if (info != null) {

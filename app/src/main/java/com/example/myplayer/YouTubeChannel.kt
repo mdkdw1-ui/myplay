@@ -31,51 +31,88 @@ object YouTubeChannel {
 
     var lastDebug: String = ""
 
-    suspend fun fetch(channelId: String): Pair<ChannelInfo?, ChannelVideosPage> =
-        withContext(Dispatchers.IO) {
-            var info: ChannelInfo? = null
-            val videos = mutableListOf<VideoItem>()
-            var cont: String? = null
-            try {
-                val body = JSONObject().apply {
-                    put("context", JSONObject().apply {
-                        put("client", JSONObject().apply {
-                            put("clientName", "WEB")
-                            put("clientVersion", "2.20240101.00.00")
-                            put("hl", "ko")
-                            put("gl", "KR")
-                        })
-                    })
-                    put("browseId", channelId)
-                }
-                val response = post(BROWSE, body.toString())
-                if (response == null) {
-                    lastDebug = "HTTP fail"
-                    return@withContext Pair(null, ChannelVideosPage(emptyList(), null))
-                }
+    suspend fun fetch(
+        channelId: String,
+        channelName: String = ""
+    ): Pair<ChannelInfo?, ChannelVideosPage> = withContext(Dispatchers.IO) {
+        var info: ChannelInfo? = null
+        val videos = mutableListOf<VideoItem>()
+        var cont: String? = null
 
+        // ========== 1단계: browse 시도 ==========
+        try {
+            val body = JSONObject().apply {
+                put("context", JSONObject().apply {
+                    put("client", JSONObject().apply {
+                        put("clientName", "WEB")
+                        put("clientVersion", "2.20240101.00.00")
+                        put("hl", "ko")
+                        put("gl", "KR")
+                    })
+                })
+                put("browseId", channelId)
+            }
+            val response = post(BROWSE, body.toString())
+            if (response != null) {
                 val json = JSONObject(response)
                 info = parseHeader(json, channelId)
                 collectVideos(json, videos)
                 cont = findContinuation(json)
-                lastDebug = "info=${info?.name ?: "null"}, videos=${videos.size}, cont=${cont != null}"
 
-                // ★ 초기 응답에 영상이 없고 continuation이 있으면 즉시 로드
+                // continuation 1회 팔로우
                 if (videos.isEmpty() && cont != null) {
-                    Log.d(TAG, "initial empty, following continuation")
                     val page2 = fetchMore(cont)
                     videos.addAll(page2.videos)
                     cont = page2.continuation
-                    lastDebug += " → +${page2.videos.size} after cont"
+                }
+            }
+            lastDebug = "browse: videos=${videos.size}"
+        } catch (e: Exception) {
+            Log.e(TAG, "browse err: ${e.message}", e)
+            lastDebug = "browse err: ${e.message}"
+        }
+
+        // ========== 2단계: browse 실패 → 검색 폴백 ==========
+        if (videos.isEmpty() && channelName.isNotBlank()) {
+            try {
+                Log.d(TAG, "falling back to search: $channelName")
+                val searchResults = YouTubeSearch.search(channelName)
+
+                // (a) 채널명 정확 일치
+                var filtered = searchResults.filter { v ->
+                    v.channel.isNotBlank() &&
+                    v.channel.equals(channelName, ignoreCase = true)
                 }
 
-                Log.d(TAG, lastDebug)
+                // (b) 부분 일치 (앞 8자 비교)
+                if (filtered.isEmpty()) {
+                    val key = channelName.take(8).lowercase()
+                    filtered = searchResults.filter { v ->
+                        v.channel.isNotBlank() &&
+                        (v.channel.lowercase().contains(key) ||
+                         channelName.lowercase().contains(v.channel.take(8).lowercase()))
+                    }
+                }
+
+                // (c) 그래도 없으면 전체 검색 결과 사용 (최후의 수단)
+                if (filtered.isEmpty() && searchResults.isNotEmpty()) {
+                    filtered = searchResults
+                    lastDebug += " | search(all)=${searchResults.size}"
+                } else {
+                    lastDebug += " | search(match)=${filtered.size}"
+                }
+
+                videos.addAll(filtered)
+                cont = null  // 검색 결과는 continuation 없음
             } catch (e: Exception) {
-                lastDebug = "err: ${e.message}"
-                Log.e(TAG, "err: ${e.message}", e)
+                Log.e(TAG, "search fallback err: ${e.message}", e)
+                lastDebug += " | search err: ${e.message}"
             }
-            Pair(info, ChannelVideosPage(videos, cont))
         }
+
+        Log.d(TAG, lastDebug)
+        Pair(info, ChannelVideosPage(videos, cont))
+    }
 
     suspend fun fetchMore(continuation: String): ChannelVideosPage = withContext(Dispatchers.IO) {
         val videos = mutableListOf<VideoItem>()
@@ -119,10 +156,7 @@ object YouTubeChannel {
         conn.readTimeout = 15000
         conn.outputStream.use { it.write(bodyStr.toByteArray()) }
         val code = conn.responseCode
-        if (code !in 200..299) {
-            Log.e(TAG, "HTTP $code")
-            return null
-        }
+        if (code !in 200..299) return null
         return conn.inputStream.bufferedReader().use(BufferedReader::readText)
     }
 
@@ -134,10 +168,8 @@ object YouTubeChannel {
     }
 
     private fun parseHeader(root: JSONObject, channelId: String): ChannelInfo? {
-        val header = root.optJSONObject("header")
-            ?: root.optJSONObject("headerRenderer")
+        val header = root.optJSONObject("header") ?: root.optJSONObject("headerRenderer")
 
-        // 1) c4TabbedHeaderRenderer
         header?.optJSONObject("c4TabbedHeaderRenderer")?.let { c4 ->
             val name = extractText(c4.optJSONObject("title"))
             val avatar = c4.optJSONObject("avatar")?.optJSONObject("thumbnails")
@@ -147,7 +179,6 @@ object YouTubeChannel {
             return ChannelInfo(channelId, name, avatar, subs)
         }
 
-        // 2) pageHeaderRenderer
         header?.optJSONObject("pageHeaderRenderer")?.let { ph ->
             val vm = ph.optJSONObject("pageHeaderViewModel") ?: return@let
             val name = extractText(
@@ -169,21 +200,18 @@ object YouTubeChannel {
             return ChannelInfo(channelId, name, avatar, subs)
         }
 
-        // 3) metadata.channelMetadataRenderer (폴백)
-        root.optJSONObject("metadata")
-            ?.optJSONObject("channelMetadataRenderer")?.let { cm ->
-                val name = cm.optString("title")
-                val avatar = cm.optJSONObject("avatar")
-                    ?.optJSONObject("thumbnails")
+        root.optJSONObject("metadata")?.optJSONObject("channelMetadataRenderer")?.let { cm ->
+            val name = cm.optString("title")
+            val avatar = cm.optJSONObject("avatar")
+                ?.optJSONObject("thumbnails")
+                ?.optJSONArray("thumbnails")
+                ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
+                ?: cm.optJSONObject("avatar")
                     ?.optJSONArray("thumbnails")
-                    ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
-                    ?: cm.optJSONObject("avatar")
-                        ?.optJSONArray("thumbnails")
-                        ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
-                    ?: ""
-                val desc = cm.optString("description")
-                return ChannelInfo(channelId, name, avatar, "", "", desc)
-            }
+                    ?.let { it.optJSONObject(it.length() - 1)?.optString("url") } ?: ""
+            val desc = cm.optString("description")
+            return ChannelInfo(channelId, name, avatar, "", "", desc)
+        }
 
         return null
     }
@@ -191,12 +219,8 @@ object YouTubeChannel {
     private fun collectVideos(node: Any?, out: MutableList<VideoItem>) {
         when (node) {
             is JSONObject -> {
-                node.optJSONObject("videoRenderer")?.let {
-                    parseVideo(it)?.let { v -> out.add(v) }
-                }
-                node.optJSONObject("gridVideoRenderer")?.let {
-                    parseVideo(it)?.let { v -> out.add(v) }
-                }
+                node.optJSONObject("videoRenderer")?.let { parseVideo(it)?.let { v -> out.add(v) } }
+                node.optJSONObject("gridVideoRenderer")?.let { parseVideo(it)?.let { v -> out.add(v) } }
                 node.optJSONObject("richItemRenderer")?.let { ri ->
                     ri.optJSONObject("content")?.let { collectVideos(it, out) }
                 }
@@ -218,16 +242,6 @@ object YouTubeChannel {
                     val token = cir.optJSONObject("continuationEndpoint")
                         ?.optJSONObject("continuationCommand")?.optString("token")
                     if (!token.isNullOrEmpty()) return token
-                }
-                // continuationItemRenderer는 array 안에 있기도 함
-                node.optJSONArray("continuationItemRenderer")?.let { arr ->
-                    for (i in 0 until arr.length()) {
-                        val token = arr.optJSONObject(i)
-                            ?.optJSONObject("continuationEndpoint")
-                            ?.optJSONObject("continuationCommand")
-                            ?.optString("token")
-                        if (!token.isNullOrEmpty()) return token
-                    }
                 }
                 val keys = node.keys()
                 while (keys.hasNext()) {
