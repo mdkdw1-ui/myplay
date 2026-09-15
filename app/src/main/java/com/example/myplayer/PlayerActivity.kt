@@ -64,6 +64,7 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var btnSpeed: MaterialButton
     private lateinit var btnCc: MaterialButton
     private lateinit var btnBookmark: MaterialButton
+    private lateinit var btnDownload: MaterialButton
     private lateinit var btnShare: MaterialButton
     private lateinit var infoScroll: View
     private lateinit var videoContainer: View
@@ -113,6 +114,7 @@ class PlayerActivity : AppCompatActivity() {
         btnCc = findViewById(R.id.btnCc)
         btnBookmark = findViewById(R.id.btnBookmark)
         btnShare = findViewById(R.id.btnShare)
+        btnDownload = findViewById(R.id.btnDownload)
         infoScroll = findViewById(R.id.infoScroll)
         videoContainer = findViewById(R.id.videoContainer)
         summaryCard = findViewById(R.id.summaryCard)
@@ -182,6 +184,7 @@ class PlayerActivity : AppCompatActivity() {
         btnCc.setOnClickListener { showSubtitleDialog() }
         btnBookmark.setOnClickListener { toggleBookmark() }
         btnShare.setOnClickListener { showShareDialog() }
+        btnDownload.setOnClickListener { startDownload() }
     }
 
     // ========== 🔗 타임스탬프 인식 ==========

@@ -20,6 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -29,6 +30,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var relatedAdapter: HorizontalVideoAdapter
     private lateinit var channelAdapter: ChannelAdapter
     private lateinit var bookmarkAdapter: HorizontalVideoAdapter
+    private lateinit var downloadsAdapter: HorizontalVideoAdapter
     private lateinit var etHomeSearch: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,6 +66,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.tvHistoryMore).setOnClickListener {
             startActivity(Intent(this, HistoryActivity::class.java))
         }
+        findViewById<View>(R.id.tvDownloadsMore).setOnClickListener {
+            startActivity(Intent(this, DownloadsActivity::class.java))
+        }
         findViewById<View>(R.id.tvClearSearches).setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle("최근 검색어")
@@ -80,6 +85,7 @@ class MainActivity : AppCompatActivity() {
         relatedAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         channelAdapter = ChannelAdapter { c -> openChannel(c) }
         bookmarkAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
+        downloadsAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
 
         findViewById<RecyclerView>(R.id.rvHistory).apply {
             layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
@@ -90,16 +96,25 @@ class MainActivity : AppCompatActivity() {
             adapter = relatedAdapter
         }
         findViewById<RecyclerView>(R.id.rvChannels).apply {
-            layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
+            // 2행 그리드 (가로 스크롤)
+            layoutManager = androidx.recyclerview.widget.GridLayoutManager(
+                this@MainActivity, 2,
+                androidx.recyclerview.widget.GridLayoutManager.HORIZONTAL, false
+            )
             adapter = channelAdapter
         }
         findViewById<RecyclerView>(R.id.rvBookmarks).apply {
             layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
             adapter = bookmarkAdapter
         }
+        findViewById<RecyclerView>(R.id.rvDownloads).apply {
+            layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
+            adapter = downloadsAdapter
+        }
 
         loadRecentSearches()
         loadBookmarks()
+        loadDownloads()
         loadHistory()
     }
 
@@ -107,7 +122,28 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         loadRecentSearches()
         loadBookmarks()
+        loadDownloads()
         loadHistory()
+    }
+
+    private fun loadDownloads() {
+        lifecycleScope.launch {
+            val section = findViewById<View>(R.id.sectionDownloads)
+            try {
+                HistoryDatabase.get(applicationContext).downloadDao().getAll().collect { list ->
+                    if (list.isEmpty()) {
+                        section.visibility = View.GONE
+                    } else {
+                        section.visibility = View.VISIBLE
+                        downloadsAdapter.submit(list.take(10).map {
+                            HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
+                        })
+                    }
+                }
+            } catch (e: Exception) {
+                section.visibility = View.GONE
+            }
+        }
     }
 
     private fun loadRecentSearches() {
@@ -255,24 +291,58 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadChannelsMulti(baseChannelNames: List<String>) {
         lifecycleScope.launch {
-            // 각 채널명마다 검색 → 결과 병합 + 중복 제거
             val all = mutableListOf<ChannelItem>()
             val seen = mutableSetOf<String>()
-            val knownNames = baseChannelNames.toSet()
 
+            // ===== 1) 내가 본 채널 (최대 5개) =====
             for (name in baseChannelNames) {
+                if (all.size >= 5) break
                 val res = YouTubeChannels.search(name)
                 for (c in res) {
-                    if (c.channelId.isBlank()) continue
-                    if (c.channelId in seen) continue
+                    if (c.channelId.isBlank() || c.channelId in seen) continue
                     seen.add(c.channelId)
                     all.add(c)
-                    if (all.size >= 15) break
+                    if (all.size >= 5) break
                 }
-                if (all.size >= 15) break
             }
 
-            // 이미 아는 채널도 포함 (아바타 없어도)
+            // ===== 2) 연관 채널 (관련 영상의 채널명 활용) =====
+            try {
+                // 시청 기록에서 최근 3개 영상의 관련 영상 채널 수집
+                val history = HistoryDatabase.get(applicationContext).historyDao()
+                    .getAll().kotlinx.coroutines.flow.first()
+
+                val relatedChannelNames = mutableSetOf<String>()
+                for (h in history.take(3)) {
+                    if (all.size >= 10) break
+                    val related = YouTubeRelated.fetch(h.videoId)
+                    for (v in related) {
+                        if (v.channel.isNotBlank()) relatedChannelNames.add(v.channel)
+                        if (relatedChannelNames.size >= 15) break
+                    }
+                    if (relatedChannelNames.size >= 15) break
+                }
+
+                // 이미 본 채널 제외
+                val knownNames = baseChannelNames.toSet()
+                val candidates = relatedChannelNames
+                    .filter { it !in knownNames }
+                    .take(5)
+
+                for (name in candidates) {
+                    if (all.size >= 10) break
+                    val res = YouTubeChannels.search(name)
+                    for (c in res) {
+                        if (c.channelId.isBlank() || c.channelId in seen) continue
+                        seen.add(c.channelId)
+                        all.add(c)
+                        if (all.size >= 10) break
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
             val filtered = all.distinctBy { it.channelId }.take(10)
             if (filtered.isEmpty()) {
                 findViewById<View>(R.id.sectionChannels).visibility = View.GONE
