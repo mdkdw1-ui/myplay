@@ -29,10 +29,8 @@ object YouTubeChannel {
     private const val API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
     private const val BROWSE = "https://www.youtube.com/youtubei/v1/browse"
 
-    // 채널 "동영상" 탭 파라미터
-    private const val VIDEOS_TAB_PARAMS = "EgZ2aWRlb3PyBgQKAjoA"
+    var lastDebug: String = ""
 
-    /** 채널 정보 + 첫 영상 페이지 */
     suspend fun fetch(channelId: String): Pair<ChannelInfo?, ChannelVideosPage> =
         withContext(Dispatchers.IO) {
             var info: ChannelInfo? = null
@@ -49,17 +47,22 @@ object YouTubeChannel {
                         })
                     })
                     put("browseId", channelId)
-                    put("params", VIDEOS_TAB_PARAMS)
+                    // params 제거 — 기본 탭에서 모든 영상 추출
                 }
                 val response = post(BROWSE, body.toString())
-                    ?: return@withContext Pair(null, ChannelVideosPage(emptyList(), null))
+                if (response == null) {
+                    lastDebug = "HTTP fail"
+                    return@withContext Pair(null, ChannelVideosPage(emptyList(), null))
+                }
 
                 val json = JSONObject(response)
                 info = parseHeader(json, channelId)
                 collectVideos(json, videos)
                 cont = findContinuation(json)
-                Log.d(TAG, "channel $channelId -> info=${info?.name}, videos=${videos.size}")
+                lastDebug = "info=${info?.name ?: "null"}, videos=${videos.size}, cont=${cont != null}"
+                Log.d(TAG, lastDebug)
             } catch (e: Exception) {
+                lastDebug = "err: ${e.message}"
                 Log.e(TAG, "err: ${e.message}", e)
             }
             Pair(info, ChannelVideosPage(videos, cont))
@@ -107,7 +110,10 @@ object YouTubeChannel {
         conn.readTimeout = 15000
         conn.outputStream.use { it.write(bodyStr.toByteArray()) }
         val code = conn.responseCode
-        if (code !in 200..299) return null
+        if (code !in 200..299) {
+            Log.e(TAG, "HTTP $code")
+            return null
+        }
         return conn.inputStream.bufferedReader().use(BufferedReader::readText)
     }
 
@@ -115,21 +121,17 @@ object YouTubeChannel {
         if (obj == null) return ""
         val simple = obj.optString("simpleText")
         if (simple.isNotBlank()) return simple
-        return obj.optJSONArray("runs")
-            ?.optJSONObject(0)
-            ?.optString("text") ?: ""
+        return obj.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: ""
     }
 
     private fun parseHeader(root: JSONObject, channelId: String): ChannelInfo? {
-        // 페이지 헤더 위치가 여러 가능성
         val header = root.optJSONObject("header")
             ?: root.optJSONObject("headerRenderer")
 
-        // 1) c4TabbedHeaderRenderer (데스크톱)
+        // 1) c4TabbedHeaderRenderer (WEB)
         header?.optJSONObject("c4TabbedHeaderRenderer")?.let { c4 ->
             val name = extractText(c4.optJSONObject("title"))
-            val avatar = c4.optJSONObject("avatar")
-                ?.optJSONObject("thumbnails")
+            val avatar = c4.optJSONObject("avatar")?.optJSONObject("thumbnails")
                 ?.optJSONArray("thumbnails")
                 ?.let { it.optJSONObject(it.length() - 1)?.optString("url") } ?: ""
             val subs = extractText(c4.optJSONObject("subscriberCountText"))
@@ -152,30 +154,38 @@ object YouTubeChannel {
                 ?.let { it.optJSONObject(it.length() - 1)?.optString("url") } ?: ""
             val subs = vm.optJSONObject("metadata")
                 ?.optJSONObject("contentMetadataViewModel")
-                ?.optJSONArray("metadataRows")
-                ?.optJSONObject(0)
-                ?.optJSONArray("metadataParts")
-                ?.optJSONObject(0)
-                ?.optJSONObject("text")
-                ?.optString("content") ?: ""
+                ?.optJSONArray("metadataRows")?.optJSONObject(0)
+                ?.optJSONArray("metadataParts")?.optJSONObject(0)
+                ?.optJSONObject("text")?.optString("content") ?: ""
             return ChannelInfo(channelId, name, avatar, subs)
         }
 
         return null
     }
 
+    /** videoRenderer + gridVideoRenderer + richItemRenderer 모두 수집 */
     private fun collectVideos(node: Any?, out: MutableList<VideoItem>) {
         when (node) {
             is JSONObject -> {
-                node.optJSONObject("videoRenderer")?.let { parseVideo(it)?.let { v -> out.add(v) } }
-                // richItemRenderer.content.videoRenderer
-                node.optJSONObject("richItemRenderer")?.let { ri ->
-                    ri.optJSONObject("content")?.optJSONObject("videoRenderer")?.let {
-                        parseVideo(it)?.let { v -> out.add(v) }
-                    }
+                // 1) videoRenderer
+                node.optJSONObject("videoRenderer")?.let {
+                    parseVideo(it)?.let { v -> out.add(v) }
                 }
+                // 2) gridVideoRenderer
+                node.optJSONObject("gridVideoRenderer")?.let {
+                    parseVideo(it)?.let { v -> out.add(v) }
+                }
+                // 3) richItemRenderer.content.videoRenderer
+                node.optJSONObject("richItemRenderer")?.let { ri ->
+                    ri.optJSONObject("content")?.let { collectVideos(it, out) }
+                }
+                // 4) 재귀
                 val keys = node.keys()
-                while (keys.hasNext()) collectVideos(node.opt(keys.next()), out)
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    if (key == "videoRenderer" || key == "gridVideoRenderer" || key == "richItemRenderer") continue
+                    collectVideos(node.opt(key), out)
+                }
             }
             is JSONArray -> for (i in 0 until node.length()) collectVideos(node.opt(i), out)
         }
@@ -186,8 +196,7 @@ object YouTubeChannel {
             is JSONObject -> {
                 node.optJSONObject("continuationItemRenderer")?.let { cir ->
                     val token = cir.optJSONObject("continuationEndpoint")
-                        ?.optJSONObject("continuationCommand")
-                        ?.optString("token")
+                        ?.optJSONObject("continuationCommand")?.optString("token")
                     if (!token.isNullOrEmpty()) return token
                 }
                 val keys = node.keys()
@@ -210,8 +219,7 @@ object YouTubeChannel {
         val channel = extractText(v.optJSONObject("ownerText"))
             .ifBlank { extractText(v.optJSONObject("longBylineText")) }
             .ifBlank { extractText(v.optJSONObject("shortBylineText")) }
-        val thumbnail = v.optJSONObject("thumbnail")
-            ?.optJSONArray("thumbnails")
+        val thumbnail = v.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
             ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
             ?: "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
         val duration = extractText(v.optJSONObject("lengthText"))

@@ -43,7 +43,7 @@ object GeminiSummary {
         if (transcript.isBlank()) return@withContext ""
 
         try {
-            val clean = stripHtml(transcript).take(30000)
+            val clean = stripHtml(transcript).take(3000)
             if (clean.isBlank()) return@withContext ""
 
             val systemPrompt = """
