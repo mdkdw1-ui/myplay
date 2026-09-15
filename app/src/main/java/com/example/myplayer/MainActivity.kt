@@ -58,6 +58,9 @@ class MainActivity : AppCompatActivity() {
             } else false
         }
         findViewById<View>(R.id.btnStartSearch).setOnClickListener { etHomeSearch.requestFocus() }
+        findViewById<View>(R.id.btnStats).setOnClickListener {
+            startActivity(Intent(this, StatsActivity::class.java))
+        }
         findViewById<View>(R.id.tvHistoryMore).setOnClickListener {
             startActivity(Intent(this, HistoryActivity::class.java))
         }

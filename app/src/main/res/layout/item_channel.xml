@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="140dp"
+    android:layout_width="110dp"
     android:layout_height="wrap_content"
-    android:layout_marginEnd="12dp"
+    android:layout_marginEnd="10dp"
     app:cardBackgroundColor="@color/bg_surface"
-    app:cardCornerRadius="14dp"
+    app:cardCornerRadius="12dp"
     app:cardElevation="0dp">
 
     <LinearLayout
@@ -13,26 +13,26 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center"
-        android:padding="16dp"
+        android:padding="12dp"
         android:background="?android:attr/selectableItemBackground">
 
         <FrameLayout
-            android:layout_width="72dp"
-            android:layout_height="72dp">
+            android:layout_width="56dp"
+            android:layout_height="56dp">
 
             <ImageView
                 android:id="@+id/avatar"
-                android:layout_width="72dp"
-                android:layout_height="72dp"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
                 android:scaleType="centerCrop"
                 android:background="@color/bg_elevated" />
 
             <TextView
                 android:id="@+id/initial"
-                android:layout_width="72dp"
-                android:layout_height="72dp"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
                 android:gravity="center"
-                android:textSize="28sp"
+                android:textSize="22sp"
                 android:textStyle="bold"
                 android:textColor="@color/accent"
                 android:background="@color/bg_elevated"
@@ -43,20 +43,20 @@
             android:id="@+id/name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:textSize="13sp"
+            android:layout_marginTop="8dp"
+            android:textSize="11sp"
             android:textStyle="bold"
             android:textColor="@color/text_primary"
             android:gravity="center"
-            android:maxLines="1"
+            android:maxLines="2"
             android:ellipsize="end" />
 
         <TextView
             android:id="@+id/subs"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textSize="11sp"
+            android:layout_marginTop="2dp"
+            android:textSize="10sp"
             android:textColor="@color/text_secondary"
             android:gravity="center"
             android:maxLines="1"
