@@ -757,6 +757,87 @@ class PlayerActivity : AppCompatActivity() {
         } catch (e: Exception) { e.printStackTrace() }
     }
 
+
+    // ========== 📥 다운로드 ==========
+    private var isDownloading = false
+
+    private fun startDownload() {
+        if (currentVideoId.isBlank()) {
+            Toast.makeText(this, "다운로드할 수 없는 영상입니다", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (isDownloading) {
+            Toast.makeText(this, "이미 다운로드 중입니다", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val streamUrl = currentStreamUrl
+        if (streamUrl.isNullOrBlank()) {
+            Toast.makeText(this, "스트림이 없습니다", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            val exists = try {
+                HistoryDatabase.get(applicationContext).downloadDao().isDownloaded(currentVideoId)
+            } catch (e: Exception) { false }
+
+            if (exists) {
+                Toast.makeText(this@PlayerActivity, "이미 다운로드됨", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
+            isDownloading = true
+            btnDownload.text = "⏳ 0%"
+
+            val progressDialog = android.app.ProgressDialog(this@PlayerActivity).apply {
+                setTitle("다운로드 중")
+                setMessage(currentTitle)
+                setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
+                max = 100
+                setCancelable(false)
+                show()
+            }
+
+            val file = AppDownloader.download(
+                applicationContext,
+                currentVideoId,
+                streamUrl
+            ) { pct ->
+                runOnUiThread {
+                    progressDialog.progress = pct
+                    btnDownload.text = "⏳ $pct%"
+                }
+            }
+
+            progressDialog.dismiss()
+            isDownloading = false
+            btnDownload.text = "📥"
+
+            if (file != null) {
+                val size = file.length()
+                HistoryDatabase.get(applicationContext).downloadDao().insert(
+                    DownloadEntity(
+                        videoId = currentVideoId,
+                        title = currentTitle,
+                        channel = currentChannel,
+                        thumbnail = currentThumb,
+                        filePath = file.absolutePath,
+                        sizeBytes = size,
+                        downloadedAt = System.currentTimeMillis()
+                    )
+                )
+                Toast.makeText(
+                    this@PlayerActivity,
+                    "다운로드 완료 (${size / 1024 / 1024}MB)",
+                    Toast.LENGTH_LONG
+                ).show()
+            } else {
+                Toast.makeText(this@PlayerActivity, "다운로드 실패", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     private fun toggleFullscreen() {
         val controller = window.insetsController ?: return
         if (!isFullscreen) {

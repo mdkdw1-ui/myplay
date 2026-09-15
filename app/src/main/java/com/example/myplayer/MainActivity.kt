@@ -310,7 +310,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 // 시청 기록에서 최근 3개 영상의 관련 영상 채널 수집
                 val history = HistoryDatabase.get(applicationContext).historyDao()
-                    .getAll().kotlinx.coroutines.flow.first()
+                    .getAll().first()
 
                 val relatedChannelNames = mutableSetOf<String>()
                 for (h in history.take(3)) {
