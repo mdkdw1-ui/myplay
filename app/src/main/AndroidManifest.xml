@@ -49,6 +49,11 @@
             android:label="통계" />
 
         <activity
+            android:name=".DownloadsActivity"
+            android:exported="false"
+            android:label="다운로드" />
+
+        <activity
             android:name=".PlayerActivity"
             android:exported="false"
             android:supportsPictureInPicture="true"
