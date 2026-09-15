@@ -115,6 +115,20 @@
                 app:cornerRadius="20dp" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnQueue"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="📋"
+                android:textSize="14sp"
+                android:minWidth="0dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                app:backgroundTint="#33FFFFFF"
+                app:cornerRadius="20dp" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnPip"
                 style="@style/Widget.MaterialComponents.Button"
                 android:layout_width="wrap_content"
@@ -324,12 +338,18 @@
                 android:paddingEnd="4dp">
 
                 <TextView
+                    android:id="@+id/tvSbLabel"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="스폰서 스킵 · 길게 눌러 카테고리"
+                    android:text="스폰서 스킵 · 탭하면 카테고리"
                     android:textSize="13sp"
-                    android:textColor="@color/text_secondary" />
+                    android:textColor="@color/text_secondary"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?android:attr/selectableItemBackground" />
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/swSponsorBlock"

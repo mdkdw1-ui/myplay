@@ -54,6 +54,11 @@
             android:label="다운로드" />
 
         <activity
+            android:name=".QueueActivity"
+            android:exported="false"
+            android:label="대기열" />
+
+        <activity
             android:name=".TranscriptActivity"
             android:exported="false"
             android:label="자막"

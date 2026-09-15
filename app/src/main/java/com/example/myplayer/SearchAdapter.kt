@@ -7,6 +7,8 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 class SearchAdapter(
     private val onClick: (VideoItem) -> Unit
@@ -52,6 +54,53 @@ class SearchAdapter(
 
         Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
         holder.itemView.setOnClickListener { onClick(item) }
+
+        // ★ 롱프레스 → 큐 추가 / 북마크
+        holder.itemView.setOnLongClickListener {
+            val ctx = holder.itemView.context
+            val options = arrayOf("📋 대기열에 추가", "⭐ 북마크 저장", "📤 공유")
+            androidx.appcompat.app.AlertDialog.Builder(ctx)
+                .setTitle(item.title)
+                .setItems(options) { _, which ->
+                    when (which) {
+                        0 -> {
+                            val added = QueueManager.add(
+                                ctx,
+                                HomeVideo(item.videoId, item.title, item.channel, item.thumbnail)
+                            )
+                            android.widget.Toast.makeText(
+                                ctx,
+                                if (added) "대기열에 추가됨 (${QueueManager.size(ctx)}개)" else "이미 대기열에 있음",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                        1 -> {
+                            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                try {
+                                    HistoryDatabase.get(ctx).bookmarkDao().insert(
+                                        BookmarkEntity(
+                                            videoId = item.videoId, title = item.title,
+                                            channel = item.channel, thumbnail = item.thumbnail,
+                                            savedAt = System.currentTimeMillis()
+                                        )
+                                    )
+                                } catch (e: Exception) { }
+                            }
+                            android.widget.Toast.makeText(ctx, "북마크 저장", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        2 -> {
+                            val url = "https://www.youtube.com/watch?v=${item.videoId}"
+                            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(android.content.Intent.EXTRA_TEXT, "${item.title}\n$url")
+                            }
+                            ctx.startActivity(android.content.Intent.createChooser(send, "공유"))
+                        }
+                    }
+                }
+                .show()
+            true
+        }
     }
 
     override fun getItemCount() = items.size

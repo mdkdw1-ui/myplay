@@ -67,6 +67,7 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var btnSpeed: MaterialButton
     private lateinit var btnCc: MaterialButton
     private lateinit var btnTranscript: MaterialButton
+    private lateinit var btnQueue: MaterialButton
     private lateinit var btnBookmark: MaterialButton
     private lateinit var btnDownload: MaterialButton
     private lateinit var btnShare: MaterialButton
@@ -126,6 +127,7 @@ class PlayerActivity : AppCompatActivity() {
         btnSpeed = findViewById(R.id.btnSpeed)
         btnCc = findViewById(R.id.btnCc)
         btnTranscript = findViewById(R.id.btnTranscript)
+        btnQueue = findViewById(R.id.btnQueue)
         btnBookmark = findViewById(R.id.btnBookmark)
         btnShare = findViewById(R.id.btnShare)
         btnLock = findViewById(R.id.btnLock)
@@ -166,7 +168,15 @@ class PlayerActivity : AppCompatActivity() {
                 sponsorSegments = emptyList()
             }
         }
+        // 스위치 또는 라벨 어디든 탭/롱프레스 → 카테고리 선택
         swSponsorBlock.setOnLongClickListener {
+            showSbCategoryDialog()
+            true
+        }
+        findViewById<View>(R.id.tvSbLabel).setOnClickListener {
+            showSbCategoryDialog()
+        }
+        findViewById<View>(R.id.tvSbLabel).setOnLongClickListener {
             showSbCategoryDialog()
             true
         }
@@ -227,6 +237,9 @@ class PlayerActivity : AppCompatActivity() {
         }
         btnCc.setOnClickListener { showSubtitleDialog() }
         btnTranscript.setOnClickListener { openTranscript() }
+        btnQueue.setOnClickListener {
+            startActivity(Intent(this, QueueActivity::class.java))
+        }
         btnBookmark.setOnClickListener { toggleBookmark() }
         btnShare.setOnClickListener { showShareDialog() }
         btnLock.setOnClickListener { toggleLock() }
@@ -311,6 +324,19 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun playNextRelated() {
+        // ★ 큐에 다음 영상이 있으면 큐 우선
+        val queue = QueueManager.get(this)
+        val nextInQueue = queue.firstOrNull { it.videoId != currentVideoId }
+        if (nextInQueue != null) {
+            QueueManager.remove(this, nextInQueue.videoId)
+            currentVideoId = nextInQueue.videoId
+            currentTitle = nextInQueue.title
+            currentChannel = nextInQueue.channel
+            currentThumb = nextInQueue.thumbnail
+            extractAndPlay(nextInQueue.videoId, nextInQueue.title, nextInQueue.channel, nextInQueue.thumbnail, 0L)
+            return
+        }
+
         val vid = currentVideoId
         if (vid.isBlank()) return
 
