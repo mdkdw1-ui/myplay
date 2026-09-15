@@ -18,6 +18,8 @@ android {
         // Gemini API 키 (GitHub Actions에서 환경변수로 주입)
         val geminiKey = System.getenv("GEMINI_API_KEY") ?: ""
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
+        val groqKey = System.getenv("GROQ_API_KEY") ?: ""
+        buildConfigField("String", "GROQ_API_KEY", "\"$groqKey\"")
     }
 
     buildTypes {
