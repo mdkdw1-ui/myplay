@@ -25,6 +25,18 @@ object YouTubeChannels {
     suspend fun search(query: String): List<ChannelItem> = withContext(Dispatchers.IO) {
         val results = mutableListOf<ChannelItem>()
         try {
+            val body = JSONObject().apply {
+                put("context", JSONObject().apply {
+                    put("client", JSONObject().apply {
+                        put("clientName", "WEB")
+                        put("clientVersion", "2.20240101.00.00")
+                        put("hl", "ko")
+                        put("gl", "KR")
+                    })
+                })
+                put("query", query)
+            }
+
             val url = URL("$ENDPOINT?key=$API_KEY&prettyPrint=false")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
@@ -38,20 +50,6 @@ object YouTubeChannels {
             conn.doOutput = true
             conn.connectTimeout = 15000
             conn.readTimeout = 15000
-
-            val body = JSONObject().apply {
-                put("context", JSONObject().apply {
-                    put("client", JSONObject().apply {
-                        put("clientName", "WEB")
-                        put("clientVersion", "2.20240101.00.00")
-                        put("hl", "ko")
-                        put("gl", "KR")
-                    })
-                })
-                put("query", query)
-                // ★ params 제거 — 전체 결과에서 channelRenderer만 추출
-            }
-
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
 
             val code = conn.responseCode
@@ -59,10 +57,8 @@ object YouTubeChannels {
             if (code !in 200..299) return@withContext emptyList()
 
             val response = conn.inputStream.bufferedReader().use(BufferedReader::readText)
-            Log.d(TAG, "response len=${response.length}")
             val json = JSONObject(response)
-
-            collectChannels(json, results)
+            collectChannels(json, results, query)
             Log.d(TAG, "found ${results.size} channels for '$query'")
         } catch (e: Exception) {
             Log.e(TAG, "err: ${e.message}", e)
@@ -70,43 +66,55 @@ object YouTubeChannels {
         results
     }
 
-    private fun collectChannels(node: Any?, out: MutableList<ChannelItem>) {
+    private fun collectChannels(node: Any?, out: MutableList<ChannelItem>, baseName: String) {
         when (node) {
             is JSONObject -> {
                 node.optJSONObject("channelRenderer")?.let { cr ->
-                    parseChannel(cr)?.let { out.add(it) }
+                    parseChannelRenderer(cr)?.let { out.add(it) }
+                }
+                node.optJSONObject("videoRenderer")?.let { vr ->
+                    parseFromVideo(vr)?.let { out.add(it) }
                 }
                 val keys = node.keys()
-                while (keys.hasNext()) {
-                    collectChannels(node.opt(keys.next()), out)
-                }
+                while (keys.hasNext()) collectChannels(node.opt(keys.next()), out, baseName)
             }
-            is JSONArray -> {
-                for (i in 0 until node.length()) {
-                    collectChannels(node.opt(i), out)
-                }
-            }
+            is JSONArray -> for (i in 0 until node.length()) collectChannels(node.opt(i), out, baseName)
         }
     }
 
-    private fun parseChannel(c: JSONObject): ChannelItem? {
+    private fun parseChannelRenderer(c: JSONObject): ChannelItem? {
         val id = c.optString("channelId").takeIf { it.isNotEmpty() } ?: return null
-        val name = c.optJSONObject("title")?.optString("simpleText")
-            ?: c.optJSONObject("title")
-                ?.optJSONArray("runs")
-                ?.optJSONObject(0)
-                ?.optString("text")
-            ?: return null
-
+        val name = extractText(c.optJSONObject("title")) ?: return null
         val thumb = c.optJSONObject("thumbnail")
             ?.optJSONArray("thumbnails")
-            ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
-            ?: ""
-
-        val subs = c.optJSONObject("videoCountText")?.optString("simpleText")
-            ?: c.optJSONObject("subscriberCountText")?.optString("simpleText")
-            ?: ""
-
+            ?.let { it.optJSONObject(it.length() - 1)?.optString("url") } ?: ""
+        val subs = extractText(c.optJSONObject("videoCountText"))
+            ?: extractText(c.optJSONObject("subscriberCountText")) ?: ""
         return ChannelItem(id, name, thumb, subs)
+    }
+
+    private fun parseFromVideo(v: JSONObject): ChannelItem? {
+        val ownerText = v.optJSONObject("ownerText")
+            ?: v.optJSONObject("longBylineText")
+            ?: v.optJSONObject("shortBylineText")
+            ?: return null
+
+        val run = ownerText.optJSONArray("runs")?.optJSONObject(0) ?: return null
+        val name = run.optString("text").takeIf { it.isNotEmpty() } ?: return null
+
+        val channelId = run.optJSONObject("navigationEndpoint")
+            ?.optJSONObject("browseEndpoint")
+            ?.optString("browseId")
+            ?.takeIf { it.isNotEmpty() }
+            ?: return null
+
+        return ChannelItem(channelId, name, "", "")
+    }
+
+    private fun extractText(obj: JSONObject?): String? {
+        if (obj == null) return null
+        val simple = obj.optString("simpleText")
+        if (simple.isNotBlank()) return simple
+        return obj.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
     }
 }
