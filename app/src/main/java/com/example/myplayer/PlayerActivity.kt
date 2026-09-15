@@ -100,6 +100,9 @@ class PlayerActivity : AppCompatActivity() {
     private var currentSpeed = 1.0f
 
     private var subtitleTracks: List<SubtitleTrack> = emptyList()
+    private var currentQualities: List<VideoQuality> = emptyList()
+    private var currentAudioUrl: String? = null
+    private var currentVideoBestUrl: String? = null
     private var currentStreamUrl: String? = null
 
     private var currentVideoId: String = ""
@@ -795,6 +798,12 @@ class PlayerActivity : AppCompatActivity() {
             makeTimestampsClickable(findViewById(R.id.tvDescription), descText)
 
             subtitleTracks = result.subtitles
+            currentQualities = result.qualities
+            currentAudioUrl = result.audioUrlBest
+            currentVideoBestUrl = result.videoUrl
+            currentQualities = result.qualities
+            currentAudioUrl = result.audioUrlBest
+            currentVideoBestUrl = result.videoUrl
             val streamUrl = result.muxedUrl ?: result.videoUrl ?: result.audioUrl
 
             val autoSub = subtitleTracks.firstOrNull { it.languageCode.startsWith("ko") }
@@ -1066,6 +1075,53 @@ class PlayerActivity : AppCompatActivity() {
             .show()
     }
 
+
+    // ========== 🎞 화질 선택 ==========
+    private fun showQualityDialog() {
+        if (currentQualities.isEmpty()) {
+            Toast.makeText(this, "화질 정보가 없습니다", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val labels = mutableListOf<String>()
+        val urls = mutableListOf<VideoQuality?>()
+
+        // 자동 (최고 화질)
+        labels.add("자동 (최고 화질)")
+        urls.add(null)
+
+        for (q in currentQualities) {
+            labels.add(q.label)
+            urls.add(q)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("화질 선택")
+            .setItems(labels.toTypedArray()) { _, i ->
+                applyQuality(urls[i])
+            }
+            .show()
+    }
+
+    private fun applyQuality(quality: VideoQuality?) {
+        val pos = mediaController?.currentPosition ?: 0L
+        val sub = subtitleTracks.firstOrNull { it.languageCode.startsWith("ko") }
+            ?: subtitleTracks.firstOrNull { it.languageCode.startsWith("en") }
+            ?: subtitleTracks.firstOrNull()
+
+        val targetUrl = quality?.url ?: currentVideoBestUrl ?: currentStreamUrl
+        if (targetUrl.isNullOrBlank()) {
+            Toast.makeText(this, "URL 없음", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        currentStreamUrl = targetUrl
+        applyStreamWithSubtitle(targetUrl, sub, null, pos)
+
+        val label = quality?.label ?: "자동"
+        Toast.makeText(this, "화질: $label", Toast.LENGTH_SHORT).show()
+    }
+
     private fun toggleFullscreen() {
         val controller = window.insetsController ?: return
         if (!isFullscreen) {
@@ -1121,6 +1177,7 @@ class PlayerActivity : AppCompatActivity() {
     // ========== ⋯ 더보기 메뉴 ==========
     private fun showMoreMenu() {
         val items = arrayOf(
+            "🎞 화질 선택",
             "🔁 반복 재생 (같은 영상)",
             "💡 화면 항상 켜짐",
             "📤 공유",
@@ -1134,14 +1191,15 @@ class PlayerActivity : AppCompatActivity() {
             .setTitle("더보기")
             .setItems(items) { _, i ->
                 when (i) {
-                    0 -> toggleRepeat()
-                    1 -> toggleKeepScreenOn()
-                    2 -> showShareDialog()
-                    3 -> startDownload()
-                    4 -> openTranscript()
-                    5 -> startActivity(Intent(this, QueueActivity::class.java))
-                    6 -> showPipSizeDialog()
-                    7 -> showSubtitleStyleDialog()
+                    0 -> showQualityDialog()
+                    1 -> toggleRepeat()
+                    2 -> toggleKeepScreenOn()
+                    3 -> showShareDialog()
+                    4 -> startDownload()
+                    5 -> openTranscript()
+                    6 -> startActivity(Intent(this, QueueActivity::class.java))
+                    7 -> showPipSizeDialog()
+                    8 -> showSubtitleStyleDialog()
                 }
             }
             .show()
