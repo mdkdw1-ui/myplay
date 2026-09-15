@@ -137,8 +137,7 @@
                 android:clipToPadding="false"
                 android:orientation="horizontal"
                 app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
-                app:spanCount="2"
-                app:orientation="horizontal" />
+                app:spanCount="2" />
         </LinearLayout>
 
         <!-- 🔥 인기 급상승 -->
