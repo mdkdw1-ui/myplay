@@ -108,6 +108,16 @@
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
         </LinearLayout>
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnPlaylist"
+            style="@style/GhostButton"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginStart="20dp"
+            android:layout_marginEnd="20dp"
+            android:layout_marginTop="12dp"
+            android:text="📃 YouTube 재생목록 열기" />
+
         <!-- ⭐ 구독 채널 -->
         <LinearLayout
             android:id="@+id/sectionSubscriptions"
