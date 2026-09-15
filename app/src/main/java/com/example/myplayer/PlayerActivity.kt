@@ -63,6 +63,7 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var btnSpeed: MaterialButton
     private lateinit var btnCc: MaterialButton
+    private lateinit var btnTranscript: MaterialButton
     private lateinit var btnBookmark: MaterialButton
     private lateinit var btnDownload: MaterialButton
     private lateinit var btnShare: MaterialButton
@@ -116,6 +117,7 @@ class PlayerActivity : AppCompatActivity() {
         playerView = findViewById(R.id.playerView)
         btnSpeed = findViewById(R.id.btnSpeed)
         btnCc = findViewById(R.id.btnCc)
+        btnTranscript = findViewById(R.id.btnTranscript)
         btnBookmark = findViewById(R.id.btnBookmark)
         btnShare = findViewById(R.id.btnShare)
         btnLock = findViewById(R.id.btnLock)
@@ -194,6 +196,7 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
         btnCc.setOnClickListener { showSubtitleDialog() }
+        btnTranscript.setOnClickListener { openTranscript() }
         btnBookmark.setOnClickListener { toggleBookmark() }
         btnShare.setOnClickListener { showShareDialog() }
         btnLock.setOnClickListener { toggleLock() }
@@ -852,6 +855,33 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+
+    // ========== 📝 자막 검색 ==========
+    private fun openTranscript() {
+        if (subtitleTracks.isEmpty()) {
+            Toast.makeText(this, "이 영상엔 자막이 없습니다", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val preferred = subtitleTracks.firstOrNull { it.languageCode.startsWith("ko") }
+            ?: subtitleTracks.firstOrNull { it.languageCode.startsWith("en") }
+            ?: subtitleTracks.firstOrNull()
+        if (preferred == null) {
+            Toast.makeText(this, "자막 없음", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(this, TranscriptActivity::class.java).apply {
+            putExtra("SUBTITLE_URL", preferred.url)
+            putExtra("VIDEO_TITLE", currentTitle)
+            putExtra("CURRENT_MS", mediaController?.currentPosition ?: 0L)
+        }
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent, REQ_TRANSCRIPT)
+    }
+
+    companion object {
+        private const val REQ_TRANSCRIPT = 1001
+    }
+
     private fun toggleFullscreen() {
         val controller = window.insetsController ?: return
         if (!isFullscreen) {
@@ -944,6 +974,19 @@ class PlayerActivity : AppCompatActivity() {
         savePosition()
         cancelAutoNext()
         if (!isInPictureInPictureMode) mediaController?.pause()
+    }
+
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_TRANSCRIPT && resultCode == RESULT_OK) {
+            val seekMs = data?.getLongExtra("SEEK_MS", -1L) ?: -1L
+            if (seekMs >= 0) {
+                mediaController?.seekTo(seekMs)
+                Toast.makeText(this, "이동: ${formatTime(seekMs)}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     override fun onDestroy() {

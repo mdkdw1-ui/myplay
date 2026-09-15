@@ -41,6 +41,24 @@
                 android:visibility="gone" />
         </LinearLayout>
 
+        <EditText
+            android:id="@+id/etSearch"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginStart="20dp"
+            android:layout_marginEnd="20dp"
+            android:layout_marginBottom="8dp"
+            android:hint="제목·채널 검색..."
+            android:textColorHint="@color/text_tertiary"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:background="@drawable/bg_search_input"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:maxLines="1" />
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler"
             android:layout_width="match_parent"

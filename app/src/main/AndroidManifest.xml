@@ -54,6 +54,12 @@
             android:label="다운로드" />
 
         <activity
+            android:name=".TranscriptActivity"
+            android:exported="false"
+            android:label="자막"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".PlayerActivity"
             android:exported="false"
             android:supportsPictureInPicture="true"
