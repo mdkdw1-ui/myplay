@@ -331,7 +331,12 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:textSize="13sp"
-                android:textColor="@color/accent" />
+                android:textColor="@color/accent"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground" />
 
             <!-- 자동 다음 동영상 토글 -->
             <LinearLayout

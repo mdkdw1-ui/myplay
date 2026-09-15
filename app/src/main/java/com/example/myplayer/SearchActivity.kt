@@ -65,13 +65,13 @@ class SearchActivity : AppCompatActivity() {
             }
             startActivity(intent)
         }
-        recycler.layoutManager = LinearLayoutManager(this)
+        recycler.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 2)
         recycler.adapter = adapter
 
         recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
                 if (dy <= 0) return
-                val lm = rv.layoutManager as LinearLayoutManager
+                val lm = rv.layoutManager as androidx.recyclerview.widget.GridLayoutManager
                 val lastVisible = lm.findLastVisibleItemPosition()
                 val total = adapter.itemCount
                 if (!loadingMore && nextContinuation != null && lastVisible >= total - 3) {

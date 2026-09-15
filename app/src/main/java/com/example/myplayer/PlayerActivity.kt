@@ -54,6 +54,7 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -202,6 +203,10 @@ class PlayerActivity : AppCompatActivity() {
         }
         (playerView.parent as? ViewGroup)?.addView(progress)
 
+        // ★ 저장된 재생 속도 복원
+        currentSpeed = pref.getFloat("saved_speed", 1.0f)
+        btnSpeed.text = "${currentSpeed}x"
+
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         gestureOverlay = findViewById(R.id.gestureOverlay)
         applySubtitleStyle()
@@ -254,6 +259,7 @@ class PlayerActivity : AppCompatActivity() {
         }
         btnBookmark.setOnClickListener { toggleBookmark() }
         btnShare.setOnClickListener { showShareDialog() }
+        findViewById<View>(R.id.tvChannel).setOnClickListener { openChannelFromPlayer() }
         btnLock.setOnClickListener { toggleLock() }
         btnMore.setOnClickListener { showMoreMenu() }
         lockOverlay.setOnClickListener { toggleLock() }
@@ -742,6 +748,8 @@ class PlayerActivity : AppCompatActivity() {
                 currentSpeed = speeds[i]
                 mediaController?.setPlaybackSpeed(currentSpeed)
                 btnSpeed.text = "${currentSpeed}x"
+                // ★ 저장 (다음 영상에도 적용)
+                pref.edit().putFloat("saved_speed", currentSpeed).apply()
             }.show()
     }
 
@@ -1122,6 +1130,112 @@ class PlayerActivity : AppCompatActivity() {
         Toast.makeText(this, "화질: $label", Toast.LENGTH_SHORT).show()
     }
 
+
+    // ========== 채널 페이지 이동 ==========
+    private fun openChannelFromPlayer() {
+        if (currentChannel.isBlank()) {
+            Toast.makeText(this, "채널 정보 없음", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            val results = YouTubeChannels.search(currentChannel)
+            val match = results.firstOrNull { it.name == currentChannel }
+                ?: results.firstOrNull { it.name.contains(currentChannel.take(8)) }
+            if (match == null) {
+                Toast.makeText(this@PlayerActivity, "채널을 찾을 수 없음", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            startActivity(Intent(this@PlayerActivity, ChannelActivity::class.java).apply {
+                putExtra("CHANNEL_ID", match.channelId)
+                putExtra("CHANNEL_NAME", match.name)
+            })
+        }
+    }
+
+
+    // ========== ✏️ 영상 메모 ==========
+    private fun addNote() {
+        if (currentVideoId.isBlank()) {
+            Toast.makeText(this, "메모할 수 없는 영상", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val pos = mediaController?.currentPosition ?: 0L
+        val input = android.widget.EditText(this).apply {
+            hint = "메모 내용"
+            setPadding(40, 30, 40, 30)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("✏️ ${formatTime(pos)}에 메모")
+            .setView(input)
+            .setPositiveButton("저장") { _, _ ->
+                val text = input.text.toString().trim()
+                if (text.isEmpty()) return@setPositiveButton
+                lifecycleScope.launch {
+                    try {
+                        HistoryDatabase.get(applicationContext).videoNoteDao().insert(
+                            VideoNoteEntity(
+                                videoId = currentVideoId,
+                                videoTitle = currentTitle,
+                                timestampMs = pos,
+                                note = text,
+                                createdAt = System.currentTimeMillis()
+                            )
+                        )
+                        Toast.makeText(this@PlayerActivity, "메모 저장", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(this@PlayerActivity, "실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun showNoteList() {
+        if (currentVideoId.isBlank()) return
+        lifecycleScope.launch {
+            val notes = try {
+                HistoryDatabase.get(applicationContext).videoNoteDao()
+                    .getForVideo(currentVideoId)
+                    .first()
+            } catch (e: Exception) { emptyList() }
+
+            if (notes.isEmpty()) {
+                Toast.makeText(this@PlayerActivity, "메모 없음", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
+            val labels = notes.map { "[${formatTime(it.timestampMs)}] ${it.note}" }.toTypedArray()
+            AlertDialog.Builder(this@PlayerActivity)
+                .setTitle("📒 메모 (탭=이동, 롱프레스=삭제)")
+                .setItems(labels) { _, i ->
+                    mediaController?.seekTo(notes[i].timestampMs)
+                    Toast.makeText(this@PlayerActivity, "${formatTime(notes[i].timestampMs)}로 이동", Toast.LENGTH_SHORT).show()
+                }
+                .setNeutralButton("전체 삭제") { _, _ ->
+                    lifecycleScope.launch {
+                        try {
+                            HistoryDatabase.get(applicationContext).videoNoteDao()
+                                .deleteForVideo(currentVideoId)
+                            Toast.makeText(this@PlayerActivity, "삭제됨", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) { }
+                    }
+                }
+                .show()
+        }
+    }
+
+
+    private fun toggleAutoPip() {
+        val on = pref.getBoolean("auto_pip", false)
+        pref.edit().putBoolean("auto_pip", !on).apply()
+        Toast.makeText(
+            this,
+            if (!on) "홈 버튼 시 자동 PiP ON" else "자동 PiP OFF",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
     private fun toggleFullscreen() {
         val controller = window.insetsController ?: return
         if (!isFullscreen) {
@@ -1177,6 +1291,8 @@ class PlayerActivity : AppCompatActivity() {
     // ========== ⋯ 더보기 메뉴 ==========
     private fun showMoreMenu() {
         val items = arrayOf(
+            "✏️ 현재 시점에 메모",
+            "📒 메모 목록",
             "🎞 화질 선택",
             "🔁 반복 재생 (같은 영상)",
             "💡 화면 항상 켜짐",
@@ -1185,21 +1301,25 @@ class PlayerActivity : AppCompatActivity() {
             "📝 자막 검색",
             "📋 재생 대기열",
             "📐 PIP 크기",
+            "🖼 홈 누르면 자동 PiP",
             "⚙️ 자막 스타일"
         )
         AlertDialog.Builder(this)
             .setTitle("더보기")
             .setItems(items) { _, i ->
                 when (i) {
-                    0 -> showQualityDialog()
-                    1 -> toggleRepeat()
-                    2 -> toggleKeepScreenOn()
-                    3 -> showShareDialog()
-                    4 -> startDownload()
-                    5 -> openTranscript()
-                    6 -> startActivity(Intent(this, QueueActivity::class.java))
-                    7 -> showPipSizeDialog()
-                    8 -> showSubtitleStyleDialog()
+                    0 -> addNote()
+                    1 -> showNoteList()
+                    2 -> showQualityDialog()
+                    3 -> toggleRepeat()
+                    4 -> toggleKeepScreenOn()
+                    5 -> showShareDialog()
+                    6 -> startDownload()
+                    7 -> openTranscript()
+                    8 -> startActivity(Intent(this, QueueActivity::class.java))
+                    9 -> showPipSizeDialog()
+                    10 -> toggleAutoPip()
+                    11 -> showSubtitleStyleDialog()
                 }
             }
             .show()
@@ -1261,6 +1381,24 @@ class PlayerActivity : AppCompatActivity() {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         findViewById<View>(R.id.controlBar).visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
         infoScroll.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
+    }
+
+
+    // ========== PIP 자동 진입 (홈 버튼) ==========
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // 설정에서 켰을 때만
+        val autoPip = pref.getBoolean("auto_pip", false)
+        if (!autoPip) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (mediaController?.isPlaying == true && !isInPictureInPictureMode) {
+                val params = PictureInPictureParams.Builder()
+                    .setAspectRatio(Rational((pipAspect * 1000).toInt(), 1000))
+                    .build()
+                setPictureInPictureParams(params)
+                enterPictureInPictureMode(params)
+            }
+        }
     }
 
     override fun onPause() {
