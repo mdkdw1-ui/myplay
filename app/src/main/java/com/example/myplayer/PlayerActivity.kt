@@ -113,6 +113,8 @@ class PlayerActivity : AppCompatActivity() {
 
     private var autoNextEnabled: Boolean = false
     private var countdownJob: kotlinx.coroutines.Job? = null
+    private var previewShown = false
+    private var previewJob: kotlinx.coroutines.Job? = null
 
     private val pref by lazy { getSharedPreferences("subtitle_prefs", Context.MODE_PRIVATE) }
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -199,6 +201,11 @@ class PlayerActivity : AppCompatActivity() {
         progress = ProgressBar(this).apply {
             indeterminateTintList = ColorStateList.valueOf(
                 ContextCompat.getColor(this@PlayerActivity, R.color.spinner)
+            )
+            // ★ 크기 40dp (기본 48dp)
+            layoutParams = ViewGroup.LayoutParams(
+                (40 * resources.displayMetrics.density).toInt(),
+                (40 * resources.displayMetrics.density).toInt()
             )
         }
         (playerView.parent as? ViewGroup)?.addView(progress)
@@ -821,6 +828,7 @@ class PlayerActivity : AppCompatActivity() {
             applyStreamWithSubtitle(streamUrl, autoSub, null, startPosMs)
             updateCcButton(autoSub != null)
             loadSponsorSegments(videoId)
+            startPreviewWatcher()
             buildSummary(videoId, finalTitle, result.description)
             saveHistory(videoId, finalTitle, finalChannel, thumb, startPosMs)
         }
@@ -885,9 +893,20 @@ class PlayerActivity : AppCompatActivity() {
             val pos = mediaController?.currentPosition ?: 0L
             labels.add(name)
             callbacks.add { applyStreamWithSubtitle(currentStreamUrl, s, null, pos); updateCcButton(true) }
+            // ★ 번역 옵션 (한국어만)
             if (!s.languageCode.startsWith("ko")) {
-                labels.add("$name → 한국어")
+                labels.add("$name → 🇰🇷 한국어")
                 callbacks.add { applyStreamWithSubtitle(currentStreamUrl, s, "ko", pos); updateCcButton(true) }
+            }
+            // ★ 영어 번역도 추가
+            if (!s.languageCode.startsWith("en")) {
+                labels.add("$name → 🇺🇸 English")
+                callbacks.add { applyStreamWithSubtitle(currentStreamUrl, s, "en", pos); updateCcButton(true) }
+            }
+            // ★ 일본어 번역
+            if (!s.languageCode.startsWith("ja")) {
+                labels.add("$name → 🇯🇵 日本語")
+                callbacks.add { applyStreamWithSubtitle(currentStreamUrl, s, "ja", pos); updateCcButton(true) }
             }
         }
         labels.add("⚙️ 자막 스타일")
@@ -1023,6 +1042,7 @@ class PlayerActivity : AppCompatActivity() {
     // ========== 🚫 SponsorBlock ==========
     private fun loadSponsorSegments(videoId: String) {
         sbCheckJob?.cancel()
+        previewJob?.cancel()
         sponsorSegments = emptyList()
         if (!sbEnabled || videoId.isBlank()) return
 
@@ -1236,6 +1256,99 @@ class PlayerActivity : AppCompatActivity() {
         ).show()
     }
 
+
+    // ========== 📑 챕터 ==========
+    private fun renderChapters(description: String) {
+        val box = findViewById<View>(R.id.chapterBox)
+        val list = findViewById<android.widget.LinearLayout>(R.id.chapterList)
+        list.removeAllViews()
+
+        val chapters = YouTubeChapters.parse(description)
+        if (chapters.isEmpty()) {
+            box.visibility = View.GONE
+            return
+        }
+        box.visibility = View.VISIBLE
+
+        for (c in chapters) {
+            val row = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                setPadding(0, 12, 0, 12)
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                isClickable = true
+                isFocusable = true
+                setBackgroundResource(android.R.drawable.list_selector_background)
+            }
+
+            row.addView(android.widget.TextView(this).apply {
+                text = formatTime(c.startMs)
+                textSize = 12f
+                setTextColor(0xFFFF2D55.toInt())
+                typeface = android.graphics.Typeface.MONOSPACE
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    (60 * resources.displayMetrics.density).toInt(),
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            })
+
+            row.addView(android.widget.TextView(this).apply {
+                text = c.title
+                textSize = 13f
+                setTextColor(0xFFF5F5F7.toInt())
+                maxLines = 2
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    0,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f
+                )
+            })
+
+            row.setOnClickListener {
+                mediaController?.seekTo(c.startMs)
+                Toast.makeText(this@PlayerActivity, "${formatTime(c.startMs)}로 이동", Toast.LENGTH_SHORT).show()
+            }
+            list.addView(row)
+        }
+    }
+
+
+    // ========== ⏭ 다음 영상 미리보기 ==========
+    private fun startPreviewWatcher() {
+        previewShown = false
+        previewJob?.cancel()
+        previewJob = lifecycleScope.launch {
+            while (isActive) {
+                val mc = mediaController ?: continue
+                val dur = mc.duration
+                val pos = mc.currentPosition
+                if (dur > 0 && !previewShown && dur - pos in 1..10000 && pos > 5000) {
+                    previewShown = true
+                    val queue = QueueManager.get(this@PlayerActivity)
+                    val queueNext = queue.firstOrNull { it.videoId != currentVideoId }
+                    val next = queueNext ?: run {
+                        val rel = YouTubeRelated.fetch(currentVideoId)
+                        rel.firstOrNull()?.let {
+                            HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
+                        }
+                    }
+                    next?.let {
+                        runOnUiThread {
+                            Toast.makeText(
+                                this@PlayerActivity,
+                                "⏭ 다음: ${it.title.take(30)}...",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
+                delay(1000)
+            }
+        }
+    }
+
     private fun toggleFullscreen() {
         val controller = window.insetsController ?: return
         if (!isFullscreen) {
@@ -1409,6 +1522,7 @@ class PlayerActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         sbCheckJob?.cancel()
+        previewJob?.cancel()
         savePosition()
         cancelAutoNext()
         if (!isInPictureInPictureMode) mediaController?.pause()
@@ -1430,6 +1544,7 @@ class PlayerActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         sbCheckJob?.cancel()
+        previewJob?.cancel()
         mediaController?.removeListener(playerListener)
         MediaController.releaseFuture(controllerFuture)
     }

@@ -62,6 +62,28 @@ class MainActivity : AppCompatActivity() {
             } else false
         }
         findViewById<View>(R.id.btnStartSearch).setOnClickListener { etHomeSearch.requestFocus() }
+        findViewById<View>(R.id.btnPlaylist).setOnClickListener {
+            val input = android.widget.EditText(this).apply {
+                hint = "재생목록 URL"
+                setPadding(40, 30, 40, 30)
+            }
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("📃 YouTube 재생목록")
+                .setMessage("playlist?list=... 형식 URL")
+                .setView(input)
+                .setPositiveButton("열기") { _, _ ->
+                    val url = input.text.toString().trim()
+                    val pid = YouTubePlaylist.extractPlaylistId(url)
+                    if (pid == null) {
+                        Toast.makeText(this, "재생목록 ID를 찾을 수 없음", Toast.LENGTH_SHORT).show()
+                    } else {
+                        startActivity(Intent(this, PlaylistActivity::class.java)
+                            .putExtra("PLAYLIST_ID", pid))
+                    }
+                }
+                .setNegativeButton("취소", null)
+                .show()
+        }
         findViewById<View>(R.id.btnStats).setOnClickListener {
             startActivity(Intent(this, StatsActivity::class.java))
         }
