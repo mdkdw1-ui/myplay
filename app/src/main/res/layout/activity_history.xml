@@ -29,6 +29,17 @@
                 android:textColor="@color/text_primary" />
 
             <TextView
+                android:id="@+id/btnSort"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⇅ 정렬"
+                android:textSize="13sp"
+                android:textColor="@color/accent"
+                android:padding="6dp"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
                 android:id="@+id/tvClearHistory"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
