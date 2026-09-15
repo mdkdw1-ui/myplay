@@ -66,6 +66,10 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var btnBookmark: MaterialButton
     private lateinit var btnDownload: MaterialButton
     private lateinit var btnShare: MaterialButton
+    private lateinit var btnLock: MaterialButton
+    private lateinit var lockOverlay: View
+    private var isLocked = false
+    private var pipAspect: Float = 16f / 9f
     private lateinit var infoScroll: View
     private lateinit var videoContainer: View
     private lateinit var summaryCard: View
@@ -114,6 +118,8 @@ class PlayerActivity : AppCompatActivity() {
         btnCc = findViewById(R.id.btnCc)
         btnBookmark = findViewById(R.id.btnBookmark)
         btnShare = findViewById(R.id.btnShare)
+        btnLock = findViewById(R.id.btnLock)
+        lockOverlay = findViewById(R.id.lockOverlay)
         btnDownload = findViewById(R.id.btnDownload)
         infoScroll = findViewById(R.id.infoScroll)
         videoContainer = findViewById(R.id.videoContainer)
@@ -180,10 +186,18 @@ class PlayerActivity : AppCompatActivity() {
 
         btnSpeed.setOnClickListener { showSpeedDialog() }
         findViewById<View>(R.id.btnFullscreen).setOnClickListener { toggleFullscreen() }
-        findViewById<View>(R.id.btnPip).setOnClickListener { enterPipMode() }
+        findViewById<View>(R.id.btnPip).apply {
+            setOnClickListener { enterPipMode() }
+            setOnLongClickListener {
+                showPipSizeDialog()
+                true
+            }
+        }
         btnCc.setOnClickListener { showSubtitleDialog() }
         btnBookmark.setOnClickListener { toggleBookmark() }
         btnShare.setOnClickListener { showShareDialog() }
+        btnLock.setOnClickListener { toggleLock() }
+        lockOverlay.setOnClickListener { toggleLock() }
         btnDownload.setOnClickListener { startDownload() }
     }
 
@@ -860,9 +874,55 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+
+    // ========== 🔒 잠금 모드 ==========
+    private fun toggleLock() {
+        isLocked = !isLocked
+        if (isLocked) {
+            // 모든 버튼 숨김
+            findViewById<View>(R.id.controlBar).visibility = View.GONE
+            lockOverlay.visibility = View.VISIBLE
+            Toast.makeText(this, "잠금됨", Toast.LENGTH_SHORT).show()
+        } else {
+            findViewById<View>(R.id.controlBar).visibility = View.VISIBLE
+            lockOverlay.visibility = View.GONE
+            Toast.makeText(this, "잠금 해제", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // ========== 📐 PIP 크기 선택 ==========
+    private fun showPipSizeDialog() {
+        val items = arrayOf(
+            "16:9 가로 (기본)",
+            "4:3 클래식",
+            "1:1 정사각",
+            "9:16 세로 (쇼츠)"
+        )
+        val ratios = arrayOf(16f / 9f, 4f / 3f, 1f, 9f / 16f)
+
+        AlertDialog.Builder(this)
+            .setTitle("PIP 크기")
+            .setItems(items) { _, i ->
+                pipAspect = ratios[i]
+                Toast.makeText(this, "PIP 비율: ${items[i]}", Toast.LENGTH_SHORT).show()
+                // PIP 중이면 즉시 반영
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isInPictureInPictureMode) {
+                    val params = PictureInPictureParams.Builder()
+                        .setAspectRatio(Rational(
+                            (pipAspect * 1000).toInt(), 1000
+                        ))
+                        .build()
+                    setPictureInPictureParams(params)
+                }
+            }
+            .show()
+    }
+
     private fun enterPipMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val params = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()
+            val params = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational((pipAspect * 1000).toInt(), 1000))
+                .build()
             setPictureInPictureParams(params)
             enterPictureInPictureMode(params)
         }
