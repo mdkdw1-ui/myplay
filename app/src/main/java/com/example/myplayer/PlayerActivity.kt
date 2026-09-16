@@ -120,7 +120,10 @@ class PlayerActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var audioManager: AudioManager
     private var gestureOverlay: View? = null
-    private val gestureHideRunnable = Runnable { gestureOverlay?.visibility = View.GONE }
+    private val gestureHideRunnable = Runnable {
+        gestureOverlay?.visibility = View.GONE
+        findViewById<View>(R.id.gestureBar)?.visibility = View.GONE
+    }
 
     // ★ 재생 상태 리스너
     private val playerListener = object : Player.Listener {
@@ -144,6 +147,7 @@ class PlayerActivity : AppCompatActivity() {
         btnShare = findViewById(R.id.btnShare)
         btnLock = findViewById(R.id.btnLock)
         btnMore = findViewById(R.id.btnMore)
+        val btnAb = findViewById<MaterialButton>(R.id.btnAbRepeat)
         lockOverlay = findViewById(R.id.lockOverlay)
         btnDownload = findViewById(R.id.btnDownload)
         infoScroll = findViewById(R.id.infoScroll)
@@ -269,6 +273,7 @@ class PlayerActivity : AppCompatActivity() {
         findViewById<View>(R.id.tvChannel).setOnClickListener { openChannelFromPlayer() }
         btnLock.setOnClickListener { toggleLock() }
         btnMore.setOnClickListener { showMoreMenu() }
+        btnAb.setOnClickListener { cycleAbRepeat() }
         lockOverlay.setOnClickListener { toggleLock() }
         btnDownload.setOnClickListener { startDownload() }
     }
@@ -457,9 +462,33 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showGestureFeedback(text: String) {
-        val g = gestureOverlay ?: return
-        (g as? TextView)?.text = text
-        g.visibility = View.VISIBLE
+        // 기존 오버레이 제거
+        val g = gestureOverlay
+        g?.visibility = View.GONE
+
+        // 새 HUD
+        val bar = findViewById<View>(R.id.gestureBar)
+        val icon = findViewById<TextView>(R.id.tvGestureIcon)
+        val pct = findViewById<TextView>(R.id.tvGesturePct)
+        val fill = findViewById<View>(R.id.gestureBarFill)
+
+        val isVolume = text.contains("🔊") || text.contains("🔇")
+        icon.text = if (text.contains("🔇")) "🔇" else if (isVolume) "🔊" else "☀️"
+
+        // 퍼센트 추출
+        val num = Regex("(\\d+)%").find(text)?.groupValues?.get(1)?.toIntOrNull() ?: 50
+        pct.text = "$num%"
+
+        // 바 높이
+        fill.post {
+            val parent = fill.parent as View
+            val h = (parent.height * num / 100f).toInt()
+            val lp = fill.layoutParams
+            lp.height = h
+            fill.layoutParams = lp
+        }
+
+        bar.visibility = View.VISIBLE
         mainHandler.removeCallbacks(gestureHideRunnable)
     }
 
@@ -933,6 +962,9 @@ class PlayerActivity : AppCompatActivity() {
 
     // ========== 📥 다운로드 ==========
     private var isDownloading = false
+    private var abStart: Long = -1L
+    private var abEnd: Long = -1L
+    private var abJob: kotlinx.coroutines.Job? = null
 
     private fun startDownload() {
         if (currentVideoId.isBlank()) {
@@ -1043,6 +1075,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun loadSponsorSegments(videoId: String) {
         sbCheckJob?.cancel()
         previewJob?.cancel()
+        abJob?.cancel()
         sponsorSegments = emptyList()
         if (!sbEnabled || videoId.isBlank()) return
 
@@ -1319,6 +1352,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun startPreviewWatcher() {
         previewShown = false
         previewJob?.cancel()
+        abJob?.cancel()
         previewJob = lifecycleScope.launch {
             while (isActive) {
                 val mc = mediaController ?: continue
@@ -1362,6 +1396,56 @@ class PlayerActivity : AppCompatActivity() {
             putExtra("VIDEO_THUMB", currentThumb)
         })
         finish()
+    }
+
+
+    // ========== A-B 반복 ==========
+    private fun cycleAbRepeat() {
+        val mc = mediaController ?: return
+        val pos = mc.currentPosition
+        val btn = findViewById<MaterialButton>(R.id.btnAbRepeat)
+
+        when {
+            abStart < 0 -> {
+                abStart = pos
+                abEnd = -1
+                btn.text = "A · -"
+                Toast.makeText(this, "A: ${formatTime(pos)}", Toast.LENGTH_SHORT).show()
+            }
+            abEnd < 0 -> {
+                if (pos <= abStart + 1000) {
+                    Toast.makeText(this, "B는 A보다 뒤여야 함", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                abEnd = pos
+                btn.text = "A·B ON"
+                Toast.makeText(this, "B: ${formatTime(pos)} · 반복 시작", Toast.LENGTH_SHORT).show()
+                startAbLoop()
+            }
+            else -> {
+                // 해제
+                abStart = -1
+                abEnd = -1
+                abJob?.cancel()
+                btn.text = "A-B"
+                Toast.makeText(this, "A-B 해제", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun startAbLoop() {
+        abJob?.cancel()
+        abJob = lifecycleScope.launch {
+            while (isActive) {
+                val mc = mediaController
+                if (mc != null && abStart >= 0 && abEnd > 0) {
+                    if (mc.currentPosition >= abEnd) {
+                        mc.seekTo(abStart)
+                    }
+                }
+                delay(200)
+            }
+        }
     }
 
     private fun toggleFullscreen() {
@@ -1540,6 +1624,7 @@ class PlayerActivity : AppCompatActivity() {
         super.onStop()
         sbCheckJob?.cancel()
         previewJob?.cancel()
+        abJob?.cancel()
         savePosition()
         cancelAutoNext()
         if (!isInPictureInPictureMode) mediaController?.pause()
@@ -1562,6 +1647,7 @@ class PlayerActivity : AppCompatActivity() {
         super.onDestroy()
         sbCheckJob?.cancel()
         previewJob?.cancel()
+        abJob?.cancel()
         mediaController?.removeListener(playerListener)
         MediaController.releaseFuture(controllerFuture)
     }

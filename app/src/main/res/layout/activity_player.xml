@@ -147,6 +147,21 @@
                 app:cornerRadius="20dp" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnAbRepeat"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="A-B"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:minWidth="0dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                app:backgroundTint="#33FFFFFF"
+                app:cornerRadius="20dp" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnMore"
                 style="@style/Widget.MaterialComponents.Button"
                 android:layout_width="wrap_content"
@@ -228,6 +243,53 @@
 
         <!-- 자동 다음 동영상 알림 오버레이 -->
         <!-- 잠금 오버레이 -->
+        <LinearLayout
+            android:id="@+id/gestureBar"
+            android:layout_width="80dp"
+            android:layout_height="200dp"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="bottom"
+            android:background="#CC000000"
+            android:padding="6dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvGestureIcon"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🔊"
+                android:textSize="20sp"
+                android:gravity="center"
+                android:paddingBottom="4dp" />
+
+            <FrameLayout
+                android:id="@+id/gestureBarTrack"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="#33FFFFFF">
+
+                <View
+                    android:id="@+id/gestureBarFill"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_gravity="bottom"
+                    android:background="@color/accent" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/tvGesturePct"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="50%"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF"
+                android:gravity="center"
+                android:paddingTop="4dp" />
+        </LinearLayout>
+
         <TextView
             android:id="@+id/gestureOverlay"
             android:layout_width="wrap_content"

@@ -62,6 +62,38 @@ class MainActivity : AppCompatActivity() {
             } else false
         }
         findViewById<View>(R.id.btnStartSearch).setOnClickListener { etHomeSearch.requestFocus() }
+        // 배경 그라데이션
+        val rootLayout = findViewById<View>(android.R.id.content).getChildAt(0)
+        val appPref = getSharedPreferences("app_prefs", MODE_PRIVATE)
+        val savedGrad = appPref.getString("home_gradient", "red") ?: "red"
+        applyHomeGradient(rootLayout, savedGrad)
+
+        findViewById<View>(R.id.btnTheme).setOnClickListener {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("🎨 디자인 설정")
+                .setItems(arrayOf("배경 테마", "카드 크기")) { _, which ->
+                    when (which) {
+                        0 -> {
+                            val options = arrayOf("🔴 빨강 (기본)", "🔵 파랑", "🟢 초록", "🟣 보라")
+                            val keys = arrayOf("red", "blue", "green", "purple")
+                            androidx.appcompat.app.AlertDialog.Builder(this)
+                                .setItems(options) { _, i ->
+                                    appPref.edit().putString("home_gradient", keys[i]).apply()
+                                    applyHomeGradient(rootLayout, keys[i])
+                                }.show()
+                        }
+                        1 -> {
+                            androidx.appcompat.app.AlertDialog.Builder(this)
+                                .setItems(arrayOf("작게", "보통 (기본)", "크게")) { _, i ->
+                                    val key = when (i) { 0 -> "small"; 2 -> "large"; else -> "medium" }
+                                    appPref.edit().putString("card_size", key).apply()
+                                    recreate()
+                                }.show()
+                        }
+                    }
+                }
+                .show()
+        }
         findViewById<View>(R.id.btnSmartPlaylist).setOnClickListener {
             startActivity(Intent(this, SmartPlaylistActivity::class.java))
         }
@@ -161,6 +193,9 @@ class MainActivity : AppCompatActivity() {
         loadSubscriptions()
         loadTrending()
         loadHistory()
+
+        // ★ 구독 알림 스케줄
+        scheduleSubscriptionWorker()
     }
 
     override fun onResume() {
@@ -232,7 +267,33 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadRecentSearches() {
+
+    private fun applyHomeGradient(view: View, key: String) {
+        val res = when (key) {
+            "blue" -> R.drawable.bg_gradient_blue
+            "green" -> R.drawable.bg_gradient_green
+            "purple" -> R.drawable.bg_gradient_purple
+            else -> R.drawable.bg_gradient_red
+        }
+        view.setBackgroundResource(res)
+    }
+
+    
+    private fun scheduleSubscriptionWorker() {
+        try {
+            val req = androidx.work.PeriodicWorkRequestBuilder<SubscriptionWorker>(
+                6, java.util.concurrent.TimeUnit.HOURS
+            ).build()
+            androidx.work.WorkManager.getInstance(applicationContext)
+                .enqueueUniquePeriodicWork(
+                    "sub_check",
+                    androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                    req
+                )
+        } catch (e: Exception) { }
+    }
+
+        private fun loadRecentSearches() {
         val section = findViewById<View>(R.id.sectionRecent)
         val container = findViewById<LinearLayout>(R.id.chipsContainer)
         container.removeAllViews()
