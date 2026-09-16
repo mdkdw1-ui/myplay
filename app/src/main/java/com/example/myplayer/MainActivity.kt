@@ -63,7 +63,7 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.btnStartSearch).setOnClickListener { etHomeSearch.requestFocus() }
         // 배경 그라데이션
-        val rootLayout = findViewById<View>(android.R.id.content).getChildAt(0)
+        val rootLayout = findViewById<View>(R.id.rootScroll)
         val appPref = getSharedPreferences("app_prefs", MODE_PRIVATE)
         val savedGrad = appPref.getString("home_gradient", "red") ?: "red"
         applyHomeGradient(rootLayout, savedGrad)
