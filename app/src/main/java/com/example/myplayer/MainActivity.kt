@@ -195,11 +195,6 @@ class MainActivity : AppCompatActivity() {
             val section = findViewById<View>(R.id.sectionTrending)
             try {
                 val list = YouTubeTrending.fetch()
-                Toast.makeText(
-                    this@MainActivity,
-                    "트렌딩: ${list.size}개 (${YouTubeTrending.lastDebug})",
-                    Toast.LENGTH_LONG
-                ).show()
                 if (list.isEmpty()) {
                     section.visibility = View.GONE
                 } else {
@@ -210,11 +205,6 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 section.visibility = View.GONE
-                Toast.makeText(
-                    this@MainActivity,
-                    "트렌딩 실패: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
             }
         }
     }
