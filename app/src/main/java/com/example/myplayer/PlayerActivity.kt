@@ -1349,6 +1349,21 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+
+    private fun switchToAudioMode() {
+        if (currentVideoId.isBlank()) {
+            Toast.makeText(this, "오디오 모드로 전환 불가", Toast.LENGTH_SHORT).show()
+            return
+        }
+        startActivity(Intent(this, AudioPlayerActivity::class.java).apply {
+            putExtra("VIDEO_ID", currentVideoId)
+            putExtra("VIDEO_TITLE", currentTitle)
+            putExtra("VIDEO_CHANNEL", currentChannel)
+            putExtra("VIDEO_THUMB", currentThumb)
+        })
+        finish()
+    }
+
     private fun toggleFullscreen() {
         val controller = window.insetsController ?: return
         if (!isFullscreen) {
@@ -1404,6 +1419,7 @@ class PlayerActivity : AppCompatActivity() {
     // ========== ⋯ 더보기 메뉴 ==========
     private fun showMoreMenu() {
         val items = arrayOf(
+            "🎵 오디오 모드로 전환",
             "✏️ 현재 시점에 메모",
             "📒 메모 목록",
             "🎞 화질 선택",
@@ -1421,15 +1437,16 @@ class PlayerActivity : AppCompatActivity() {
             .setTitle("더보기")
             .setItems(items) { _, i ->
                 when (i) {
-                    0 -> addNote()
-                    1 -> showNoteList()
-                    2 -> showQualityDialog()
-                    3 -> toggleRepeat()
-                    4 -> toggleKeepScreenOn()
-                    5 -> showShareDialog()
-                    6 -> startDownload()
-                    7 -> openTranscript()
-                    8 -> startActivity(Intent(this, QueueActivity::class.java))
+                    0 -> switchToAudioMode()
+                    1 -> addNote()
+                    2 -> showNoteList()
+                    3 -> showQualityDialog()
+                    4 -> toggleRepeat()
+                    5 -> toggleKeepScreenOn()
+                    6 -> showShareDialog()
+                    7 -> startDownload()
+                    8 -> openTranscript()
+                    9 -> startActivity(Intent(this, QueueActivity::class.java))
                     9 -> showPipSizeDialog()
                     10 -> toggleAutoPip()
                     11 -> showSubtitleStyleDialog()

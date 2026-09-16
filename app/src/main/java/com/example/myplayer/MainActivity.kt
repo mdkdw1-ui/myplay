@@ -62,6 +62,9 @@ class MainActivity : AppCompatActivity() {
             } else false
         }
         findViewById<View>(R.id.btnStartSearch).setOnClickListener { etHomeSearch.requestFocus() }
+        findViewById<View>(R.id.btnSmartPlaylist).setOnClickListener {
+            startActivity(Intent(this, SmartPlaylistActivity::class.java))
+        }
         findViewById<View>(R.id.btnPlaylist).setOnClickListener {
             val input = android.widget.EditText(this).apply {
                 hint = "재생목록 URL"
