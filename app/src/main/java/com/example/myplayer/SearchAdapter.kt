@@ -1,6 +1,7 @@
 package com.example.myplayer
 
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
@@ -55,52 +56,89 @@ class SearchAdapter(
         Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
         holder.itemView.setOnClickListener { onClick(item) }
 
-        // ★ 롱프레스 → 큐 추가 / 북마크
-        holder.itemView.setOnLongClickListener {
-            val ctx = holder.itemView.context
-            val options = arrayOf("📋 대기열에 추가", "⭐ 북마크 저장", "📤 공유")
-            androidx.appcompat.app.AlertDialog.Builder(ctx)
-                .setTitle(item.title)
-                .setItems(options) { _, which ->
-                    when (which) {
-                        0 -> {
-                            val added = QueueManager.add(
-                                ctx,
-                                HomeVideo(item.videoId, item.title, item.channel, item.thumbnail)
-                            )
-                            android.widget.Toast.makeText(
-                                ctx,
-                                if (added) "대기열에 추가됨 (${QueueManager.size(ctx)}개)" else "이미 대기열에 있음",
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
+        // ★ 롱프레스 → 미리보기 / 손 떼면 메뉴
+        holder.itemView.setOnLongClickListener { true } // 소비 (OnTouch에서 처리)
+        holder.itemView.setOnTouchListener { v, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    // 500ms 후 미리보기 시작
+                    v.postDelayed({
+                        val ctx = v.context
+                        val parent = v.parent as? ViewGroup
+                        if (parent != null) {
+                            PreviewPlayer.start(ctx, parent as ViewGroup, item.videoId)
                         }
-                        1 -> {
-                            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                try {
-                                    HistoryDatabase.get(ctx).bookmarkDao().insert(
-                                        BookmarkEntity(
-                                            videoId = item.videoId, title = item.title,
-                                            channel = item.channel, thumbnail = item.thumbnail,
-                                            savedAt = System.currentTimeMillis()
-                                        )
-                                    )
-                                } catch (e: Exception) { }
-                            }
-                            android.widget.Toast.makeText(ctx, "북마크 저장", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                        2 -> {
-                            val url = "https://www.youtube.com/watch?v=${item.videoId}"
-                            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(android.content.Intent.EXTRA_TEXT, "${item.title}\n$url")
-                            }
-                            ctx.startActivity(android.content.Intent.createChooser(send, "공유"))
-                        }
+                    }, 500)
+                    // 다운 이벤트 저장용 태그
+                    v.setTag(android.R.id.text1, true)
+                    false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    // 스크롤이면 취소
+                    false
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (PreviewPlayer.isPlaying()) {
+                        PreviewPlayer.stop()
+                        true
+                    } else {
+                        // 미리보기 안 시작 → 롱프레스 메뉴
+                        showOptions(v, item)
+                        false
                     }
                 }
-                .show()
-            true
+                MotionEvent.ACTION_CANCEL -> {
+                    PreviewPlayer.stop()
+                    true
+                }
+                else -> false
+            }
         }
+    }
+
+    private fun showOptions(v: View, item: VideoItem) {
+        val ctx = v.context
+        val options = arrayOf("📋 대기열에 추가", "⭐ 북마크 저장", "📤 공유")
+        androidx.appcompat.app.AlertDialog.Builder(ctx)
+            .setTitle(item.title)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
+                        val added = QueueManager.add(
+                            ctx,
+                            HomeVideo(item.videoId, item.title, item.channel, item.thumbnail)
+                        )
+                        android.widget.Toast.makeText(
+                            ctx,
+                            if (added) "대기열 추가 (${QueueManager.size(ctx)}개)" else "이미 있음",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    1 -> {
+                        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                HistoryDatabase.get(ctx).bookmarkDao().insert(
+                                    BookmarkEntity(
+                                        videoId = item.videoId, title = item.title,
+                                        channel = item.channel, thumbnail = item.thumbnail,
+                                        savedAt = System.currentTimeMillis()
+                                    )
+                                )
+                            } catch (e: Exception) { }
+                        }
+                        android.widget.Toast.makeText(ctx, "북마크 저장", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    2 -> {
+                        val url = "https://www.youtube.com/watch?v=${item.videoId}"
+                        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_TEXT, "${item.title}\n$url")
+                        }
+                        ctx.startActivity(android.content.Intent.createChooser(send, "공유"))
+                    }
+                }
+            }
+            .show()
     }
 
     override fun getItemCount() = items.size
