@@ -56,8 +56,9 @@ object PreviewPlayer {
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
                 setBackgroundColor(Color.BLACK)
-                isClickable = true
-                isFocusable = true
+                // ★ 터치 통과 (카드가 탭 받도록)
+                isClickable = false
+                isFocusable = false
             }
 
             // ★ 썸네일 먼저 (블러 + 스케일)
@@ -68,6 +69,8 @@ object PreviewPlayer {
                 )
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 setColorFilter(0x99000000.toInt())
+                isClickable = false
+                isFocusable = false
             }
             if (thumbUrl.isNotBlank()) {
                 Glide.with(ctx).load(thumbUrl).into(thumbIv)
@@ -185,20 +188,17 @@ object PreviewPlayer {
     }
 
     fun stop() {
-        stopJob?.cancel()
-        stopJob = null
-        loadJob?.cancel()
-        loadJob = null
+        stopJob?.cancel(); stopJob = null
+        loadJob?.cancel(); loadJob = null
+        try {
+            overlay?.let { ov -> (ov.parent as? ViewGroup)?.removeView(ov) }
+        } catch (e: Exception) { }
+        overlay = null
         try { player?.stop() } catch (e: Exception) { }
         try { player?.release() } catch (e: Exception) { }
         player = null
         playerView = null
-        try {
-            overlay?.let { (it.parent as? ViewGroup)?.removeView(it) }
-        } catch (e: Exception) { }
-        overlay = null
         host = null
-        scope?.cancel()
-        scope = null
+        scope?.cancel(); scope = null
     }
 }
