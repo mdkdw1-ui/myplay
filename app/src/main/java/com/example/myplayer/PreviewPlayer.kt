@@ -1,16 +1,19 @@
 package com.example.myplayer
 
 import android.content.Context
+import android.graphics.Color
 import android.net.Uri
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.bumptech.glide.Glide
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -20,13 +23,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * 카드 위에 뜨는 5초 미리보기 (전역 싱글턴, 안전 설계)
- */
 object PreviewPlayer {
 
     private const val TAG = "PreviewPlayer"
-    private const val PREVIEW_MS = 5000L
+    private const val PREVIEW_MS = 10_000L   // ★ 10초로 연장
+
+    // ★ 캐시: videoId → url (두 번째부터 즉시)
+    private val urlCache = mutableMapOf<String, String>()
 
     private var player: ExoPlayer? = null
     private var playerView: PlayerView? = null
@@ -34,27 +37,56 @@ object PreviewPlayer {
     private var host: ViewGroup? = null
     private var scope: CoroutineScope? = null
     private var stopJob: Job? = null
+    private var loadJob: Job? = null
 
     fun isPlaying(): Boolean = player?.isPlaying == true
     fun isActive(): Boolean = overlay != null
 
     /**
-     * @param host 카드의 itemView (RecyclerView 아님!)
+     * @param thumbUrl 썸네일 (검은 화면 대신 먼저 표시)
      */
-    fun start(ctx: Context, hostCard: ViewGroup, videoId: String) {
+    fun start(ctx: Context, hostCard: ViewGroup, videoId: String, thumbUrl: String) {
         stop()
 
         try {
+            // 1. 오버레이 (썸네일 배경 + PlayerView)
             val ov = FrameLayout(ctx).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
-                setBackgroundColor(0x99000000.toInt())
+                setBackgroundColor(Color.BLACK)
                 isClickable = true
                 isFocusable = true
-                // 카드 위에 얹기 위해 부모가 FrameLayout이어야 함
             }
+
+            // ★ 썸네일 먼저 (블러 + 스케일)
+            val thumbIv = ImageView(ctx).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setColorFilter(0x99000000.toInt())
+            }
+            if (thumbUrl.isNotBlank()) {
+                Glide.with(ctx).load(thumbUrl).into(thumbIv)
+            }
+            ov.addView(thumbIv)
+
+            // 로딩 인디케이터
+            val loader = android.widget.ProgressBar(ctx).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT
+                ).apply { gravity = android.view.Gravity.CENTER }
+                indeterminateTintList = android.content.res.ColorStateList.valueOf(
+                    android.graphics.Color.parseColor("#FF2D55")
+                )
+            }
+            ov.addView(loader)
+
+            // PlayerView (숨김 상태로)
             val pv = PlayerView(ctx).apply {
                 useController = false
                 layoutParams = FrameLayout.LayoutParams(
@@ -62,22 +94,18 @@ object PreviewPlayer {
                     FrameLayout.LayoutParams.MATCH_PARENT
                 )
                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                visibility = View.GONE  // 로드 완료 후 표시
             }
             ov.addView(pv)
 
-            // 카드 자체가 FrameLayout이 아니면 감쌀 수 없음 → 부모에 얹기
-            // item_video.xml 루트가 CardView 내부 LinearLayout → 그 위에 얹기 위해 CardView에 붙임
             if (hostCard is FrameLayout || hostCard is androidx.cardview.widget.CardView) {
                 hostCard.addView(ov)
             } else {
-                // fallback: 부모 ViewGroup에 얹기
-                val parent = hostCard.parent as? ViewGroup ?: run {
-                    Log.e(TAG, "no parent")
-                    return
-                }
+                val parent = hostCard.parent as? ViewGroup ?: return
                 parent.addView(ov)
             }
 
+            // 2. ExoPlayer
             val p = ExoPlayer.Builder(ctx).build().apply {
                 volume = 0f
                 repeatMode = Player.REPEAT_MODE_OFF
@@ -90,33 +118,38 @@ object PreviewPlayer {
             host = hostCard
             scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-            scope?.launch {
-                try {
-                    val result = YouTubeStream.extract(videoId)
-                    val url = result.muxedUrl
-                        ?: result.videoUrl
-                        ?: result.audioUrl
-                    if (url.isNullOrBlank()) {
-                        stop()
-                        return@launch
-                    }
-                    withContext(Dispatchers.Main) {
-                        try {
-                            p.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
-                            p.prepare()
-                            p.playWhenReady = true
-                            p.seekTo(5000)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "play err", e)
+            // 3. URL 캐시 확인 → 즉시 재생 or 추출
+            val cached = urlCache[videoId]
+            if (cached != null) {
+                playUrl(p, pv, loader, cached)
+            } else {
+                loadJob = scope?.launch {
+                    try {
+                        val result = YouTubeStream.extract(videoId)
+                        // ★ 최저화질 우선 (빠른 로드)
+                        val url = result.qualities
+                            .minByOrNull { it.height }
+                            ?.url
+                            ?: result.muxedUrl
+                            ?: result.videoUrl
+                            ?: result.audioUrl
+
+                        if (url.isNullOrBlank()) {
                             stop()
+                            return@launch
                         }
+                        urlCache[videoId] = url
+                        withContext(Dispatchers.Main) {
+                            playUrl(p, pv, loader, url)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "extract err", e)
+                        stop()
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "extract err", e)
-                    stop()
                 }
             }
 
+            // 4. 자동 정지 (10초)
             stopJob = scope?.launch {
                 delay(PREVIEW_MS)
                 stop()
@@ -127,17 +160,41 @@ object PreviewPlayer {
         }
     }
 
+    private fun playUrl(p: ExoPlayer, pv: PlayerView, loader: View, url: String) {
+        try {
+            p.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
+            p.prepare()
+            p.playWhenReady = true
+            p.seekTo(7000)  // 7초 지점부터 (인트로 스킵)
+
+            // 준비되면 PlayerView 표시 + 로더 숨김
+            p.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_READY) {
+                        pv.visibility = View.VISIBLE
+                        loader.visibility = View.GONE
+                    } else if (state == Player.STATE_BUFFERING) {
+                        loader.visibility = View.VISIBLE
+                    }
+                }
+            })
+        } catch (e: Exception) {
+            Log.e(TAG, "play err", e)
+            stop()
+        }
+    }
+
     fun stop() {
         stopJob?.cancel()
         stopJob = null
+        loadJob?.cancel()
+        loadJob = null
         try { player?.stop() } catch (e: Exception) { }
         try { player?.release() } catch (e: Exception) { }
         player = null
         playerView = null
         try {
-            overlay?.let {
-                (it.parent as? ViewGroup)?.removeView(it)
-            }
+            overlay?.let { (it.parent as? ViewGroup)?.removeView(it) }
         } catch (e: Exception) { }
         overlay = null
         host = null

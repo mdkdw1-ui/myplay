@@ -64,7 +64,7 @@ class SearchAdapter(
         val longPressRunnable = Runnable {
             longPressTriggered = true
             // 카드의 FrameLayout에 오버레이 붙이기
-            PreviewPlayer.start(host.context, host, item.videoId)
+            PreviewPlayer.start(host.context, host, item.videoId, item.thumbnail)
         }
 
         host.setOnTouchListener { _, event ->
