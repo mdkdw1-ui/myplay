@@ -25,7 +25,8 @@ class DownloadsActivity : AppCompatActivity() {
 
         val adapter = DownloadsAdapter(
             onClick = { item -> playLocal(item) },
-            onDelete = { item -> confirmDelete(item) }
+            onDelete = { item -> confirmDelete(item) },
+            onExport = { item -> exportToDownload(item) }
         )
         recycler.layoutManager = LinearLayoutManager(this)
         recycler.adapter = adapter
@@ -36,6 +37,47 @@ class DownloadsActivity : AppCompatActivity() {
                 emptyBox.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
                 recycler.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE
             }
+        }
+    }
+
+
+    private fun exportToDownload(item: DownloadEntity) {
+        try {
+            val src = java.io.File(item.filePath)
+            if (!src.exists()) {
+                android.widget.Toast.makeText(this, "파일 없음", android.widget.Toast.LENGTH_SHORT).show()
+                return
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, src.name)
+                    put(android.provider.MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                    put(android.provider.MediaStore.Video.Media.RELATIVE_PATH,
+                        android.os.Environment.DIRECTORY_DOWNLOADS + "/MyPlayer")
+                }
+                val uri = contentResolver.insert(
+                    android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values
+                ) ?: throw Exception("MediaStore insert 실패")
+                contentResolver.openOutputStream(uri)?.use { out ->
+                    src.inputStream().use { it.copyTo(out) }
+                }
+            } else {
+                val dir = java.io.File(
+                    android.os.Environment.getExternalStoragePublicDirectory(
+                        android.os.Environment.DIRECTORY_DOWNLOADS
+                    ), "MyPlayer"
+                )
+                dir.mkdirs()
+                val dst = java.io.File(dir, src.name)
+                src.copyTo(dst, overwrite = true)
+            }
+            android.widget.Toast.makeText(
+                this,
+                "내보냄: Download/MyPlayer/${src.name}",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(this, "실패: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
