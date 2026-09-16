@@ -56,14 +56,21 @@ class SearchAdapter(
 
         Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
 
-        // ★ 터치 처리: 탭 → 재생 / 길게 → 미리보기
+        // ★ 클릭 리스너 (onTouch와 별개로 탭 처리)
+        holder.itemView.setOnClickListener {
+            PreviewPlayer.stop()
+            onClick(item)
+        }
+
+        // ★ 롱프레스 (미리보기만)
+        holder.itemView.setOnLongClickListener { false } // onTouch에서 처리
+
         val host = holder.itemView as ViewGroup
         var downX = 0f
         var downY = 0f
-        var longPressTriggered = false
+        var previewStarted = false
         val longPressRunnable = Runnable {
-            longPressTriggered = true
-            // 카드의 FrameLayout에 오버레이 붙이기
+            previewStarted = true
             PreviewPlayer.start(host.context, host, item.videoId, item.thumbnail)
         }
 
@@ -72,37 +79,39 @@ class SearchAdapter(
                 MotionEvent.ACTION_DOWN -> {
                     downX = event.rawX
                     downY = event.rawY
-                    longPressTriggered = false
+                    previewStarted = false
                     host.postDelayed(longPressRunnable, 500)
-                    false
+                    false  // ★ 이벤트 전달 (탭 인식 유지)
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    // 스크롤/이동 시 롱프레스 취소
                     if (Math.abs(event.rawX - downX) > 20 ||
                         Math.abs(event.rawY - downY) > 20) {
                         host.removeCallbacks(longPressRunnable)
                         if (PreviewPlayer.isActive()) PreviewPlayer.stop()
+                        previewStarted = false
                     }
                     false
                 }
                 MotionEvent.ACTION_UP -> {
                     host.removeCallbacks(longPressRunnable)
-                    if (longPressTriggered) {
-                        // 미리보기 정지 + 메뉴
+                    if (previewStarted) {
+                        // ★ 미리보기 정지 + 즉시 제거 + 옵션 메뉴
                         PreviewPlayer.stop()
                         showOptions(host, item)
-                        longPressTriggered = false
+                        previewStarted = false
+                        true  // ★ 이벤트 소비 (탭 재생 안 함)
                     } else {
-                        // 일반 탭 → 재생
+                        // ★ 일반 탭 → 재생
+                        PreviewPlayer.stop()
                         onClick(item)
+                        true
                     }
-                    false
                 }
                 MotionEvent.ACTION_CANCEL -> {
                     host.removeCallbacks(longPressRunnable)
                     PreviewPlayer.stop()
-                    longPressTriggered = false
-                    false
+                    previewStarted = false
+                    true
                 }
                 else -> false
             }
