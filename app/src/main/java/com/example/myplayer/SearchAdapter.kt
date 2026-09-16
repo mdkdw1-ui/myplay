@@ -56,22 +56,26 @@ class SearchAdapter(
 
         Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
 
-        // ★ 클릭 리스너 (onTouch와 별개로 탭 처리)
-        holder.itemView.setOnClickListener {
-            PreviewPlayer.stop()
-            onClick(item)
-        }
-
-        // ★ 롱프레스 (미리보기만)
-        holder.itemView.setOnLongClickListener { false } // onTouch에서 처리
+        // onClick은 onTouch에서 직접 처리 (중복 방지)
+        holder.itemView.setOnClickListener(null)
 
         val host = holder.itemView as ViewGroup
         var downX = 0f
         var downY = 0f
         var previewStarted = false
-        val longPressRunnable = Runnable {
+        var menuTriggered = false
+
+        // 0.5초 후 미리보기 시작
+        val previewRunnable = Runnable {
             previewStarted = true
             PreviewPlayer.start(host.context, host, item.videoId, item.thumbnail)
+        }
+
+        // 1.5초 후 옵션 메뉴
+        val menuRunnable = Runnable {
+            menuTriggered = true
+            PreviewPlayer.stop()
+            showOptions(host, item)
         }
 
         host.setOnTouchListener { _, event ->
@@ -80,38 +84,47 @@ class SearchAdapter(
                     downX = event.rawX
                     downY = event.rawY
                     previewStarted = false
-                    host.postDelayed(longPressRunnable, 500)
-                    false  // ★ 이벤트 전달 (탭 인식 유지)
+                    menuTriggered = false
+                    host.postDelayed(previewRunnable, 500)
+                    host.postDelayed(menuRunnable, 1500)
+                    false
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (Math.abs(event.rawX - downX) > 20 ||
                         Math.abs(event.rawY - downY) > 20) {
-                        host.removeCallbacks(longPressRunnable)
-                        if (PreviewPlayer.isActive()) PreviewPlayer.stop()
+                        host.removeCallbacks(previewRunnable)
+                        host.removeCallbacks(menuRunnable)
+                        PreviewPlayer.stop()
                         previewStarted = false
+                        menuTriggered = false
                     }
                     false
                 }
-                MotionEvent.ACTION_UP -> {
-                    host.removeCallbacks(longPressRunnable)
-                    if (previewStarted) {
-                        // ★ 미리보기 정지 + 즉시 제거 + 옵션 메뉴
-                        PreviewPlayer.stop()
-                        showOptions(host, item)
-                        previewStarted = false
-                        true  // ★ 이벤트 소비 (탭 재생 안 함)
-                    } else {
-                        // ★ 일반 탭 → 재생
-                        PreviewPlayer.stop()
-                        onClick(item)
-                        true
-                    }
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    host.removeCallbacks(longPressRunnable)
-                    PreviewPlayer.stop()
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    host.removeCallbacks(previewRunnable)
+                    host.removeCallbacks(menuRunnable)
+                    val wasPreview = previewStarted
+                    val wasMenu = menuTriggered
                     previewStarted = false
-                    true
+                    menuTriggered = false
+
+                    when {
+                        wasMenu -> {
+                            // 메뉴는 이미 떴음
+                            true
+                        }
+                        wasPreview -> {
+                            // ★ 미리보기 유지 (손 떼도) → 3초 뒤 자동 종료
+                            host.postDelayed({ PreviewPlayer.stop() }, 6000)
+                            true
+                        }
+                        else -> {
+                            // 일반 탭 (0.5초 이하) → 재생
+                            PreviewPlayer.stop()
+                            onClick(item)
+                            true
+                        }
+                    }
                 }
                 else -> false
             }
