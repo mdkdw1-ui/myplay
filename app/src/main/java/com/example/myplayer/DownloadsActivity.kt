@@ -50,15 +50,15 @@ class DownloadsActivity : AppCompatActivity() {
             }
 
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                // ★ MediaStore (Android 10+)
+                // ★ MediaStore.Downloads 컬렉션 (Download 폴더 전용)
                 val values = android.content.ContentValues().apply {
-                    put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, src.name)
-                    put(android.provider.MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                    put(android.provider.MediaStore.Video.Media.RELATIVE_PATH,
+                    put(android.provider.MediaStore.Downloads.DISPLAY_NAME, src.name)
+                    put(android.provider.MediaStore.Downloads.MIME_TYPE, "video/mp4")
+                    put(android.provider.MediaStore.Downloads.RELATIVE_PATH,
                         android.os.Environment.DIRECTORY_DOWNLOADS + "/MyPlayer")
-                    put(android.provider.MediaStore.Video.Media.IS_PENDING, 1)
+                    put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
                 }
-                val collection = android.provider.MediaStore.Video.Media.getContentUri(
+                val collection = android.provider.MediaStore.Downloads.getContentUri(
                     android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY
                 )
                 val uri = contentResolver.insert(collection, values)
@@ -68,9 +68,8 @@ class DownloadsActivity : AppCompatActivity() {
                     src.inputStream().use { it.copyTo(out) }
                 } ?: throw Exception("openOutputStream null")
 
-                // 완료 표시
                 values.clear()
-                values.put(android.provider.MediaStore.Video.Media.IS_PENDING, 0)
+                values.put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
                 contentResolver.update(uri, values, null, null)
 
                 android.widget.Toast.makeText(
@@ -79,7 +78,6 @@ class DownloadsActivity : AppCompatActivity() {
                     android.widget.Toast.LENGTH_LONG
                 ).show()
             } else {
-                // Android 9 이하
                 @Suppress("DEPRECATION")
                 val dir = java.io.File(
                     android.os.Environment.getExternalStoragePublicDirectory(
@@ -103,6 +101,7 @@ class DownloadsActivity : AppCompatActivity() {
             ).show()
         }
     }
+
 
 
     private fun playLocal(item: DownloadEntity) {
