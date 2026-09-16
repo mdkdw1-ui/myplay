@@ -222,6 +222,7 @@ class PlayerActivity : AppCompatActivity() {
         gestureOverlay = findViewById(R.id.gestureOverlay)
         applySubtitleStyle()
         setupGestures()
+        setupSubtitleDrag()
 
         val videoUri = intent.getStringExtra("VIDEO_URI")
         val videoId = intent.getStringExtra("VIDEO_ID")
@@ -962,6 +963,9 @@ class PlayerActivity : AppCompatActivity() {
 
     // ========== 📥 다운로드 ==========
     private var isDownloading = false
+    private var subtitleOffsetX = 0f
+    private var subtitleOffsetY = 0f
+    private var subtitleDragActive = false
     private var abStart: Long = -1L
     private var abEnd: Long = -1L
     private var abJob: kotlinx.coroutines.Job? = null
@@ -1446,6 +1450,72 @@ class PlayerActivity : AppCompatActivity() {
                 delay(200)
             }
         }
+    }
+
+
+    // ========== 👆 자막 드래그 ==========
+    private fun setupSubtitleDrag() {
+        val sv = playerView.subtitleView ?: return
+        var downX = 0f
+        var downY = 0f
+        var startTransX = 0f
+        var startTransY = 0f
+        val hint = findViewById<View>(R.id.tvSubtitleHint)
+
+        sv.setOnTouchListener { _, event ->
+            when (event.action) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                    startTransX = sv.translationX
+                    startTransY = sv.translationY
+                    subtitleDragActive = false
+                    true
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downX
+                    val dy = event.rawY - downY
+                    if (!subtitleDragActive && (Math.abs(dx) > 20 || Math.abs(dy) > 20)) {
+                        subtitleDragActive = true
+                        hint.visibility = View.VISIBLE
+                    }
+                    if (subtitleDragActive) {
+                        sv.translationX = startTransX + dx
+                        sv.translationY = startTransY + dy
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                    if (subtitleDragActive) {
+                        subtitleOffsetX = sv.translationX
+                        subtitleOffsetY = sv.translationY
+                        pref.edit()
+                            .putFloat("offset_x", subtitleOffsetX)
+                            .putFloat("offset_y", subtitleOffsetY)
+                            .apply()
+                        hint.visibility = View.GONE
+                        Toast.makeText(
+                            this@PlayerActivity,
+                            "자막 위치 저장됨",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    subtitleDragActive = false
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
+
+    private fun resetSubtitlePosition() {
+        pref.edit().remove("offset_x").remove("offset_y").apply()
+        subtitleOffsetX = 0f
+        subtitleOffsetY = 0f
+        playerView.subtitleView?.translationX = 0f
+        playerView.subtitleView?.translationY = 0f
+        Toast.makeText(this, "자막 위치 초기화", Toast.LENGTH_SHORT).show()
     }
 
     private fun toggleFullscreen() {
