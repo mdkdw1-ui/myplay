@@ -35,6 +35,23 @@ class HorizontalVideoAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val item = items[position]
+
+        // ★ 카드 크기 프리셋
+        val pref = holder.itemView.context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+        val sizeKey = pref.getString("card_size", "medium") ?: "medium"
+        val (w, h) = when (sizeKey) {
+            "small" -> Pair(140, 80)
+            "large" -> Pair(220, 124)
+            else -> Pair(170, 96)
+        }
+        val density = holder.itemView.context.resources.displayMetrics.density
+        holder.itemView.layoutParams = holder.itemView.layoutParams.apply {
+            width = (w * density).toInt()
+            height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        }
+        holder.thumb.layoutParams = holder.thumb.layoutParams.apply {
+            height = (h * density).toInt()
+        }
         holder.title.text = item.title
         holder.channel.text = item.channel
         Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
