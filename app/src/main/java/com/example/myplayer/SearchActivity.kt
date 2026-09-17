@@ -68,6 +68,31 @@ class SearchActivity : AppCompatActivity() {
         recycler.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 2)
         recycler.adapter = adapter
 
+        // ★ 터치 리스너 (탭/롱프레스 완벽 분리)
+        recycler.addOnItemTouchListener(
+            RecyclerTouchListener(
+                this, recycler,
+                onItemClick = { _, item ->
+                    val intent = Intent(this, PlayerActivity::class.java).apply {
+                        putExtra("VIDEO_ID", item.videoId)
+                        putExtra("VIDEO_TITLE", item.title)
+                        putExtra("VIDEO_CHANNEL", item.channel)
+                        putExtra("VIDEO_THUMB", item.thumbnail)
+                    }
+                    startActivity(intent)
+                },
+                onItemLongPress = { _, item, child ->
+                    PreviewPlayer.start(this, child as android.view.ViewGroup, item.videoId, item.thumbnail)
+                },
+                onItemRelease = { _, item, child ->
+                    // 손 떼면 6초 후 정지
+                    child.postDelayed({
+                        PreviewPlayer.stop()
+                    }, 6000)
+                }
+            )
+        )
+
         recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
                 if (dy <= 0) return
