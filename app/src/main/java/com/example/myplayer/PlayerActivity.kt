@@ -883,16 +883,37 @@ class PlayerActivity : AppCompatActivity() {
             }
             // (실제로는 URL만 캐시, 파일 캐시는 별도)
             val label = if (targetLang != null) "${sub.displayName} → 한국어" else sub.displayName
-            builder.setSubtitleConfigurations(
-                listOf(
+            val configs = mutableListOf<MediaItem.SubtitleConfiguration>()
+
+            if (targetLang != null) {
+                configs.add(
                     MediaItem.SubtitleConfiguration.Builder(Uri.parse(vttUrl))
                         .setMimeType(MimeTypes.TEXT_VTT)
-                        .setLanguage(targetLang ?: sub.languageCode)
+                        .setLanguage(targetLang)
                         .setLabel(label)
                         .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
                         .build()
                 )
-            )
+                val origUrl = ensureVttFormat(sub.url)
+                configs.add(
+                    MediaItem.SubtitleConfiguration.Builder(Uri.parse(origUrl))
+                        .setMimeType(MimeTypes.TEXT_VTT)
+                        .setLanguage(sub.languageCode)
+                        .setLabel("${sub.displayName} (원본)")
+                        .build()
+                )
+            } else {
+                configs.add(
+                    MediaItem.SubtitleConfiguration.Builder(Uri.parse(vttUrl))
+                        .setMimeType(MimeTypes.TEXT_VTT)
+                        .setLanguage(sub.languageCode)
+                        .setLabel(label)
+                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                        .build()
+                )
+            }
+
+            builder.setSubtitleConfigurations(configs)
         }
         // ★ 재생 중이면 setMediaItem 대신 자막만 다시 적용
         // (Media3는 setMediaItem 시 버퍼 리셋되므로)
@@ -953,7 +974,7 @@ class PlayerActivity : AppCompatActivity() {
             callbacks.add { applyStreamWithSubtitle(currentStreamUrl, s, null, pos); updateCcButton(true) }
             // ★ 번역 옵션 (한국어만)
             if (!s.languageCode.startsWith("ko")) {
-                labels.add("$name → 🇰🇷 한국어 (YouTube 제한)")
+                labels.add("$name → 🇰🇷 한국어 (⚠️ YouTube 버그로 자주 실패)")
                 callbacks.add { applyStreamWithSubtitle(currentStreamUrl, s, "ko", pos); updateCcButton(true) }
             }
             // ★ 영어 번역도 추가
