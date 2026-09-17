@@ -851,10 +851,10 @@ class PlayerActivity : AppCompatActivity() {
             currentVideoBestUrl = result.videoUrl
             val streamUrl = result.muxedUrl ?: result.videoUrl ?: result.audioUrl
 
+            // ★ 자동 번역 없이 원본 자막만 (429 방지)
             val autoSub = subtitleTracks.firstOrNull { it.languageCode.startsWith("ko") }
                 ?: subtitleTracks.firstOrNull { it.languageCode.startsWith("en") }
                 ?: subtitleTracks.firstOrNull()
-
             applyStreamWithSubtitle(streamUrl, autoSub, null, startPosMs)
             updateCcButton(autoSub != null)
             loadSponsorSegments(videoId)
@@ -873,6 +873,15 @@ class PlayerActivity : AppCompatActivity() {
         if (sub != null) {
             val rawUrl = if (targetLang != null) buildTranslatedUrl(sub.url, targetLang) else sub.url
             val vttUrl = ensureVttFormat(rawUrl)
+
+            // ★ 자막 URL 캐시 (429 방지)
+            val cacheKey = "sub_cache_${currentVideoId}_${sub.languageCode}_${targetLang ?: "orig"}"
+            val cached = pref.getString(cacheKey, null)
+            val finalVttUrl = if (cached != null) cached else {
+                pref.edit().putString(cacheKey, vttUrl).apply()
+                vttUrl
+            }
+            // (실제로는 URL만 캐시, 파일 캐시는 별도)
             val label = if (targetLang != null) "${sub.displayName} → 한국어" else sub.displayName
             builder.setSubtitleConfigurations(
                 listOf(
@@ -921,7 +930,9 @@ class PlayerActivity : AppCompatActivity() {
     private fun showSubtitleDialog() {
         if (subtitleTracks.isEmpty()) {
             AlertDialog.Builder(this).setTitle("자막")
-                .setMessage("이 영상엔 자막이 없습니다")
+                .setMessage("이 영상엔 자막이 없습니다\n\n" +
+                        "• 트레일러/음악 영상은 YouTube가 자동 자막을 안 만들 수 있습니다\n" +
+                        "• 잠시 후 다시 시도해보세요")
                 .setPositiveButton("확인", null)
                 .setNeutralButton("자막 스타일") { _, _ -> showSubtitleStyleDialog() }
                 .show()
@@ -942,7 +953,7 @@ class PlayerActivity : AppCompatActivity() {
             callbacks.add { applyStreamWithSubtitle(currentStreamUrl, s, null, pos); updateCcButton(true) }
             // ★ 번역 옵션 (한국어만)
             if (!s.languageCode.startsWith("ko")) {
-                labels.add("$name → 🇰🇷 한국어")
+                labels.add("$name → 🇰🇷 한국어 (YouTube 제한)")
                 callbacks.add { applyStreamWithSubtitle(currentStreamUrl, s, "ko", pos); updateCcButton(true) }
             }
             // ★ 영어 번역도 추가
