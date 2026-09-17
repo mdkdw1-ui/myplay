@@ -143,12 +143,26 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** ★ 연관 노래 재생 (라이브/싫어요 제외) */
+    /** ★ 다음 곡: 큐 우선 → 없으면 YouTubeRadio */
     private fun playNextRelated() {
+        // 1. 큐에 다음 곡 있으면 그걸 재생
+        val queue = QueueManager.get(this)
+        val queueNext = queue.firstOrNull { it.videoId != currentVideoId }
+        if (queueNext != null) {
+            QueueManager.remove(this, queueNext.videoId)
+            currentVideoId = queueNext.videoId
+            currentTitle = queueNext.title
+            currentChannel = queueNext.channel
+            currentThumb = queueNext.thumbnail
+            updateUI()
+            loadAudio(queueNext.videoId, isInitial = false)
+            return
+        }
+
+        // 2. 큐 비었으면 YouTubeRadio
         lifecycleScope.launch {
             val disliked = pref?.getStringSet("disliked_ids", emptySet()) ?: emptySet()
 
-            // 1. 연관 노래 가져오기
             Toast.makeText(
                 this@AudioPlayerActivity,
                 "다음 곡 검색 중...",
@@ -156,7 +170,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             ).show()
 
             val related = YouTubeRadio.fetchRelated(currentVideoId)
-                .filter { it.videoId !in disliked }  // ★ 싫어요 제외
+                .filter { it.videoId !in disliked }
 
             if (related.isEmpty()) {
                 Toast.makeText(
@@ -167,14 +181,12 @@ class AudioPlayerActivity : AppCompatActivity() {
                 return@launch
             }
 
-            // 2. 첫 번째 곡 재생
             val next = related.first()
             currentVideoId = next.videoId
             currentTitle = next.title
             currentChannel = next.channel
             currentThumb = next.thumbnail
             updateUI()
-
             loadAudio(next.videoId, isInitial = false)
         }
     }

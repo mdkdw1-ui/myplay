@@ -97,6 +97,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnSmartPlaylist).setOnClickListener {
             startActivity(Intent(this, SmartPlaylistActivity::class.java))
         }
+        findViewById<View>(R.id.btnAudioHome).setOnClickListener {
+            startActivity(Intent(this, AudioHomeActivity::class.java))
+        }
         findViewById<View>(R.id.btnPlaylist).setOnClickListener {
             val input = android.widget.EditText(this).apply {
                 hint = "재생목록 URL"
