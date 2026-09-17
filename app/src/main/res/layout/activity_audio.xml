@@ -187,6 +187,16 @@
                 android:textSize="12sp" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDislike"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:text="👎 싫어요"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnVideoMode"
                 style="@style/Widget.MaterialComponents.Button.TextButton"
                 android:layout_width="wrap_content"
