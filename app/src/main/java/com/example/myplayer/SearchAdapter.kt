@@ -1,5 +1,6 @@
 package com.example.myplayer
 
+import android.view.GestureDetector
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -11,21 +12,12 @@ import com.bumptech.glide.Glide
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 
 class SearchAdapter(
     private val onClick: (VideoItem) -> Unit
 ) : RecyclerView.Adapter<SearchAdapter.VH>() {
 
     private val items = mutableListOf<VideoItem>()
-
-    // ★ 스크롤 상태 추적
-    private var isScrolling = false
-    private val scrollListener = object : RecyclerView.OnScrollListener() {
-        override fun onScrollStateChanged(rv: RecyclerView, newState: Int) {
-            isScrolling = newState != RecyclerView.SCROLL_STATE_IDLE
-        }
-    }
 
     fun submit(list: List<VideoItem>) {
         items.clear()
@@ -38,16 +30,6 @@ class SearchAdapter(
         val start = items.size
         items.addAll(list)
         notifyItemRangeInserted(start, list.size)
-    }
-
-    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
-        super.onAttachedToRecyclerView(recyclerView)
-        recyclerView.addOnScrollListener(scrollListener)
-    }
-
-    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
-        super.onDetachedFromRecyclerView(recyclerView)
-        recyclerView.removeOnScrollListener(scrollListener)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -74,103 +56,67 @@ class SearchAdapter(
 
         Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
 
-        // 클릭 리스너는 onTouch에서 직접 처리
-        holder.itemView.setOnClickListener(null)
-
-        val host = holder.itemView as ViewGroup
-        var downX = 0f
-        var downY = 0f
-        var downTime = 0L
+        // ★ GestureDetector: 탭 / 롱프레스 완벽 분리
+        val ctx = holder.itemView.context
         var previewStarted = false
         var menuTriggered = false
-        var canceled = false
 
-        val previewRunnable = Runnable {
-            if (!isScrolling && !canceled) {
-                previewStarted = true
-                PreviewPlayer.start(host.context, host, item.videoId, item.thumbnail)
-            }
-        }
-        val menuRunnable = Runnable {
-            if (!isScrolling && !canceled && previewStarted) {
-                menuTriggered = true
+        val gestureDetector = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
+
+            // ★ 탭 확정 (더블탭 아님, 스크롤 아님)
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 PreviewPlayer.stop()
-                showOptions(host, item)
+                onClick(item)
+                return true
             }
-        }
 
-        host.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    downX = event.rawX
-                    downY = event.rawY
-                    downTime = System.currentTimeMillis()
-                    previewStarted = false
-                    menuTriggered = false
-                    canceled = isScrolling  // ★ 이미 스크롤 중이면 즉시 취소
-                    host.postDelayed(previewRunnable, 500)
-                    host.postDelayed(menuRunnable, 1500)
-                    false
+            // ★ 롱프레스 시작 (0.5초)
+            override fun onLongPress(e: MotionEvent) {
+                super.onLongPress(e)
+                if (!previewStarted) {
+                    previewStarted = true
+                    PreviewPlayer.start(ctx, holder.itemView as ViewGroup, item.videoId, item.thumbnail)
                 }
-
-                MotionEvent.ACTION_MOVE -> {
-                    // ★ 어떤 방향이든 20px 이상 이동 → 취소
-                    val dx = abs(event.rawX - downX)
-                    val dy = abs(event.rawY - downY)
-                    if (dx > 20 || dy > 20) {
-                        if (!canceled) {
-                            canceled = true
-                            host.removeCallbacks(previewRunnable)
-                            host.removeCallbacks(menuRunnable)
-                            PreviewPlayer.stop()
-                        }
-                    }
-                    // ★ MOVE가 여러 번 오면 스크롤 확정
-                    if (dx > 5 || dy > 5) {
-                        canceled = true
-                    }
-                    false
-                }
-
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    host.removeCallbacks(previewRunnable)
-                    host.removeCallbacks(menuRunnable)
-
-                    val elapsed = System.currentTimeMillis() - downTime
-                    val wasPreview = previewStarted
-                    val wasMenu = menuTriggered
-                    val wasCanceled = canceled
-                    val wasScrolling = isScrolling
-
-                    previewStarted = false
-                    menuTriggered = false
-                    canceled = false
-
-                    when {
-                        wasMenu -> true
-                        wasPreview -> {
-                            host.postDelayed({ PreviewPlayer.stop() }, 6000)
-                            true
-                        }
-                        wasCanceled || wasScrolling -> {
-                            // 스크롤이었음 → 아무 동작 X
-                            true
-                        }
-                        // ★ 짧은 탭도 최소 150ms 이상 유지된 경우만 재생
-                        elapsed < 150 -> {
-                            // 관성 스크롤의 짧은 DOWN-UP → 무시
-                            true
-                        }
-                        else -> {
-                            PreviewPlayer.stop()
-                            onClick(item)
-                            true
-                        }
-                    }
-                }
-
-                else -> false
             }
+
+            // ★ 스크롤 다운 시 (onScroll) — 취소
+            override fun onScroll(e1: MotionEvent?, e2: MotionEvent, dx: Float, dy: Float): Boolean {
+                if (previewStarted) {
+                    PreviewPlayer.stop()
+                    previewStarted = false
+                }
+                return false  // RecyclerView 스크롤에 양보
+            }
+
+            // ★ 다운 시점
+            override fun onDown(e: MotionEvent): Boolean {
+                previewStarted = false
+                menuTriggered = false
+                return true  // ★ true 반환해야 이후 이벤트 받음
+            }
+
+            // ★ 업 시점
+            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                // onSingleTapConfirmed이 처리하므로 여기선 pass
+                return false
+            }
+        })
+
+        // ★ onTouchListener: GestureDetector + 손 떼면 미리보기 유지
+        holder.itemView.setOnTouchListener { _, event ->
+            gestureDetector.onTouchEvent(event)
+
+            if (event.action == MotionEvent.ACTION_UP ||
+                event.action == MotionEvent.ACTION_CANCEL) {
+                if (previewStarted) {
+                    // 미리보기 중 손 뗌 → 6초 더 유지
+                    holder.itemView.postDelayed({
+                        PreviewPlayer.stop()
+                        previewStarted = false
+                    }, 6000)
+                }
+            }
+            false  // ★ RecyclerView 스크롤 양보
         }
     }
 
