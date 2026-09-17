@@ -229,6 +229,7 @@ class AudioHomeActivity : AppCompatActivity() {
             putExtra("VIDEO_TITLE", startTitle)
             putExtra("VIDEO_CHANNEL", startChannel)
             putExtra("VIDEO_THUMB", startThumb)
+            putExtra("FROM_PLAYLIST", true)  // ★ 큐 유지
         })
     }
 }
