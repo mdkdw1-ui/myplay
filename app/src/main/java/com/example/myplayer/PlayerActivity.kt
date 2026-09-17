@@ -1452,11 +1452,15 @@ class PlayerActivity : AppCompatActivity() {
             Toast.makeText(this, "오디오 모드로 전환 불가", Toast.LENGTH_SHORT).show()
             return
         }
+        // ★ 큐 초기화 (다른 영상의 큐 섞임 방지)
+        QueueManager.clear(this)
+
         startActivity(Intent(this, AudioPlayerActivity::class.java).apply {
             putExtra("VIDEO_ID", currentVideoId)
             putExtra("VIDEO_TITLE", currentTitle)
             putExtra("VIDEO_CHANNEL", currentChannel)
             putExtra("VIDEO_THUMB", currentThumb)
+            putExtra("FROM_PLAYLIST", false)
         })
         finish()
     }

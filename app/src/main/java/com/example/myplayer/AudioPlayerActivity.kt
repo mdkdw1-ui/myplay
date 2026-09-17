@@ -64,6 +64,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         tvPos = findViewById(R.id.tvPos)
         tvDur = findViewById(R.id.tvDur)
         seekBar = findViewById(R.id.seekBar)
+        seekBar.max = 1000  // ★ 0~1000 범위 (기본 100은 버그)
         btnPlay = findViewById(R.id.btnPlay)
         btnSpeed = findViewById(R.id.btnSpeed)
         btnRepeat = findViewById(R.id.btnRepeat)
@@ -72,6 +73,12 @@ class AudioPlayerActivity : AppCompatActivity() {
         currentTitle = intent.getStringExtra("VIDEO_TITLE") ?: ""
         currentChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
         currentThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
+
+        // ★ 플레이리스트에서 온 게 아니면 큐 초기화 (인기 동영상 섞임 방지)
+        val fromPlaylist = intent.getBooleanExtra("FROM_PLAYLIST", false)
+        if (!fromPlaylist) {
+            QueueManager.clear(this)
+        }
 
         updateUI()
 
@@ -145,7 +152,7 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     /** ★ 다음 곡: 큐 우선 → 없으면 YouTubeRadio */
     private fun playNextRelated() {
-        // 1. 큐에 다음 곡 있으면 그걸 재생
+        // 1. 큐에 다음 곡 있으면 재생
         val queue = QueueManager.get(this)
         val queueNext = queue.firstOrNull { it.videoId != currentVideoId }
         if (queueNext != null) {
@@ -158,6 +165,9 @@ class AudioPlayerActivity : AppCompatActivity() {
             loadAudio(queueNext.videoId, isInitial = false)
             return
         }
+
+        // 큐가 비었으면 큐 자체 초기화 (오염 방지)
+        QueueManager.clear(this)
 
         // 2. 큐 비었으면 YouTubeRadio
         lifecycleScope.launch {
