@@ -311,7 +311,7 @@
             android:layout_marginTop="16dp"
             android:padding="8dp"
             android:background="#CC000000"
-            android:text="👆 자막을 드래그해서 이동"
+            android:text="👆 1초 누른 후 드래그"
             android:textColor="#FFFFFF"
             android:textSize="12sp"
             android:visibility="gone" />

@@ -1522,8 +1522,17 @@ class PlayerActivity : AppCompatActivity() {
         var downY = 0f
         var startTransX = 0f
         var startTransY = 0f
+        var dragging = false
+        var longPressReady = false
         val hint = findViewById<View>(R.id.tvSubtitleHint)
 
+        val longPressRunnable = Runnable {
+            longPressReady = true
+            hint.visibility = View.VISIBLE
+        }
+
+        sv.isClickable = true
+        sv.isFocusable = true
         sv.setOnTouchListener { _, event ->
             when (event.action) {
                 android.view.MotionEvent.ACTION_DOWN -> {
@@ -1531,38 +1540,50 @@ class PlayerActivity : AppCompatActivity() {
                     downY = event.rawY
                     startTransX = sv.translationX
                     startTransY = sv.translationY
-                    subtitleDragActive = false
+                    dragging = false
+                    longPressReady = false
+                    // ★ 1초 롱프레스 후에만 드래그 준비
+                    sv.postDelayed(longPressRunnable, 1000)
                     true
                 }
                 android.view.MotionEvent.ACTION_MOVE -> {
                     val dx = event.rawX - downX
                     val dy = event.rawY - downY
-                    if (!subtitleDragActive && (Math.abs(dx) > 20 || Math.abs(dy) > 20)) {
-                        subtitleDragActive = true
-                        hint.visibility = View.VISIBLE
+                    val moved = Math.abs(dx) > 20 || Math.abs(dy) > 20
+
+                    // ★ 롱프레스 안 됐는데 크게 움직이면 취소
+                    if (!longPressReady && moved) {
+                        sv.removeCallbacks(longPressRunnable)
+                        hint.visibility = View.GONE
+                        return@setOnTouchListener true
                     }
-                    if (subtitleDragActive) {
+
+                    // ★ 롱프레스 완료 + 이동 → 실제 드래그
+                    if (longPressReady) {
+                        dragging = true
                         sv.translationX = startTransX + dx
                         sv.translationY = startTransY + dy
                     }
                     true
                 }
                 android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
-                    if (subtitleDragActive) {
+                    sv.removeCallbacks(longPressRunnable)
+                    hint.visibility = View.GONE
+                    if (dragging) {
                         subtitleOffsetX = sv.translationX
                         subtitleOffsetY = sv.translationY
                         pref.edit()
                             .putFloat("offset_x", subtitleOffsetX)
                             .putFloat("offset_y", subtitleOffsetY)
                             .apply()
-                        hint.visibility = View.GONE
                         Toast.makeText(
                             this@PlayerActivity,
                             "자막 위치 저장됨",
                             Toast.LENGTH_SHORT
                         ).show()
                     }
-                    subtitleDragActive = false
+                    dragging = false
+                    longPressReady = false
                     true
                 }
                 else -> false
