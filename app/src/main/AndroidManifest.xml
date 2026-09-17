@@ -72,6 +72,11 @@
             android:label="스마트 플레이리스트" />
 
         <activity
+            android:name=".AudioHomeActivity"
+            android:exported="false"
+            android:label="오디오 홈" />
+
+        <activity
             android:name=".AudioPlayerActivity"
             android:exported="false"
             android:label="오디오 모드"
