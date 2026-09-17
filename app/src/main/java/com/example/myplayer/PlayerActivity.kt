@@ -998,11 +998,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         // ★ AI 번역 옵션 (영어 자막 있으면)
-        val englishSub = subtitleTracks.firstOrNull { it.languageCode.startsWith("en") }
-        if (englishSub != null) {
-            labels.add("🤖 [AI 번역] English → 한국어")
-            callbacks.add { translateAndApply(englishSub) }
-        }
+
         AlertDialog.Builder(this).setTitle("자막 선택")
             .setItems(labels.toTypedArray()) { _, i -> callbacks[i].invoke() }
             .show()
