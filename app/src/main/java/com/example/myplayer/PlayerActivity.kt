@@ -990,6 +990,19 @@ class PlayerActivity : AppCompatActivity() {
         }
         labels.add("⚙️ 자막 스타일")
         callbacks.add { showSubtitleStyleDialog() }
+
+        val englishSub = subtitleTracks.firstOrNull { it.languageCode.startsWith("en") }
+        if (englishSub != null) {
+            labels.add("🤖 [AI 번역] English → 한국어")
+            callbacks.add { translateAndApply(englishSub) }
+        }
+
+        // ★ AI 번역 옵션 (영어 자막 있으면)
+        val englishSub = subtitleTracks.firstOrNull { it.languageCode.startsWith("en") }
+        if (englishSub != null) {
+            labels.add("🤖 [AI 번역] English → 한국어")
+            callbacks.add { translateAndApply(englishSub) }
+        }
         AlertDialog.Builder(this).setTitle("자막 선택")
             .setItems(labels.toTypedArray()) { _, i -> callbacks[i].invoke() }
             .show()
@@ -1569,6 +1582,81 @@ class PlayerActivity : AppCompatActivity() {
         playerView.subtitleView?.translationX = 0f
         playerView.subtitleView?.translationY = 0f
         Toast.makeText(this, "자막 위치 초기화", Toast.LENGTH_SHORT).show()
+    }
+
+
+    // ========== 🤖 AI 번역 자막 ==========
+    private var translating = false
+
+    private fun translateAndApply(englishSub: SubtitleTrack) {
+        if (translating) {
+            Toast.makeText(this, "이미 번역 중입니다", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (currentVideoId.isBlank()) return
+
+        translating = true
+        val progressDialog = android.app.ProgressDialog(this).apply {
+            setTitle("🤖 AI 번역 중")
+            setMessage("영어 자막을 한국어로 번역하고 있습니다...")
+            setCancelable(false)
+            show()
+        }
+
+        lifecycleScope.launch {
+            try {
+                val vttFile = SubtitleTranslator.translateToVtt(
+                    applicationContext,
+                    currentVideoId,
+                    englishSub.url,
+                    "ko"
+                )
+                progressDialog.dismiss()
+                translating = false
+
+                if (vttFile == null || !vttFile.exists()) {
+                    Toast.makeText(
+                        this@PlayerActivity,
+                        "번역 실패. 잠시 후 다시 시도하세요",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@launch
+                }
+
+                // 로컬 VTT 재생
+                val pos = mediaController?.currentPosition ?: 0L
+                val builder = MediaItem.Builder().setUri(currentStreamUrl ?: return@launch)
+                builder.setSubtitleConfigurations(
+                    listOf(
+                        MediaItem.SubtitleConfiguration.Builder(
+                            android.net.Uri.fromFile(vttFile)
+                        )
+                            .setMimeType(MimeTypes.TEXT_VTT)
+                            .setLanguage("ko")
+                            .setLabel("AI 번역 (한국어)")
+                            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                            .build()
+                    )
+                )
+                mediaController?.setMediaItem(builder.build(), pos)
+                mediaController?.prepare()
+                mediaController?.playWhenReady = true
+
+                Toast.makeText(
+                    this@PlayerActivity,
+                    "✅ AI 번역 자막 적용",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (e: Exception) {
+                progressDialog.dismiss()
+                translating = false
+                Toast.makeText(
+                    this@PlayerActivity,
+                    "오류: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
     private fun toggleFullscreen() {
