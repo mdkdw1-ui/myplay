@@ -885,11 +885,28 @@ class PlayerActivity : AppCompatActivity() {
                 )
             )
         }
-        mediaController?.setMediaItem(builder.build(), startPosMs)
-        mediaController?.prepare()
-        mediaController?.playWhenReady = true
-        mediaController?.setPlaybackSpeed(currentSpeed)
-        playerView.post { applySubtitleStyle() }
+        // ★ 재생 중이면 setMediaItem 대신 자막만 다시 적용
+        // (Media3는 setMediaItem 시 버퍼 리셋되므로)
+        val mc = mediaController
+        if (mc != null && mc.isPlaying && startPosMs > 0) {
+            // 재생 중 자막만 변경 시도
+            try {
+                mc.setMediaItem(builder.build(), startPosMs)
+                mc.prepare()
+                mc.playWhenReady = true
+            } catch (e: Exception) {
+                // 실패 시 처음부터
+                mc.setMediaItem(builder.build(), 0L)
+                mc.prepare()
+                mc.playWhenReady = true
+            }
+        } else {
+            mc?.setMediaItem(builder.build(), startPosMs)
+            mc?.prepare()
+            mc?.playWhenReady = true
+        }
+        mc?.setPlaybackSpeed(currentSpeed)
+        // applySubtitleStyle 재호출 제거 (매번 실행 X)
     }
 
     private fun ensureVttFormat(url: String): String =
@@ -1097,13 +1114,14 @@ class PlayerActivity : AppCompatActivity() {
         sbCheckJob = lifecycleScope.launch {
             while (isActive) {
                 checkAndSkip()
-                delay(500)
+                delay(1000)
             }
         }
     }
 
     private fun checkAndSkip() {
         if (!sbEnabled) return
+        if (sponsorSegments.isEmpty()) return  // ★ 스킵할 게 없으면 스킵
         val pos = mediaController?.currentPosition ?: return
         for (seg in sponsorSegments) {
             if (pos >= seg.startMs && pos < seg.endMs - 200) {
@@ -1446,8 +1464,11 @@ class PlayerActivity : AppCompatActivity() {
                     if (mc.currentPosition >= abEnd) {
                         mc.seekTo(abStart)
                     }
+                } else {
+                    // ★ A-B 없으면 job 종료
+                    return@launch
                 }
-                delay(200)
+                delay(500)
             }
         }
     }
