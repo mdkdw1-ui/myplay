@@ -19,17 +19,12 @@ class SearchAdapter(
 
     private val items = mutableListOf<VideoItem>()
 
-    // ★ 스크롤 중인지 추적
+    // ★ 스크롤 상태 추적
     private var isScrolling = false
     private val scrollListener = object : RecyclerView.OnScrollListener() {
         override fun onScrollStateChanged(rv: RecyclerView, newState: Int) {
             isScrolling = newState != RecyclerView.SCROLL_STATE_IDLE
         }
-    }
-
-    init {
-        // 어댑터 attach 시 리스너 등록
-        registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {})
     }
 
     fun submit(list: List<VideoItem>) {
@@ -78,11 +73,14 @@ class SearchAdapter(
         }
 
         Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
+
+        // 클릭 리스너는 onTouch에서 직접 처리
         holder.itemView.setOnClickListener(null)
 
         val host = holder.itemView as ViewGroup
         var downX = 0f
         var downY = 0f
+        var downTime = 0L
         var previewStarted = false
         var menuTriggered = false
         var canceled = false
@@ -106,31 +104,44 @@ class SearchAdapter(
                 MotionEvent.ACTION_DOWN -> {
                     downX = event.rawX
                     downY = event.rawY
+                    downTime = System.currentTimeMillis()
                     previewStarted = false
                     menuTriggered = false
-                    canceled = false
+                    canceled = isScrolling  // ★ 이미 스크롤 중이면 즉시 취소
                     host.postDelayed(previewRunnable, 500)
                     host.postDelayed(menuRunnable, 1500)
                     false
                 }
+
                 MotionEvent.ACTION_MOVE -> {
-                    // ★ 좌우/상하 통합 10px 임계값
-                    if (abs(event.rawX - downX) > 10 || abs(event.rawY - downY) > 10) {
+                    // ★ 어떤 방향이든 20px 이상 이동 → 취소
+                    val dx = abs(event.rawX - downX)
+                    val dy = abs(event.rawY - downY)
+                    if (dx > 20 || dy > 20) {
+                        if (!canceled) {
+                            canceled = true
+                            host.removeCallbacks(previewRunnable)
+                            host.removeCallbacks(menuRunnable)
+                            PreviewPlayer.stop()
+                        }
+                    }
+                    // ★ MOVE가 여러 번 오면 스크롤 확정
+                    if (dx > 5 || dy > 5) {
                         canceled = true
-                        host.removeCallbacks(previewRunnable)
-                        host.removeCallbacks(menuRunnable)
-                        PreviewPlayer.stop()
-                        previewStarted = false
-                        menuTriggered = false
                     }
                     false
                 }
+
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     host.removeCallbacks(previewRunnable)
                     host.removeCallbacks(menuRunnable)
+
+                    val elapsed = System.currentTimeMillis() - downTime
                     val wasPreview = previewStarted
                     val wasMenu = menuTriggered
                     val wasCanceled = canceled
+                    val wasScrolling = isScrolling
+
                     previewStarted = false
                     menuTriggered = false
                     canceled = false
@@ -141,18 +152,23 @@ class SearchAdapter(
                             host.postDelayed({ PreviewPlayer.stop() }, 6000)
                             true
                         }
-                        wasCanceled -> {
+                        wasCanceled || wasScrolling -> {
                             // 스크롤이었음 → 아무 동작 X
                             true
                         }
+                        // ★ 짧은 탭도 최소 150ms 이상 유지된 경우만 재생
+                        elapsed < 150 -> {
+                            // 관성 스크롤의 짧은 DOWN-UP → 무시
+                            true
+                        }
                         else -> {
-                            // 짧은 탭만 재생
                             PreviewPlayer.stop()
                             onClick(item)
                             true
                         }
                     }
                 }
+
                 else -> false
             }
         }
