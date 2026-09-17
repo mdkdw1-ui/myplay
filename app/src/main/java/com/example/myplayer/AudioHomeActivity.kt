@@ -208,26 +208,27 @@ class AudioHomeActivity : AppCompatActivity() {
     }
 
     /** ★ 플레이리스트 재생 — 큐 채우기 */
-    private fun playPlaylist(pl: AudioPlaylist, firstVideo: VideoItem?) {
+    private fun playPlaylist(pl: AudioPlaylist, firstVideo: HomeVideo?) {
         if (pl.videos.isEmpty()) return
 
-        val startVideo = firstVideo ?: pl.videos.first()
-        val startIdx = pl.videos.indexOfFirst { it.videoId == startVideo.videoId }
-            .coerceAtLeast(0)
+        val startId = firstVideo?.videoId ?: pl.videos[0].videoId
+        val startTitle = firstVideo?.title ?: pl.videos[0].title
+        val startChannel = firstVideo?.channel ?: pl.videos[0].channel
+        val startThumb = firstVideo?.thumbnail ?: pl.videos[0].thumbnail
 
-        // 큐 초기화 + 이후 곡 큐에 추가
+        val startIdx = pl.videos.indexOfFirst { it.videoId == startId }.coerceAtLeast(0)
+
         QueueManager.clear(this)
         for (i in (startIdx + 1) until pl.videos.size) {
             val v = pl.videos[i]
             QueueManager.add(this, HomeVideo(v.videoId, v.title, v.channel, v.thumbnail))
         }
 
-        // 오디오 모드로 재생
         startActivity(Intent(this, AudioPlayerActivity::class.java).apply {
-            putExtra("VIDEO_ID", startVideo.videoId)
-            putExtra("VIDEO_TITLE", startVideo.title)
-            putExtra("VIDEO_CHANNEL", startVideo.channel)
-            putExtra("VIDEO_THUMB", startVideo.thumbnail)
+            putExtra("VIDEO_ID", startId)
+            putExtra("VIDEO_TITLE", startTitle)
+            putExtra("VIDEO_CHANNEL", startChannel)
+            putExtra("VIDEO_THUMB", startThumb)
         })
     }
 }
