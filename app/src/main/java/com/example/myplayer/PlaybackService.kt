@@ -22,9 +22,14 @@ class PlaybackService : MediaSessionService() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
 
+        val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setBufferDurationsMs(50000, 120000, 5000, 10000)
+            .build()
+
         val player = ExoPlayer.Builder(this)
-            .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ false)
-            .setHandleAudioBecomingNoisy(false)  // 이어폰 뽑혀도 멈추지 않음 (선택)
+            .setAudioAttributes(audioAttributes, false)
+            .setHandleAudioBecomingNoisy(false)
+            .setLoadControl(loadControl)
             .build()
 
         val sessionActivity = PendingIntent.getActivity(

@@ -11,12 +11,26 @@ import com.bumptech.glide.Glide
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 class SearchAdapter(
     private val onClick: (VideoItem) -> Unit
 ) : RecyclerView.Adapter<SearchAdapter.VH>() {
 
     private val items = mutableListOf<VideoItem>()
+
+    // ★ 스크롤 중인지 추적
+    private var isScrolling = false
+    private val scrollListener = object : RecyclerView.OnScrollListener() {
+        override fun onScrollStateChanged(rv: RecyclerView, newState: Int) {
+            isScrolling = newState != RecyclerView.SCROLL_STATE_IDLE
+        }
+    }
+
+    init {
+        // 어댑터 attach 시 리스너 등록
+        registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {})
+    }
 
     fun submit(list: List<VideoItem>) {
         items.clear()
@@ -29,6 +43,16 @@ class SearchAdapter(
         val start = items.size
         items.addAll(list)
         notifyItemRangeInserted(start, list.size)
+    }
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        super.onAttachedToRecyclerView(recyclerView)
+        recyclerView.addOnScrollListener(scrollListener)
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        super.onDetachedFromRecyclerView(recyclerView)
+        recyclerView.removeOnScrollListener(scrollListener)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -46,7 +70,6 @@ class SearchAdapter(
         val metaParts = mutableListOf<String>()
         if (item.viewCount.isNotBlank()) metaParts.add(item.viewCount)
         if (item.uploadDate.isNotBlank()) metaParts.add(item.uploadDate)
-
         if (metaParts.isNotEmpty()) {
             holder.meta.text = metaParts.joinToString(" · ")
             holder.meta.visibility = View.VISIBLE
@@ -55,8 +78,6 @@ class SearchAdapter(
         }
 
         Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
-
-        // onClick은 onTouch에서 직접 처리 (중복 방지)
         holder.itemView.setOnClickListener(null)
 
         val host = holder.itemView as ViewGroup
@@ -64,18 +85,20 @@ class SearchAdapter(
         var downY = 0f
         var previewStarted = false
         var menuTriggered = false
+        var canceled = false
 
-        // 0.5초 후 미리보기 시작
         val previewRunnable = Runnable {
-            previewStarted = true
-            PreviewPlayer.start(host.context, host, item.videoId, item.thumbnail)
+            if (!isScrolling && !canceled) {
+                previewStarted = true
+                PreviewPlayer.start(host.context, host, item.videoId, item.thumbnail)
+            }
         }
-
-        // 1.5초 후 옵션 메뉴
         val menuRunnable = Runnable {
-            menuTriggered = true
-            PreviewPlayer.stop()
-            showOptions(host, item)
+            if (!isScrolling && !canceled && previewStarted) {
+                menuTriggered = true
+                PreviewPlayer.stop()
+                showOptions(host, item)
+            }
         }
 
         host.setOnTouchListener { _, event ->
@@ -85,13 +108,15 @@ class SearchAdapter(
                     downY = event.rawY
                     previewStarted = false
                     menuTriggered = false
+                    canceled = false
                     host.postDelayed(previewRunnable, 500)
                     host.postDelayed(menuRunnable, 1500)
                     false
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (Math.abs(event.rawX - downX) > 20 ||
-                        Math.abs(event.rawY - downY) > 20) {
+                    // ★ 좌우/상하 통합 10px 임계값
+                    if (abs(event.rawX - downX) > 10 || abs(event.rawY - downY) > 10) {
+                        canceled = true
                         host.removeCallbacks(previewRunnable)
                         host.removeCallbacks(menuRunnable)
                         PreviewPlayer.stop()
@@ -105,21 +130,23 @@ class SearchAdapter(
                     host.removeCallbacks(menuRunnable)
                     val wasPreview = previewStarted
                     val wasMenu = menuTriggered
+                    val wasCanceled = canceled
                     previewStarted = false
                     menuTriggered = false
+                    canceled = false
 
                     when {
-                        wasMenu -> {
-                            // 메뉴는 이미 떴음
-                            true
-                        }
+                        wasMenu -> true
                         wasPreview -> {
-                            // ★ 미리보기 유지 (손 떼도) → 3초 뒤 자동 종료
                             host.postDelayed({ PreviewPlayer.stop() }, 6000)
                             true
                         }
+                        wasCanceled -> {
+                            // 스크롤이었음 → 아무 동작 X
+                            true
+                        }
                         else -> {
-                            // 일반 탭 (0.5초 이하) → 재생
+                            // 짧은 탭만 재생
                             PreviewPlayer.stop()
                             onClick(item)
                             true
@@ -143,8 +170,7 @@ class SearchAdapter(
                             ctx, HomeVideo(item.videoId, item.title, item.channel, item.thumbnail)
                         )
                         android.widget.Toast.makeText(
-                            ctx,
-                            if (added) "대기열 추가" else "이미 있음",
+                            ctx, if (added) "대기열 추가" else "이미 있음",
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                     }
