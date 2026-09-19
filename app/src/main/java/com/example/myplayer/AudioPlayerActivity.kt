@@ -31,6 +31,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var mediaController: MediaController? = null
     private var updateJob: Job? = null
     private var isDragging = false
+    private var pulseAnimator: android.animation.ValueAnimator? = null
 
     // ★ 오디오 모드 상태
     private var currentVideoId: String = ""
@@ -38,6 +39,18 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var currentChannel: String = ""
     private var currentThumb: String = ""
     private var currentArtist: String = ""  // ★ 실제 가수명
+    private var sameArtistMode: Boolean = false
+    // ★ 히스토리 (최근 50곡)
+    private val audioHistory = mutableListOf<AudioHistoryItem>()
+    private var historyIndex = -1
+    private var isPlayingFromHistory = false
+
+    data class AudioHistoryItem(
+        val videoId: String,
+        val title: String,
+        val channel: String,
+        val thumbnail: String
+    )
     private var autoPlayJob: Job? = null
     private var pref: android.content.SharedPreferences? = null
 
@@ -82,6 +95,20 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
 
         updateUI()
+
+        // ★ 가수 토글 초기화
+        sameArtistMode = pref?.getBoolean("same_artist_mode", false) ?: false
+        val swArtist = findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.swSameArtist)
+        swArtist.isChecked = sameArtistMode
+        swArtist.setOnCheckedChangeListener { _, checked ->
+            sameArtistMode = checked
+            pref?.edit()?.putBoolean("same_artist_mode", checked)?.apply()
+            Toast.makeText(
+                this,
+                if (checked) "🎤 같은 가수만 재생" else "🎵 연관곡 재생",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
 
         val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
@@ -140,6 +167,9 @@ class AudioPlayerActivity : AppCompatActivity() {
             mediaController?.setMediaItem(MediaItem.fromUri(url))
             mediaController?.prepare()
             mediaController?.playWhenReady = true
+
+            // ★ 히스토리 추가
+            addToHistory(videoId, currentTitle, currentChannel, currentThumb)
         }
     }
 
@@ -150,6 +180,11 @@ class AudioPlayerActivity : AppCompatActivity() {
                 if (playbackState == Player.STATE_ENDED) {
                     scheduleNextTrack()
                 }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                // ★ 재생 중일 때만 애니메이션
+                if (isPlaying) startPulse() else stopPulse()
             }
         })
     }
@@ -164,6 +199,36 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     /** ★ 다음 곡: 큐 우선 → 없으면 YouTubeRadio */
+
+    // ========== ★ 히스토리 ==========
+    private fun addToHistory(videoId: String, title: String, channel: String, thumb: String) {
+        // 이미 있으면 제거 후 재삽입
+        audioHistory.removeAll { it.videoId == videoId }
+        audioHistory.add(AudioHistoryItem(videoId, title, channel, thumb))
+        // 최대 50
+        while (audioHistory.size > 50) audioHistory.removeAt(0)
+        historyIndex = audioHistory.size - 1
+    }
+
+    private fun playPrevious() {
+        if (historyIndex > 0) {
+            historyIndex--
+            val prev = audioHistory[historyIndex]
+            isPlayingFromHistory = true
+            currentVideoId = prev.videoId
+            currentTitle = prev.title
+            currentChannel = prev.channel
+            currentThumb = prev.thumbnail
+            updateUI()
+            loadAudio(prev.videoId, isInitial = false)
+        } else {
+            // 히스토리 처음 → 현재 곡 처음부터
+            mediaController?.seekTo(0)
+            Toast.makeText(this, "처음 곡입니다", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+
     private fun playNextRelated() {
         // 1. 큐에 다음 곡 있으면 재생
         val queue = QueueManager.get(this)
@@ -182,18 +247,25 @@ class AudioPlayerActivity : AppCompatActivity() {
         // 큐가 비었으면 큐 자체 초기화 (오염 방지)
         QueueManager.clear(this)
 
-        // 2. 큐 비었으면 YouTubeRadio
+        // 2. 큐 비었음 → 토글에 따라 소스 선택
         lifecycleScope.launch {
             val disliked = pref?.getStringSet("disliked_ids", emptySet()) ?: emptySet()
 
             Toast.makeText(
                 this@AudioPlayerActivity,
-                "다음 곡 검색 중...",
+                if (sameArtistMode) "🎤 같은 가수 곡 검색 중..." else "🎵 연관곡 검색 중...",
                 Toast.LENGTH_SHORT
             ).show()
 
-            val related = YouTubeRadio.fetchRelated(currentVideoId)
-                .filter { it.videoId !in disliked }
+            // ★ 토글: 같은 가수 vs 연관곡
+            val related = if (sameArtistMode) {
+                val artist = currentArtist.ifBlank { currentChannel }
+                YouTubeArtist.fetchSongs(artist, currentVideoId)
+                    .filter { it.videoId !in disliked }
+            } else {
+                YouTubeRadio.fetchRelated(currentVideoId)
+                    .filter { it.videoId !in disliked }
+            }
 
             if (related.isEmpty()) {
                 Toast.makeText(
@@ -247,12 +319,10 @@ class AudioPlayerActivity : AppCompatActivity() {
             mc.seekTo(if (dur > 0) newPos.coerceAtMost(dur) else newPos)
         }
 
-        // ★ 이전/다음 곡 버튼
+        // ★ 이전/다음 곡 버튼 — 히스토리 기반
         findViewById<ImageButton>(R.id.btnPrev).setOnClickListener {
             autoPlayJob?.cancel()
-            Toast.makeText(this, "이전 곡", Toast.LENGTH_SHORT).show()
-            // 히스토리 없으니 처음부터 재생
-            mc.seekTo(0)
+            playPrevious()
         }
         findViewById<ImageButton>(R.id.btnNext).setOnClickListener {
             autoPlayJob?.cancel()
@@ -324,6 +394,34 @@ class AudioPlayerActivity : AppCompatActivity() {
             .show()
     }
 
+
+    // ========== ★ 배경 애니메이션 ==========
+    private fun startPulse() {
+        if (pulseAnimator != null) return
+        pulseAnimator = android.animation.ValueAnimator.ofFloat(1f, 1.08f).apply {
+            duration = 2000
+            repeatMode = android.animation.ValueAnimator.REVERSE
+            repeatCount = android.animation.ValueAnimator.INFINITE
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            addUpdateListener { anim ->
+                val v = anim.animatedValue as Float
+                ivArt.scaleX = v
+                ivArt.scaleY = v
+                ivBackground.alpha = 0.15f + (v - 1f) * 1.5f
+            }
+            start()
+        }
+    }
+
+    private fun stopPulse() {
+        pulseAnimator?.cancel()
+        pulseAnimator = null
+        ivArt.scaleX = 1f
+        ivArt.scaleY = 1f
+        ivBackground.alpha = 1f
+    }
+
+
     private fun startUpdateLoop() {
         updateJob?.cancel()
         updateJob = lifecycleScope.launch {
@@ -358,6 +456,7 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopPulse()
         updateJob?.cancel()
         autoPlayJob?.cancel()
         MediaController.releaseFuture(controllerFuture)
