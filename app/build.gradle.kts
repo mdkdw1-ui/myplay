@@ -20,6 +20,12 @@ android {
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
         val groqKey = System.getenv("GROQ_API_KEY") ?: ""
         buildConfigField("String", "GROQ_API_KEY", "\"$groqKey\"")
+        val textraId = System.getenv("TEXTRA_CLIENT_ID") ?: ""
+        buildConfigField("String", "TEXTRA_CLIENT_ID", "\"$textraId\"")
+        val textraSecret = System.getenv("TEXTRA_CLIENT_SECRET") ?: ""
+        buildConfigField("String", "TEXTRA_CLIENT_SECRET", "\"$textraSecret\"")
+        val textraName = System.getenv("TEXTRA_NAME") ?: ""
+        buildConfigField("String", "TEXTRA_NAME", "\"$textraName\"")
     }
 
     buildTypes {
