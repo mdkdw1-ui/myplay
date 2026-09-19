@@ -2,11 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
 
     <application
         android:allowBackup="true"
@@ -16,71 +17,26 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MyPlayer">
 
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
+        <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".SearchActivity"
-            android:exported="false"
-            android:label="검색" />
-
-        <activity
-            android:name=".HistoryActivity"
-            android:exported="false"
-            android:label="시청 기록" />
-
-        <activity
-            android:name=".RelatedActivity"
-            android:exported="false"
-            android:label="관련 영상" />
-
-        <activity
-            android:name=".ChannelActivity"
-            android:exported="false"
-            android:label="채널" />
-
-        <activity
-            android:name=".StatsActivity"
-            android:exported="false"
-            android:label="통계" />
-
-        <activity
-            android:name=".DownloadsActivity"
-            android:exported="false"
-            android:label="다운로드" />
-
-        <activity
-            android:name=".QueueActivity"
-            android:exported="false"
-            android:label="대기열" />
-
-        <activity
-            android:name=".TranscriptActivity"
-            android:exported="false"
-            android:label="자막"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
-            android:name=".SmartPlaylistActivity"
-            android:exported="false"
-            android:label="스마트 플레이리스트" />
-
-        <activity
-            android:name=".AudioHomeActivity"
-            android:exported="false"
-            android:label="오디오 홈" />
-
-        <activity
-            android:name=".AudioPlayerActivity"
-            android:exported="false"
-            android:label="오디오 모드"
-            android:theme="@style/Theme.MyPlayer" />
+        <activity android:name=".SearchActivity" android:exported="false" android:label="검색" />
+        <activity android:name=".HistoryActivity" android:exported="false" android:label="시청 기록" />
+        <activity android:name=".RelatedActivity" android:exported="false" android:label="관련 영상" />
+        <activity android:name=".ChannelActivity" android:exported="false" android:label="채널" />
+        <activity android:name=".StatsActivity" android:exported="false" android:label="통계" />
+        <activity android:name=".DownloadsActivity" android:exported="false" android:label="다운로드" />
+        <activity android:name=".SettingsActivity" android:exported="false" android:label="설정" />
+        <activity android:name=".PlaylistActivity" android:exported="false" android:label="재생목록" />
+        <activity android:name=".QueueActivity" android:exported="false" android:label="대기열" />
+        <activity android:name=".TranscriptActivity" android:exported="false" android:label="자막" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".SmartPlaylistActivity" android:exported="false" android:label="스마트 플레이리스트" />
+        <activity android:name=".AudioHomeActivity" android:exported="false" android:label="오디오 홈" />
+        <activity android:name=".AudioPlayerActivity" android:exported="false" android:label="오디오 모드" android:theme="@style/Theme.MyPlayer" />
+        <activity android:name=".LyricsActivity" android:exported="false" android:label="가사" />
 
         <activity
             android:name=".PlayerActivity"

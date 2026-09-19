@@ -15,8 +15,6 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        // ★ 핵심: handleAudioFocus = false
-        // 다른 앱(카톡 등)이 오디오 포커스를 요청해도 덕킹/일시정지하지 않음
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
@@ -31,6 +29,8 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(false)
             .setLoadControl(loadControl)
             .build()
+
+        exoPlayer = player
 
         val sessionActivity = PendingIntent.getActivity(
             this,
@@ -54,6 +54,13 @@ class PlaybackService : MediaSessionService() {
             release()
         }
         mediaSession = null
+        exoPlayer = null
         super.onDestroy()
+    }
+
+    companion object {
+        /** Equalizer 등에서 접근용 */
+        var exoPlayer: ExoPlayer? = null
+            private set
     }
 }
