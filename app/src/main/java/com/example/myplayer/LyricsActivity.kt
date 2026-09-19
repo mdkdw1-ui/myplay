@@ -2,9 +2,11 @@ package com.example.myplayer
 
 import android.content.ComponentName
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.session.MediaController
@@ -36,6 +38,8 @@ class LyricsActivity : AppCompatActivity() {
         val channel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
         val subtitleUrl = intent.getStringExtra("SUBTITLE_URL") ?: ""
 
+        Log.d("LyricsActivity", "videoId=$videoId, subUrl=${subtitleUrl.take(80)}")
+
         findViewById<TextView>(R.id.tvTitle).text = title
         findViewById<TextView>(R.id.tvChannel).text = channel
 
@@ -58,6 +62,8 @@ class LyricsActivity : AppCompatActivity() {
 
         if (subtitleUrl.isBlank()) {
             tvEmpty.visibility = View.VISIBLE
+            tvEmpty.text = "🎤\n\n이 곡은 자막/가사가 없습니다"
+            progress.visibility = View.GONE
             return
         }
 
@@ -65,10 +71,31 @@ class LyricsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             lyricLines = LyricsParser.fetchLyrics(subtitleUrl)
             progress.visibility = View.GONE
+
+            Log.d("LyricsActivity", "loaded ${lyricLines.size} lines")
+
             if (lyricLines.isEmpty()) {
                 tvEmpty.visibility = View.VISIBLE
+                tvEmpty.text = "🎤\n\n가사를 불러올 수 없습니다\n(자막 URL: ${subtitleUrl.take(40)}...)"
+                Toast.makeText(
+                    this@LyricsActivity,
+                    "가사 0줄 (자막 서버 응답 없음)",
+                    Toast.LENGTH_LONG
+                ).show()
             } else {
+                tvEmpty.visibility = View.GONE
+                recycler.visibility = View.VISIBLE
                 adapter.submit(lyricLines)
+
+                // 초기 스크롤
+                val pos = mediaController?.currentPosition ?: 0L
+                val idx = lyricLines.indexOfLast { it.startMs <= pos }
+                if (idx >= 0) {
+                    recycler.post {
+                        (recycler.layoutManager as? LinearLayoutManager)
+                            ?.scrollToPositionWithOffset(idx, recycler.height / 3)
+                    }
+                }
             }
         }
     }
@@ -84,7 +111,6 @@ class LyricsActivity : AppCompatActivity() {
                     if (idx >= 0 && idx != lastIndex) {
                         lastIndex = idx
                         adapter.setCurrentIndex(idx)
-                        // 현재 라인으로 스크롤
                         (recycler.layoutManager as? LinearLayoutManager)
                             ?.scrollToPositionWithOffset(idx, recycler.height / 3)
                     }

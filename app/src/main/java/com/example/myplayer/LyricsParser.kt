@@ -12,16 +12,37 @@ object LyricsParser {
     private const val TAG = "LyricsParser"
 
     suspend fun fetchLyrics(vttUrl: String): List<LyricLine> {
-        if (vttUrl.isBlank()) return emptyList()
+        if (vttUrl.isBlank()) {
+            Log.d(TAG, "empty url")
+            return emptyList()
+        }
         return try {
-            val url = URL(ensureVtt(vttUrl))
+            val fixed = ensureVtt(vttUrl)
+            Log.d(TAG, "fetch: ${fixed.take(120)}")
+
+            val url = URL(fixed)
             val conn = url.openConnection() as HttpURLConnection
             conn.connectTimeout = 10000
             conn.readTimeout = 10000
             conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-            if (conn.responseCode !in 200..299) return emptyList()
+            conn.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9")
+            conn.instanceFollowRedirects = true
+
+            val code = conn.responseCode
+            Log.d(TAG, "HTTP $code, len=${conn.contentLengthLong}")
+
+            if (code !in 200..299) {
+                val err = conn.errorStream?.bufferedReader()?.use { it.readText() }
+                Log.e(TAG, "err body: ${err?.take(200)}")
+                return emptyList()
+            }
+
             val raw = conn.inputStream.bufferedReader().use(BufferedReader::readText)
-            parse(raw)
+            Log.d(TAG, "raw len=${raw.length}, head=${raw.take(100)}")
+
+            val parsed = parse(raw)
+            Log.d(TAG, "parsed ${parsed.size} lines")
+            parsed
         } catch (e: Exception) {
             Log.e(TAG, "err: ${e.message}", e)
             emptyList()
@@ -33,6 +54,11 @@ object LyricsParser {
         else if (url.contains("?")) "$url&fmt=vtt" else "$url?fmt=vtt"
 
     private fun parse(raw: String): List<LyricLine> {
+        // JSON 응답 (YouTube XML→JSON 형식) 감지
+        if (raw.trimStart().startsWith("{")) {
+            return parseJsonTimedText(raw)
+        }
+
         val out = mutableListOf<LyricLine>()
         val lines = raw.split("\n")
         var i = 0
@@ -58,6 +84,32 @@ object LyricsParser {
             } else i++
         }
         return out.distinctBy { it.startMs }.sortedBy { it.startMs }
+    }
+
+    /** JSON 형식 timedtext 파싱 */
+    private fun parseJsonTimedText(raw: String): List<LyricLine> {
+        return try {
+            val json = org.json.JSONObject(raw)
+            val events = json.optJSONArray("events") ?: return emptyList()
+            val out = mutableListOf<LyricLine>()
+            for (i in 0 until events.length()) {
+                val e = events.getJSONObject(i)
+                val startMs = e.optLong("tStartMs", -1L)
+                val segs = e.optJSONArray("segs") ?: continue
+                val sb = StringBuilder()
+                for (j in 0 until segs.length()) {
+                    sb.append(segs.getJSONObject(j).optString("utf8"))
+                }
+                val text = sb.toString().trim()
+                if (text.isNotBlank() && startMs >= 0) {
+                    out.add(LyricLine(startMs, text))
+                }
+            }
+            out
+        } catch (e: Exception) {
+            Log.e(TAG, "json parse err: ${e.message}")
+            emptyList()
+        }
     }
 
     private fun parseTime(ts: String): Long {
