@@ -1538,11 +1538,23 @@ class PlayerActivity : AppCompatActivity() {
         var startTransY = 0f
         var dragging = false
         var longPressReady = false
-        val hint = findViewById<View>(R.id.tvSubtitleHint)
+
+        // ★ 힌트 박스 (드래그 가능 표시)
+        val dragHint = findViewById<View>(R.id.dragHintBox)
 
         val longPressRunnable = Runnable {
             longPressReady = true
-            hint.visibility = View.VISIBLE
+            dragHint.visibility = View.VISIBLE
+            // 자막 뷰 강조 (테두리)
+            sv.background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0x33000000)
+                setStroke(
+                    (3 * resources.displayMetrics.density).toInt(),
+                    0xFFFF2D55.toInt()
+                )
+                cornerRadius = 8 * resources.displayMetrics.density
+            }
+            sv.setPadding(16, 8, 16, 8)
         }
 
         sv.isClickable = true
@@ -1556,23 +1568,22 @@ class PlayerActivity : AppCompatActivity() {
                     startTransY = sv.translationY
                     dragging = false
                     longPressReady = false
-                    // ★ 1초 롱프레스 후에만 드래그 준비
-                    sv.postDelayed(longPressRunnable, 1000)
+                    // ★ 2초로 늘림
+                    sv.postDelayed(longPressRunnable, 2000)
                     true
                 }
                 android.view.MotionEvent.ACTION_MOVE -> {
                     val dx = event.rawX - downX
                     val dy = event.rawY - downY
-                    val moved = Math.abs(dx) > 20 || Math.abs(dy) > 20
+                    val moved = Math.abs(dx) > 15 || Math.abs(dy) > 15
 
-                    // ★ 롱프레스 안 됐는데 크게 움직이면 취소
                     if (!longPressReady && moved) {
                         sv.removeCallbacks(longPressRunnable)
-                        hint.visibility = View.GONE
+                        dragHint.visibility = View.GONE
+                        clearSubtitleBorder(sv)
                         return@setOnTouchListener true
                     }
 
-                    // ★ 롱프레스 완료 + 이동 → 실제 드래그
                     if (longPressReady) {
                         dragging = true
                         sv.translationX = startTransX + dx
@@ -1582,7 +1593,8 @@ class PlayerActivity : AppCompatActivity() {
                 }
                 android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
                     sv.removeCallbacks(longPressRunnable)
-                    hint.visibility = View.GONE
+                    dragHint.visibility = View.GONE
+                    clearSubtitleBorder(sv)
                     if (dragging) {
                         subtitleOffsetX = sv.translationX
                         subtitleOffsetY = sv.translationY
@@ -1603,6 +1615,11 @@ class PlayerActivity : AppCompatActivity() {
                 else -> false
             }
         }
+    }
+
+    private fun clearSubtitleBorder(sv: View) {
+        sv.background = null
+        sv.setPadding(0, 0, 0, 0)
     }
 
 
@@ -1690,6 +1707,18 @@ class PlayerActivity : AppCompatActivity() {
                 ).show()
             }
         }
+    }
+
+
+    private fun toggleTexTra() {
+        val appPref = getSharedPreferences("app_prefs", MODE_PRIVATE)
+        val current = appPref.getBoolean("use_textra", false)
+        appPref.edit().putBoolean("use_textra", !current).apply()
+        Toast.makeText(
+            this,
+            if (!current) "🇯🇵 TexTra ON (느림·고품질)\n일본어 → 한국어에만 적용" else "Groq (빠름)",
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun toggleFullscreen() {
