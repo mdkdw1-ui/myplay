@@ -97,6 +97,16 @@ class AudioPlayerActivity : AppCompatActivity() {
         }, MoreExecutors.directExecutor())
     }
 
+    private fun extractArtistAsync() {
+        lifecycleScope.launch {
+            try {
+                currentArtist = ArtistExtractor.extractArtist(
+                    currentVideoId, currentTitle, currentChannel
+                )
+            } catch (e: Exception) { }
+        }
+    }
+
     private fun updateUI() {
         tvTitle.text = currentTitle
         tvChannel.text = currentChannel
