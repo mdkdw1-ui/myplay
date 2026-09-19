@@ -114,6 +114,9 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          TEXTRA_CLIENT_ID: ${{ secrets.TEXTRA_CLIENT_ID }}
+          TEXTRA_CLIENT_SECRET: ${{ secrets.TEXTRA_CLIENT_SECRET }}
+          TEXTRA_NAME: ${{ secrets.TEXTRA_NAME }}
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Check APK exists

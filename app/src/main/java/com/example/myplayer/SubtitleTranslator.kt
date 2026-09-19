@@ -84,10 +84,26 @@ object SubtitleTranslator {
         }
     }
 
-    /**
-     * ★ 언어 무관 번역: 원문 언어 감지 없이 Groq이 알아서 번역
-     */
-    private suspend fun translateBatch(texts: List<String>, apiKey: String): List<String> =
+    /** ★ 라우팅: 일본어면 TexTra, 그 외는 Groq */
+    private suspend fun translateBatch(
+        texts: List<String>,
+        sourceLang: String,
+        apiKey: String
+    ): List<String> {
+        // 일본어 → 한국어: TexTra
+        if (sourceLang.startsWith("ja")) {
+            Log.d(TAG, "routing to TexTra (source=$sourceLang)")
+            val r = TexTraTranslator.translateBatch(texts, "generalNT_ja_ko")
+            if (r != null && r.size == texts.size) {
+                return r
+            }
+            Log.w(TAG, "TexTra failed, fallback to Groq")
+        }
+        // 그 외: Groq
+        return translateWithGroq(texts, apiKey)
+    }
+
+    private suspend fun translateWithGroq(texts: List<String>, apiKey: String): List<String> =
         withContext(Dispatchers.IO) {
             if (texts.isEmpty()) return@withContext emptyList()
             try {
@@ -152,18 +168,14 @@ $numbered
                         result.add(line.trim())
                     }
                 }
-
                 while (result.size < texts.size) result.add("")
                 result.take(texts.size)
             } catch (e: Exception) {
-                Log.e(TAG, "translate err: ${e.message}", e)
+                Log.e(TAG, "Groq err: ${e.message}", e)
                 texts
             }
         }
 
-    /**
-     * @param sourceLang 원문 언어 (로그/캐시용, 번역엔 영향 X)
-     */
     suspend fun translateToVtt(
         ctx: Context,
         videoId: String,
@@ -185,17 +197,13 @@ $numbered
             if (cues.isEmpty()) return@withContext null
 
             val apiKey = BuildConfig.GROQ_API_KEY
-            if (apiKey.isBlank()) {
-                Log.e(TAG, "no GROQ_API_KEY")
-                return@withContext null
-            }
 
             val translated = mutableListOf<String>()
-            val batchSize = 30
+            val batchSize = if (sourceLang.startsWith("ja")) 10 else 30  // TexTra는 10개씩 (rate limit)
             for (i in cues.indices step batchSize) {
                 val batch = cues.subList(i, minOf(i + batchSize, cues.size))
                 val texts = batch.map { it.text }
-                val results = translateBatch(texts, apiKey)
+                val results = translateBatch(texts, sourceLang, apiKey)
                 translated.addAll(results)
                 Log.d(TAG, "batch ${i / batchSize + 1} done (${results.size})")
             }
