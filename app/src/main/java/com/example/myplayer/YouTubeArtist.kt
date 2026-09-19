@@ -24,7 +24,7 @@ object YouTubeArtist {
                 val queries = listOf("$artistName 노래", "$artistName 곡", artistName)
                 for (q in queries) {
                     if (out.size >= 30) break
-                    val list = search(q)
+                    val list = search(q, artistName)
                     for (v in list) {
                         if (v.videoId == excludeVideoId) continue
                         if (out.any { it.videoId == v.videoId }) continue
@@ -38,40 +38,49 @@ object YouTubeArtist {
             out.take(30)
         }
 
-    private suspend fun search(query: String): List<VideoItem> = withContext(Dispatchers.IO) {
-        val out = mutableListOf<VideoItem>()
-        try {
-            val body = JSONObject().apply {
-                put("context", JSONObject().apply {
-                    put("client", JSONObject().apply {
-                        put("clientName", "WEB")
-                        put("clientVersion", "2.20240101.00.00")
-                        put("hl", "ko")
-                        put("gl", "KR")
+    private suspend fun search(query: String, artistName: String): List<VideoItem> =
+        withContext(Dispatchers.IO) {
+            val raw = mutableListOf<VideoItem>()
+            try {
+                val body = JSONObject().apply {
+                    put("context", JSONObject().apply {
+                        put("client", JSONObject().apply {
+                            put("clientName", "WEB")
+                            put("clientVersion", "2.20240101.00.00")
+                            put("hl", "ko")
+                            put("gl", "KR")
+                        })
                     })
-                })
-                put("query", query)
-                put("params", "EgIQAQ%3D%3D")
-            }
-            val conn = URL("$ENDPOINT?key=$API_KEY&prettyPrint=false").openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-            conn.setRequestProperty("Origin", "https://www.youtube.com")
-            conn.doOutput = true
-            conn.connectTimeout = 15000
-            conn.readTimeout = 15000
-            conn.outputStream.use { it.write(body.toString().toByteArray()) }
+                    put("query", query)
+                    put("params", "EgIQAQ%3D%3D")
+                }
+                val conn = URL("$ENDPOINT?key=$API_KEY&prettyPrint=false").openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                conn.setRequestProperty("Origin", "https://www.youtube.com")
+                conn.doOutput = true
+                conn.connectTimeout = 15000
+                conn.readTimeout = 15000
+                conn.outputStream.use { it.write(body.toString().toByteArray()) }
 
-            if (conn.responseCode !in 200..299) return@withContext emptyList()
-            val response = conn.inputStream.bufferedReader().use(BufferedReader::readText)
-            val json = JSONObject(response)
-            collect(json, out)
-        } catch (e: Exception) {
-            Log.e(TAG, "search err: ${e.message}", e)
+                if (conn.responseCode !in 200..299) return@withContext emptyList()
+                val response = conn.inputStream.bufferedReader().use(BufferedReader::readText)
+                val json = JSONObject(response)
+                collect(json, raw)
+            } catch (e: Exception) {
+                Log.e(TAG, "search err: ${e.message}", e)
+            }
+
+            // ★ 아티스트 이름 매칭 필터
+            val key = artistName.lowercase().trim()
+            val filtered = raw.filter { v ->
+                v.channel.lowercase().contains(key) ||
+                v.title.lowercase().contains(key)
+            }
+            Log.d(TAG, "search '$query': raw=${raw.size}, matched=${filtered.size}")
+            filtered
         }
-        out
-    }
 
     private fun collect(node: Any?, out: MutableList<VideoItem>) {
         when (node) {
