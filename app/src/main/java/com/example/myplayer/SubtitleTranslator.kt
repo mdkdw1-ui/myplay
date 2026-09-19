@@ -84,22 +84,31 @@ object SubtitleTranslator {
         }
     }
 
-    /** ★ 라우팅: 일본어면 TexTra, 그 외는 Groq */
+    /**
+     * ★ 라우팅:
+     * - 기본: Groq (모든 언어, 빠름)
+     * - 일본어 & "use_textra" pref ON: TexTra (고품질, 느림)
+     * - TexTra 실패 시: Groq 폴백
+     */
     private suspend fun translateBatch(
         texts: List<String>,
         sourceLang: String,
-        apiKey: String
+        apiKey: String,
+        ctx: Context? = null
     ): List<String> {
-        // 일본어 → 한국어: TexTra
-        if (sourceLang.startsWith("ja")) {
-            Log.d(TAG, "routing to TexTra (source=$sourceLang)")
+        // 일본어 + 사용자 설정 ON → TexTra
+        val useTexTra = ctx?.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+            ?.getBoolean("use_textra", false) ?: false
+
+        if (sourceLang.startsWith("ja") && useTexTra) {
+            Log.d(TAG, "routing to TexTra (source=$sourceLang, pref=on)")
             val r = TexTraTranslator.translateBatch(texts, "generalNT_ja_ko")
             if (r != null && r.size == texts.size) {
                 return r
             }
             Log.w(TAG, "TexTra failed, fallback to Groq")
         }
-        // 그 외: Groq
+        // 그 외: Groq (빠름)
         return translateWithGroq(texts, apiKey)
     }
 
@@ -199,11 +208,11 @@ $numbered
             val apiKey = BuildConfig.GROQ_API_KEY
 
             val translated = mutableListOf<String>()
-            val batchSize = if (sourceLang.startsWith("ja")) 10 else 30  // TexTra는 10개씩 (rate limit)
+            val batchSize = 30  // Groq 기준 (30줄씩)
             for (i in cues.indices step batchSize) {
                 val batch = cues.subList(i, minOf(i + batchSize, cues.size))
                 val texts = batch.map { it.text }
-                val results = translateBatch(texts, sourceLang, apiKey)
+                val results = translateBatch(texts, sourceLang, apiKey, ctx)
                 translated.addAll(results)
                 Log.d(TAG, "batch ${i / batchSize + 1} done (${results.size})")
             }
