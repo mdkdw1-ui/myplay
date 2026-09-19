@@ -1,8 +1,10 @@
 package com.example.myplayer
 
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.PowerManager
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.SeekBar
@@ -20,7 +22,10 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -34,6 +39,12 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var pulseAnimator: android.animation.ValueAnimator? = null
     private var isDragging = false
 
+    // ★ 화면 꺼져도 유지되는 스코프 (Activity 생명주기 무관)
+    private val bgScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    // ★ WakeLock
+    private var wakeLock: PowerManager.WakeLock? = null
+
     private var currentVideoId: String = ""
     private var currentTitle: String = ""
     private var currentChannel: String = ""
@@ -41,6 +52,9 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var currentArtist: String = ""
     private var currentSubtitleUrl: String = ""
     private var sameArtistMode: Boolean = false
+
+    // ★ 중복 재생 방지
+    private var loadingNext = false
 
     private val audioHistory = mutableListOf<AudioHistoryItem>()
     private var historyIndex = -1
@@ -100,12 +114,23 @@ class AudioPlayerActivity : AppCompatActivity() {
         swArtist.setOnCheckedChangeListener { _, checked ->
             sameArtistMode = checked
             pref?.edit()?.putBoolean("same_artist_mode", checked)?.apply()
-            Toast.makeText(
-                this,
-                if (checked) "🎤 같은 가수만 재생" else "🎵 연관곡 재생",
-                Toast.LENGTH_SHORT
-            ).show()
         }
+
+        // ★ Service에 다음 곡 핸들러 등록
+        PlaybackService.nextTrackHandler = {
+            runOnUiThread {
+                if (!loadingNext) {
+                    loadingNext = true
+                    bgScope.launch {
+                        delay(1000)
+                        playNextRelatedBg()
+                    }
+                }
+            }
+        }
+
+        // ★ WakeLock 획득 (화면 꺼져도 CPU 유지)
+        acquireWakeLock()
 
         val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
@@ -119,19 +144,31 @@ class AudioPlayerActivity : AppCompatActivity() {
         }, MoreExecutors.directExecutor())
     }
 
+    private fun acquireWakeLock() {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "MyPlayer::AudioPlayback"
+            ).apply {
+                setReferenceCounted(false)
+                acquire(4 * 60 * 60 * 1000L) // 최대 4시간
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AudioPlayer", "wakelock err: ${e.message}", e)
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            wakeLock?.let { if (it.isHeld) it.release() }
+        } catch (e: Exception) { }
+        wakeLock = null
+    }
+
     private fun attachEqualizer() {
         val session = PlaybackService.exoPlayer?.audioSessionId ?: 0
-        if (session != 0) {
-            val ok = EqualizerManager.attach(session)
-            android.util.Log.d("AudioPlayer", "eq attach: $ok (session=$session)")
-        } else {
-            // 재시도 (sessionId 준비 안 됐을 수 있음)
-            lifecycleScope.launch {
-                delay(1500)
-                val s2 = PlaybackService.exoPlayer?.audioSessionId ?: 0
-                if (s2 != 0) EqualizerManager.attach(s2)
-            }
-        }
+        if (session != 0) EqualizerManager.attach(session)
     }
 
     private fun updateUI() {
@@ -148,7 +185,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         val vid = currentVideoId
         val t = currentTitle
         val c = currentChannel
-        lifecycleScope.launch {
+        bgScope.launch {
             try {
                 val result = ArtistExtractor.extract(vid, t, c)
                 if (vid == currentVideoId) currentArtist = result
@@ -157,9 +194,11 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
-        lifecycleScope.launch {
+        bgScope.launch {
             if (isInitial) {
-                Toast.makeText(this@AudioPlayerActivity, "오디오 추출 중...", Toast.LENGTH_SHORT).show()
+                runOnUiThread {
+                    Toast.makeText(this@AudioPlayerActivity, "오디오 추출 중...", Toast.LENGTH_SHORT).show()
+                }
             }
 
             val result = YouTubeStream.extract(videoId)
@@ -169,49 +208,45 @@ class AudioPlayerActivity : AppCompatActivity() {
                 ?: result.videoUrl
 
             if (url.isNullOrBlank()) {
-                Toast.makeText(this@AudioPlayerActivity, "오디오를 가져올 수 없음", Toast.LENGTH_LONG).show()
+                runOnUiThread {
+                    Toast.makeText(this@AudioPlayerActivity, "오디오 없음", Toast.LENGTH_SHORT).show()
+                }
+                loadingNext = false
                 return@launch
             }
 
-            // 자막 URL 저장 (가사용)
             currentSubtitleUrl = result.subtitles.firstOrNull { it.languageCode.startsWith("ko") }?.url
                 ?: result.subtitles.firstOrNull { it.languageCode.startsWith("en") }?.url
                 ?: result.subtitles.firstOrNull()?.url
                 ?: ""
 
-            mediaController?.setMediaItem(MediaItem.fromUri(url))
-            mediaController?.prepare()
-            mediaController?.playWhenReady = true
+            runOnUiThread {
+                mediaController?.setMediaItem(MediaItem.fromUri(url))
+                mediaController?.prepare()
+                mediaController?.playWhenReady = true
+                updateUI()
+            }
 
             addToHistory(videoId, currentTitle, currentChannel, currentThumb)
 
-            // ★ EQ 세션 재확인 (새 트랙마다)
-            delay(300)
-            val s = PlaybackService.exoPlayer?.audioSessionId ?: 0
-            if (s != 0) EqualizerManager.attach(s)
+            delay(500)
+            attachEqualizer()
+            loadingNext = false
         }
     }
 
     private fun attachPlayerListener() {
+        // Service의 리스너가 다음 곡 처리하므로, 여기서는 애니메이션만
         mediaController?.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) scheduleNextTrack()
-            }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) startAnimation() else stopAnimation()
             }
         })
     }
 
-    private fun scheduleNextTrack() {
-        autoPlayJob?.cancel()
-        autoPlayJob = lifecycleScope.launch {
-            delay(1000)
-            playNextRelated()
-        }
-    }
-
-    private fun playNextRelated() {
+    /** ★ 백그라운드에서도 동작하는 다음 곡 */
+    private fun playNextRelatedBg() {
+        // 히스토리 앞으로
         if (!isPlayingFromHistory && historyIndex >= 0 && historyIndex < audioHistory.size - 1) {
             historyIndex++
             val next = audioHistory[historyIndex]
@@ -219,12 +254,13 @@ class AudioPlayerActivity : AppCompatActivity() {
             currentTitle = next.title
             currentChannel = next.channel
             currentThumb = next.thumbnail
-            updateUI()
+            runOnUiThread { updateUI() }
             loadAudio(next.videoId, isInitial = false)
             return
         }
         isPlayingFromHistory = false
 
+        // 큐에서
         val queue = QueueManager.get(this)
         val queueNext = queue.firstOrNull { it.videoId != currentVideoId }
         if (queueNext != null) {
@@ -233,30 +269,33 @@ class AudioPlayerActivity : AppCompatActivity() {
             currentTitle = queueNext.title
             currentChannel = queueNext.channel
             currentThumb = queueNext.thumbnail
-            updateUI()
+            runOnUiThread { updateUI() }
             loadAudio(queueNext.videoId, isInitial = false)
             return
         }
 
         QueueManager.clear(this)
 
-        lifecycleScope.launch {
+        // 네트워크 (YouTubeRadio / YouTubeArtist)
+        bgScope.launch {
             val disliked = pref?.getStringSet("disliked_ids", emptySet()) ?: emptySet()
-            Toast.makeText(
-                this@AudioPlayerActivity,
-                if (sameArtistMode) "🎤 같은 가수 곡 검색 중..." else "🎵 연관곡 검색 중...",
-                Toast.LENGTH_SHORT
-            ).show()
 
-            val related = if (sameArtistMode) {
-                val artist = currentArtist.ifBlank { currentChannel }
-                YouTubeArtist.fetchSongs(artist, currentVideoId).filter { it.videoId !in disliked }
-            } else {
-                YouTubeRadio.fetchRelated(currentVideoId).filter { it.videoId !in disliked }
+            val related = try {
+                if (sameArtistMode) {
+                    val artist = currentArtist.ifBlank { currentChannel }
+                    YouTubeArtist.fetchSongs(artist, currentVideoId).filter { it.videoId !in disliked }
+                } else {
+                    YouTubeRadio.fetchRelated(currentVideoId).filter { it.videoId !in disliked }
+                }
+            } catch (e: Exception) {
+                emptyList()
             }
 
             if (related.isEmpty()) {
-                Toast.makeText(this@AudioPlayerActivity, "다음 곡을 찾을 수 없습니다", Toast.LENGTH_LONG).show()
+                loadingNext = false
+                runOnUiThread {
+                    Toast.makeText(this@AudioPlayerActivity, "다음 곡 없음", Toast.LENGTH_SHORT).show()
+                }
                 return@launch
             }
 
@@ -265,8 +304,17 @@ class AudioPlayerActivity : AppCompatActivity() {
             currentTitle = next.title
             currentChannel = next.channel
             currentThumb = next.thumbnail
-            updateUI()
+            runOnUiThread { updateUI() }
             loadAudio(next.videoId, isInitial = false)
+        }
+    }
+
+    /** UI 버튼에서 직접 다음 곡 (중복 방지) */
+    private fun playNextManual() {
+        if (loadingNext) return
+        loadingNext = true
+        bgScope.launch {
+            playNextRelatedBg()
         }
     }
 
@@ -290,7 +338,6 @@ class AudioPlayerActivity : AppCompatActivity() {
             loadAudio(prev.videoId, isInitial = false)
         } else {
             mediaController?.seekTo(0)
-            Toast.makeText(this, "처음 곡입니다", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -299,17 +346,19 @@ class AudioPlayerActivity : AppCompatActivity() {
         val disliked = (pref?.getStringSet("disliked_ids", mutableSetOf()) ?: mutableSetOf()).toMutableSet()
         disliked.add(currentVideoId)
         pref?.edit()?.putStringSet("disliked_ids", disliked)?.apply()
-        Toast.makeText(this, "다음부터 추천 제외됨", Toast.LENGTH_SHORT).show()
-        autoPlayJob?.cancel()
-        autoPlayJob = lifecycleScope.launch {
-            delay(500)
-            playNextRelated()
+        Toast.makeText(this, "다음부터 제외", Toast.LENGTH_SHORT).show()
+        if (!loadingNext) {
+            loadingNext = true
+            bgScope.launch {
+                delay(500)
+                playNextRelatedBg()
+            }
         }
     }
 
     private fun openLyrics() {
         if (currentSubtitleUrl.isBlank()) {
-            Toast.makeText(this, "이 곡은 가사가 없습니다", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "가사 없음", Toast.LENGTH_SHORT).show()
             return
         }
         startActivity(Intent(this, LyricsActivity::class.java).apply {
@@ -321,10 +370,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun showEqDialog() {
-        if (PlaybackService.exoPlayer == null) {
-            Toast.makeText(this, "EQ 준비 안 됨", Toast.LENGTH_SHORT).show()
-            return
-        }
+        if (PlaybackService.exoPlayer == null) return
         val session = PlaybackService.exoPlayer?.audioSessionId ?: 0
         if (session == 0 || !EqualizerManager.attach(session)) {
             Toast.makeText(this, "EQ 초기화 실패", Toast.LENGTH_SHORT).show()
@@ -352,16 +398,12 @@ class AudioPlayerActivity : AppCompatActivity() {
                     android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                     marginEnd = (4 * resources.displayMetrics.density).toInt()
                 }
-                setOnClickListener {
-                    EqualizerManager.applyPreset(i)
-                    // 다이얼로그 재오픈
-                }
+                setOnClickListener { EqualizerManager.applyPreset(i) }
             }
             presetRow.addView(b)
         }
         container.addView(presetRow)
 
-        val seekbars = mutableListOf<SeekBar>()
         for (i in 0 until bands) {
             val row = android.widget.LinearLayout(this).apply {
                 orientation = android.widget.LinearLayout.HORIZONTAL
@@ -396,7 +438,6 @@ class AudioPlayerActivity : AppCompatActivity() {
                     override fun onStopTrackingTouch(s: SeekBar?) {}
                 })
             }
-            seekbars.add(sb)
             row.addView(sb)
             container.addView(row)
         }
@@ -405,24 +446,13 @@ class AudioPlayerActivity : AppCompatActivity() {
             .setTitle("🎛 이퀄라이저")
             .setView(container)
             .setPositiveButton("닫기", null)
-            .setNeutralButton("EQ 끄기") { _, _ ->
-                EqualizerManager.setEnabled(!EqualizerManager.isEnabled())
-                Toast.makeText(
-                    this,
-                    if (EqualizerManager.isEnabled()) "EQ ON" else "EQ OFF",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
             .show()
     }
 
     private fun attachListeners() {
         val mc = mediaController ?: return
 
-        btnPlay.setOnClickListener {
-            if (mc.isPlaying) mc.pause() else mc.play()
-        }
-
+        btnPlay.setOnClickListener { if (mc.isPlaying) mc.pause() else mc.play() }
         findViewById<ImageButton>(R.id.btnRewind).setOnClickListener {
             mc.seekTo((mc.currentPosition - 10_000).coerceAtLeast(0))
         }
@@ -431,12 +461,8 @@ class AudioPlayerActivity : AppCompatActivity() {
             val newPos = mc.currentPosition + 10_000
             mc.seekTo(if (dur > 0) newPos.coerceAtMost(dur) else newPos)
         }
-        findViewById<ImageButton>(R.id.btnPrev).setOnClickListener {
-            autoPlayJob?.cancel(); playPrevious()
-        }
-        findViewById<ImageButton>(R.id.btnNext).setOnClickListener {
-            autoPlayJob?.cancel(); playNextRelated()
-        }
+        findViewById<ImageButton>(R.id.btnPrev).setOnClickListener { playPrevious() }
+        findViewById<ImageButton>(R.id.btnNext).setOnClickListener { playNextManual() }
 
         btnRepeat.setOnClickListener { toggleRepeat() }
         btnRepeat.setOnLongClickListener { dislikeCurrent(); true }
@@ -479,12 +505,11 @@ class AudioPlayerActivity : AppCompatActivity() {
             else -> Player.REPEAT_MODE_OFF
         }
         mc.repeatMode = next
-        val label = when (next) {
+        btnRepeat.text = when (next) {
             Player.REPEAT_MODE_ONE -> "🔁1"
             Player.REPEAT_MODE_ALL -> "🔁A"
             else -> "🔁"
         }
-        btnRepeat.text = label
     }
 
     private fun showSpeedDialog() {
@@ -500,26 +525,27 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     private fun startUpdateLoop() {
         updateJob?.cancel()
-        updateJob = lifecycleScope.launch {
+        updateJob = bgScope.launch {
             while (isActive) {
                 val mc = mediaController
                 if (mc != null && !isDragging) {
                     val pos = mc.currentPosition
                     val dur = mc.duration
-                    tvPos.text = fmt(pos)
-                    tvDur.text = if (dur > 0) fmt(dur) else "0:00"
-                    if (dur > 0) seekBar.progress = (pos * 1000 / dur).toInt()
-                    btnPlay.setImageResource(
-                        if (mc.isPlaying) android.R.drawable.ic_media_pause
-                        else android.R.drawable.ic_media_play
-                    )
+                    runOnUiThread {
+                        tvPos.text = fmt(pos)
+                        tvDur.text = if (dur > 0) fmt(dur) else "0:00"
+                        if (dur > 0) seekBar.progress = (pos * 1000 / dur).toInt()
+                        btnPlay.setImageResource(
+                            if (mc.isPlaying) android.R.drawable.ic_media_pause
+                            else android.R.drawable.ic_media_play
+                        )
+                    }
                 }
                 delay(500)
             }
         }
     }
 
-    /** ★ 배경 애니메이션 — pulse + 배경 드리프트 */
     private fun startAnimation() {
         if (pulseAnimator != null) return
         pulseAnimator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
@@ -529,11 +555,9 @@ class AudioPlayerActivity : AppCompatActivity() {
             interpolator = android.view.animation.AccelerateDecelerateInterpolator()
             addUpdateListener { anim ->
                 val t = anim.animatedValue as Float
-                // 아트 pulse
                 val s = 1f + t * 0.06f
                 ivArt.scaleX = s
                 ivArt.scaleY = s
-                // 배경 회전 + 줌
                 ivBackground.rotation = -3f + t * 6f
                 ivBackground.scaleX = 1.1f + t * 0.05f
                 ivBackground.scaleY = 1.1f + t * 0.05f
@@ -565,9 +589,13 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // ★ 핸들러 해제
+        PlaybackService.nextTrackHandler = null
+        releaseWakeLock()
         stopAnimation()
         updateJob?.cancel()
         autoPlayJob?.cancel()
+        bgScope.coroutineContext.cancelChildren()
         MediaController.releaseFuture(controllerFuture)
     }
 }
