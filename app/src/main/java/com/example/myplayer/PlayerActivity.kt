@@ -121,7 +121,6 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var audioManager: AudioManager
     private var gestureOverlay: View? = null
     private val gestureHideRunnable = Runnable {
-        gestureOverlay?.visibility = View.GONE
         findViewById<View>(R.id.gestureBar)?.visibility = View.GONE
     }
 
@@ -219,7 +218,6 @@ class PlayerActivity : AppCompatActivity() {
         btnSpeed.text = "${currentSpeed}x"
 
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        gestureOverlay = findViewById(R.id.gestureOverlay)
         applySubtitleStyle()
         setupGestures()
         setupSubtitleDrag()
@@ -463,10 +461,6 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showGestureFeedback(text: String) {
-        // 기존 오버레이 제거
-        val g = gestureOverlay
-        g?.visibility = View.GONE
-
         // 새 HUD
         val bar = findViewById<View>(R.id.gestureBar)
         val icon = findViewById<TextView>(R.id.tvGestureIcon)
