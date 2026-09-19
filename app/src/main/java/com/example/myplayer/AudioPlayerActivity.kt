@@ -3,6 +3,8 @@ package com.example.myplayer
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.os.PowerManager
 import android.widget.ImageButton
@@ -14,6 +16,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -30,20 +33,17 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.net.HttpURLConnection
+import java.net.URL
 
 class AudioPlayerActivity : AppCompatActivity() {
 
     private lateinit var controllerFuture: ListenableFuture<MediaController>
     private var mediaController: MediaController? = null
     private var updateJob: Job? = null
-    private var autoPlayJob: Job? = null
     private var pulseAnimator: android.animation.ValueAnimator? = null
     private var isDragging = false
-
-    // ★ 화면 꺼져도 유지되는 스코프 (Activity 생명주기 무관)
     private val bgScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-
-    // ★ WakeLock
     private var wakeLock: PowerManager.WakeLock? = null
 
     private var currentVideoId: String = ""
@@ -53,8 +53,6 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var currentArtist: String = ""
     private var currentSubtitleUrl: String = ""
     private var sameArtistMode: Boolean = false
-
-    // ★ 중복 재생 방지
     private var loadingNext = false
 
     private val audioHistory = mutableListOf<AudioHistoryItem>()
@@ -117,7 +115,6 @@ class AudioPlayerActivity : AppCompatActivity() {
             pref?.edit()?.putBoolean("same_artist_mode", checked)?.apply()
         }
 
-        // ★ Service에 다음 곡 핸들러 등록
         PlaybackService.nextTrackHandler = {
             runOnUiThread {
                 if (!loadingNext) {
@@ -130,7 +127,6 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
         }
 
-        // ★ WakeLock 획득 (화면 꺼져도 CPU 유지)
         acquireWakeLock()
 
         val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
@@ -148,22 +144,15 @@ class AudioPlayerActivity : AppCompatActivity() {
     private fun acquireWakeLock() {
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = pm.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "MyPlayer::AudioPlayback"
-            ).apply {
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyPlayer::AudioPlayback").apply {
                 setReferenceCounted(false)
-                acquire(4 * 60 * 60 * 1000L) // 최대 4시간
+                acquire(4 * 60 * 60 * 1000L)
             }
-        } catch (e: Exception) {
-            android.util.Log.e("AudioPlayer", "wakelock err: ${e.message}", e)
-        }
+        } catch (e: Exception) { }
     }
 
     private fun releaseWakeLock() {
-        try {
-            wakeLock?.let { if (it.isHeld) it.release() }
-        } catch (e: Exception) { }
+        try { wakeLock?.let { if (it.isHeld) it.release() } } catch (e: Exception) { }
         wakeLock = null
     }
 
@@ -189,9 +178,40 @@ class AudioPlayerActivity : AppCompatActivity() {
         bgScope.launch {
             try {
                 val result = ArtistExtractor.extract(vid, t, c)
-                if (vid == currentVideoId) currentArtist = result
+                if (vid == currentVideoId) {
+                    currentArtist = result
+                    // ★ 아티스트 확정 후 메타데이터 재갱신 (블루투스용)
+                    runOnUiThread { refreshMediaMetadata() }
+                }
             } catch (e: Exception) { }
         }
+    }
+
+    /** ★ 블루투스/알림용 메타데이터 갱신 */
+    private fun refreshMediaMetadata() {
+        val mc = mediaController ?: return
+        val item = mc.currentMediaItem ?: return
+        val url = item.localConfiguration?.uri?.toString() ?: return
+
+        val artist = currentArtist.ifBlank { currentChannel }
+        val metadata = MediaMetadata.Builder()
+            .setTitle(currentTitle)
+            .setArtist(artist)
+            .setAlbumTitle(currentChannel)
+            .setArtworkUri(android.net.Uri.parse(currentThumb))
+            .build()
+
+        val newItem = MediaItem.Builder()
+            .setUri(url)
+            .setMediaId(currentVideoId)
+            .setMediaMetadata(metadata)
+            .build()
+
+        val pos = mc.currentPosition
+        val wasPlaying = mc.isPlaying
+        mc.setMediaItem(newItem, pos)
+        mc.prepare()
+        if (wasPlaying) mc.play()
     }
 
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
@@ -216,13 +236,32 @@ class AudioPlayerActivity : AppCompatActivity() {
                 return@launch
             }
 
-            currentSubtitleUrl = result.subtitles.firstOrNull { it.languageCode.startsWith("ko") }?.url
+            // ★ 자막 URL - 자동생성 포함, 언어 우선순위
+            currentSubtitleUrl = result.subtitles
+                .firstOrNull { it.languageCode.startsWith("ko") }?.url
                 ?: result.subtitles.firstOrNull { it.languageCode.startsWith("en") }?.url
                 ?: result.subtitles.firstOrNull()?.url
                 ?: ""
 
+            android.util.Log.d("AudioPlayer", "videoId=$videoId, subs=${result.subtitles.size}, subUrl=${currentSubtitleUrl.take(50)}")
+
+            // ★ MediaMetadata 세팅 (블루투스용)
+            val artist = currentArtist.ifBlank { currentChannel }
+            val metadata = MediaMetadata.Builder()
+                .setTitle(currentTitle)
+                .setArtist(artist)
+                .setAlbumTitle(currentChannel)
+                .setArtworkUri(android.net.Uri.parse(currentThumb))
+                .build()
+
+            val mediaItem = MediaItem.Builder()
+                .setUri(url)
+                .setMediaId(videoId)
+                .setMediaMetadata(metadata)
+                .build()
+
             runOnUiThread {
-                mediaController?.setMediaItem(MediaItem.fromUri(url))
+                mediaController?.setMediaItem(mediaItem)
                 mediaController?.prepare()
                 mediaController?.playWhenReady = true
                 updateUI()
@@ -237,7 +276,6 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun attachPlayerListener() {
-        // Service의 리스너가 다음 곡 처리하므로, 여기서는 애니메이션만
         mediaController?.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) startAnimation() else stopAnimation()
@@ -245,9 +283,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         })
     }
 
-    /** ★ 백그라운드에서도 동작하는 다음 곡 */
     private fun playNextRelatedBg() {
-        // 히스토리 앞으로
         if (!isPlayingFromHistory && historyIndex >= 0 && historyIndex < audioHistory.size - 1) {
             historyIndex++
             val next = audioHistory[historyIndex]
@@ -261,7 +297,6 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
         isPlayingFromHistory = false
 
-        // 큐에서
         val queue = QueueManager.get(this)
         val queueNext = queue.firstOrNull { it.videoId != currentVideoId }
         if (queueNext != null) {
@@ -277,7 +312,6 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         QueueManager.clear(this)
 
-        // 네트워크 (YouTubeRadio / YouTubeArtist)
         bgScope.launch {
             val disliked = pref?.getStringSet("disliked_ids", emptySet()) ?: emptySet()
 
@@ -310,13 +344,10 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** UI 버튼에서 직접 다음 곡 (중복 방지) */
     private fun playNextManual() {
         if (loadingNext) return
         loadingNext = true
-        bgScope.launch {
-            playNextRelatedBg()
-        }
+        bgScope.launch { playNextRelatedBg() }
     }
 
     private fun addToHistory(videoId: String, title: String, channel: String, thumb: String) {
@@ -350,18 +381,16 @@ class AudioPlayerActivity : AppCompatActivity() {
         Toast.makeText(this, "다음부터 제외", Toast.LENGTH_SHORT).show()
         if (!loadingNext) {
             loadingNext = true
-            bgScope.launch {
-                delay(500)
-                playNextRelatedBg()
-            }
+            bgScope.launch { delay(500); playNextRelatedBg() }
         }
     }
 
     private fun openLyrics() {
         if (currentSubtitleUrl.isBlank()) {
-            Toast.makeText(this, "가사 없음", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "이 곡은 자막/가사가 없습니다", Toast.LENGTH_LONG).show()
             return
         }
+        android.util.Log.d("AudioPlayer", "openLyrics url=${currentSubtitleUrl.take(80)}")
         startActivity(Intent(this, LyricsActivity::class.java).apply {
             putExtra("VIDEO_ID", currentVideoId)
             putExtra("VIDEO_TITLE", currentTitle)
@@ -590,12 +619,10 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // ★ 핸들러 해제
         PlaybackService.nextTrackHandler = null
         releaseWakeLock()
         stopAnimation()
         updateJob?.cancel()
-        autoPlayJob?.cancel()
         bgScope.cancel()
         MediaController.releaseFuture(controllerFuture)
     }
