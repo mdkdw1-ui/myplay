@@ -3,7 +3,6 @@ package com.example.myplayer
 import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
-import android.view.View
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.SeekBar
@@ -18,6 +17,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.bumptech.glide.Glide
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Job
@@ -30,17 +30,17 @@ class AudioPlayerActivity : AppCompatActivity() {
     private lateinit var controllerFuture: ListenableFuture<MediaController>
     private var mediaController: MediaController? = null
     private var updateJob: Job? = null
-    private var isDragging = false
+    private var autoPlayJob: Job? = null
     private var pulseAnimator: android.animation.ValueAnimator? = null
+    private var isDragging = false
 
-    // ★ 오디오 모드 상태
     private var currentVideoId: String = ""
     private var currentTitle: String = ""
     private var currentChannel: String = ""
     private var currentThumb: String = ""
-    private var currentArtist: String = ""  // ★ 실제 가수명
+    private var currentArtist: String = ""
     private var sameArtistMode: Boolean = false
-    // ★ 히스토리 (최근 50곡)
+
     private val audioHistory = mutableListOf<AudioHistoryItem>()
     private var historyIndex = -1
     private var isPlayingFromHistory = false
@@ -51,7 +51,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         val channel: String,
         val thumbnail: String
     )
-    private var autoPlayJob: Job? = null
+
     private var pref: android.content.SharedPreferences? = null
 
     private lateinit var ivArt: ImageView
@@ -78,7 +78,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         tvPos = findViewById(R.id.tvPos)
         tvDur = findViewById(R.id.tvDur)
         seekBar = findViewById(R.id.seekBar)
-        seekBar.max = 1000  // ★ 0~1000 범위 (기본 100은 버그)
+        seekBar.max = 1000
         btnPlay = findViewById(R.id.btnPlay)
         btnSpeed = findViewById(R.id.btnSpeed)
         btnRepeat = findViewById(R.id.btnRepeat)
@@ -88,7 +88,6 @@ class AudioPlayerActivity : AppCompatActivity() {
         currentChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
         currentThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
 
-        // ★ 플레이리스트에서 온 게 아니면 큐 초기화 (인기 동영상 섞임 방지)
         val fromPlaylist = intent.getBooleanExtra("FROM_PLAYLIST", false)
         if (!fromPlaylist) {
             QueueManager.clear(this)
@@ -96,9 +95,8 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         updateUI()
 
-        // ★ 가수 토글 초기화
         sameArtistMode = pref?.getBoolean("same_artist_mode", false) ?: false
-        val swArtist = findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.swSameArtist)
+        val swArtist = findViewById<SwitchMaterial>(R.id.swSameArtist)
         swArtist.isChecked = sameArtistMode
         swArtist.setOnCheckedChangeListener { _, checked ->
             sameArtistMode = checked
@@ -124,28 +122,31 @@ class AudioPlayerActivity : AppCompatActivity() {
         }, MoreExecutors.directExecutor())
     }
 
-    private fun extractArtistAsync() {
-        lifecycleScope.launch {
-            try {
-                currentArtist = ArtistExtractor.extractArtist(
-                    currentVideoId, currentTitle, currentChannel
-                )
-            } catch (e: Exception) { }
-        }
-    }
-
     private fun updateUI() {
         tvTitle.text = currentTitle
         tvChannel.text = currentChannel
-        // ★ 가수명 추출 (백그라운드)
-        extractArtistAsync()
         if (currentThumb.isNotEmpty()) {
             Glide.with(this).load(currentThumb).into(ivArt)
             Glide.with(this).load(currentThumb).into(ivBackground)
         }
+        extractArtistAsync()
     }
 
-    /** ★ 오디오 로드 (음질 최고 우선) */
+    private fun extractArtistAsync() {
+        val vid = currentVideoId
+        val title = currentTitle
+        val ch = currentChannel
+        lifecycleScope.launch {
+            try {
+                val result = ArtistExtractor.extract(vid, title, ch)
+                if (vid == currentVideoId) {
+                    currentArtist = result
+                    android.util.Log.d("AudioPlayer", "artist=$result")
+                }
+            } catch (e: Exception) { }
+        }
+    }
+
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
         lifecycleScope.launch {
             if (isInitial) {
@@ -153,7 +154,6 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
 
             val result = YouTubeStream.extract(videoId)
-            // ★ 오디오 전용 (최고 비트레이트) → 없으면 muxed
             val url = result.audioUrlBest
                 ?: result.audioUrl
                 ?: result.muxedUrl
@@ -168,12 +168,10 @@ class AudioPlayerActivity : AppCompatActivity() {
             mediaController?.prepare()
             mediaController?.playWhenReady = true
 
-            // ★ 히스토리 추가
             addToHistory(videoId, currentTitle, currentChannel, currentThumb)
         }
     }
 
-    /** ★ Player.Listener — 곡 종료 시 자동 다음 */
     private fun attachPlayerListener() {
         mediaController?.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -181,56 +179,34 @@ class AudioPlayerActivity : AppCompatActivity() {
                     scheduleNextTrack()
                 }
             }
-
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                // ★ 재생 중일 때만 애니메이션
                 if (isPlaying) startPulse() else stopPulse()
             }
         })
     }
 
-    /** ★ 1초 후 다음 곡 */
     private fun scheduleNextTrack() {
         autoPlayJob?.cancel()
         autoPlayJob = lifecycleScope.launch {
-            delay(1000)  // ★ 1초 대기
+            delay(1000)
             playNextRelated()
         }
     }
 
-    /** ★ 다음 곡: 큐 우선 → 없으면 YouTubeRadio */
-
-    // ========== ★ 히스토리 ==========
-    private fun addToHistory(videoId: String, title: String, channel: String, thumb: String) {
-        // 이미 있으면 제거 후 재삽입
-        audioHistory.removeAll { it.videoId == videoId }
-        audioHistory.add(AudioHistoryItem(videoId, title, channel, thumb))
-        // 최대 50
-        while (audioHistory.size > 50) audioHistory.removeAt(0)
-        historyIndex = audioHistory.size - 1
-    }
-
-    private fun playPrevious() {
-        if (historyIndex > 0) {
-            historyIndex--
-            val prev = audioHistory[historyIndex]
-            isPlayingFromHistory = true
-            currentVideoId = prev.videoId
-            currentTitle = prev.title
-            currentChannel = prev.channel
-            currentThumb = prev.thumbnail
-            updateUI()
-            loadAudio(prev.videoId, isInitial = false)
-        } else {
-            // 히스토리 처음 → 현재 곡 처음부터
-            mediaController?.seekTo(0)
-            Toast.makeText(this, "처음 곡입니다", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-
     private fun playNextRelated() {
-        // 1. 큐에 다음 곡 있으면 재생
+        if (!isPlayingFromHistory && historyIndex >= 0 && historyIndex < audioHistory.size - 1) {
+            historyIndex++
+            val next = audioHistory[historyIndex]
+            currentVideoId = next.videoId
+            currentTitle = next.title
+            currentChannel = next.channel
+            currentThumb = next.thumbnail
+            updateUI()
+            loadAudio(next.videoId, isInitial = false)
+            return
+        }
+        isPlayingFromHistory = false
+
         val queue = QueueManager.get(this)
         val queueNext = queue.firstOrNull { it.videoId != currentVideoId }
         if (queueNext != null) {
@@ -244,10 +220,8 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
 
-        // 큐가 비었으면 큐 자체 초기화 (오염 방지)
         QueueManager.clear(this)
 
-        // 2. 큐 비었음 → 토글에 따라 소스 선택
         lifecycleScope.launch {
             val disliked = pref?.getStringSet("disliked_ids", emptySet()) ?: emptySet()
 
@@ -257,7 +231,6 @@ class AudioPlayerActivity : AppCompatActivity() {
                 Toast.LENGTH_SHORT
             ).show()
 
-            // ★ 토글: 같은 가수 vs 연관곡
             val related = if (sameArtistMode) {
                 val artist = currentArtist.ifBlank { currentChannel }
                 YouTubeArtist.fetchSongs(artist, currentVideoId)
@@ -286,7 +259,30 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** ★ 싫어요 — 다음부터 제외 */
+    private fun addToHistory(videoId: String, title: String, channel: String, thumb: String) {
+        audioHistory.removeAll { it.videoId == videoId }
+        audioHistory.add(AudioHistoryItem(videoId, title, channel, thumb))
+        while (audioHistory.size > 50) audioHistory.removeAt(0)
+        historyIndex = audioHistory.size - 1
+    }
+
+    private fun playPrevious() {
+        if (historyIndex > 0) {
+            historyIndex--
+            val prev = audioHistory[historyIndex]
+            isPlayingFromHistory = true
+            currentVideoId = prev.videoId
+            currentTitle = prev.title
+            currentChannel = prev.channel
+            currentThumb = prev.thumbnail
+            updateUI()
+            loadAudio(prev.videoId, isInitial = false)
+        } else {
+            mediaController?.seekTo(0)
+            Toast.makeText(this, "처음 곡입니다", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun dislikeCurrent() {
         if (currentVideoId.isBlank()) return
         val disliked = (pref?.getStringSet("disliked_ids", mutableSetOf()) ?: mutableSetOf()).toMutableSet()
@@ -295,7 +291,6 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         Toast.makeText(this, "다음부터 추천 제외됨", Toast.LENGTH_SHORT).show()
 
-        // 즉시 다음 곡
         autoPlayJob?.cancel()
         autoPlayJob = lifecycleScope.launch {
             delay(500)
@@ -319,7 +314,6 @@ class AudioPlayerActivity : AppCompatActivity() {
             mc.seekTo(if (dur > 0) newPos.coerceAtMost(dur) else newPos)
         }
 
-        // ★ 이전/다음 곡 버튼 — 히스토리 기반
         findViewById<ImageButton>(R.id.btnPrev).setOnClickListener {
             autoPlayJob?.cancel()
             playPrevious()
@@ -330,15 +324,14 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
 
         btnRepeat.setOnClickListener { toggleRepeat() }
-        findViewById<MaterialButton>(R.id.btnDislike).setOnClickListener {
-            dislikeCurrent()
-        }
-        btnSpeed.setOnClickListener { showSpeedDialog() }
-
-        // ★ 싫어요 버튼 (없으면 btnRepeat 롱프레스로)
         btnRepeat.setOnLongClickListener {
             dislikeCurrent()
             true
+        }
+        btnSpeed.setOnClickListener { showSpeedDialog() }
+
+        findViewById<MaterialButton>(R.id.btnDislike).setOnClickListener {
+            dislikeCurrent()
         }
 
         findViewById<MaterialButton>(R.id.btnVideoMode).setOnClickListener {
@@ -394,8 +387,27 @@ class AudioPlayerActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun startUpdateLoop() {
+        updateJob?.cancel()
+        updateJob = lifecycleScope.launch {
+            while (isActive) {
+                val mc = mediaController
+                if (mc != null && !isDragging) {
+                    val pos = mc.currentPosition
+                    val dur = mc.duration
+                    tvPos.text = fmt(pos)
+                    tvDur.text = if (dur > 0) fmt(dur) else "0:00"
+                    if (dur > 0) seekBar.progress = (pos * 1000 / dur).toInt()
+                    btnPlay.setImageResource(
+                        if (mc.isPlaying) android.R.drawable.ic_media_pause
+                        else android.R.drawable.ic_media_play
+                    )
+                }
+                delay(500)
+            }
+        }
+    }
 
-    // ========== ★ 배경 애니메이션 ==========
     private fun startPulse() {
         if (pulseAnimator != null) return
         pulseAnimator = android.animation.ValueAnimator.ofFloat(1f, 1.08f).apply {
@@ -418,31 +430,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         pulseAnimator = null
         ivArt.scaleX = 1f
         ivArt.scaleY = 1f
-        ivBackground.alpha = 1f
-    }
-
-
-    private fun startUpdateLoop() {
-        updateJob?.cancel()
-        updateJob = lifecycleScope.launch {
-            while (isActive) {
-                val mc = mediaController
-                if (mc != null && !isDragging) {
-                    val pos = mc.currentPosition
-                    val dur = mc.duration
-                    tvPos.text = fmt(pos)
-                    tvDur.text = if (dur > 0) fmt(dur) else "0:00"
-                    if (dur > 0) {
-                        seekBar.progress = (pos * 1000 / dur).toInt()
-                    }
-                    btnPlay.setImageResource(
-                        if (mc.isPlaying) android.R.drawable.ic_media_pause
-                        else android.R.drawable.ic_media_play
-                    )
-                }
-                delay(500)
-            }
-        }
+        ivBackground.alpha = 0.25f
     }
 
     private fun fmt(ms: Long): String {
