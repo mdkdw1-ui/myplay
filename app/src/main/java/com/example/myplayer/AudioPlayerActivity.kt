@@ -37,6 +37,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var currentTitle: String = ""
     private var currentChannel: String = ""
     private var currentThumb: String = ""
+    private var currentArtist: String = ""  // ★ 실제 가수명
     private var autoPlayJob: Job? = null
     private var pref: android.content.SharedPreferences? = null
 
@@ -99,6 +100,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private fun updateUI() {
         tvTitle.text = currentTitle
         tvChannel.text = currentChannel
+        // ★ 가수명 추출 (백그라운드)
+        extractArtistAsync()
         if (currentThumb.isNotEmpty()) {
             Glide.with(this).load(currentThumb).into(ivArt)
             Glide.with(this).load(currentThumb).into(ivBackground)
