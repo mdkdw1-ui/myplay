@@ -991,10 +991,13 @@ class PlayerActivity : AppCompatActivity() {
         labels.add("⚙️ 자막 스타일")
         callbacks.add { showSubtitleStyleDialog() }
 
-        val englishSub = subtitleTracks.firstOrNull { it.languageCode.startsWith("en") }
-        if (englishSub != null) {
-            labels.add("🤖 [AI 번역] English → 한국어")
-            callbacks.add { translateAndApply(englishSub) }
+        // ★ 모든 비한국어 자막에 AI 번역 옵션
+        val nonKorean = subtitleTracks.filter { !it.languageCode.startsWith("ko") }
+            .distinctBy { it.languageCode }
+        for (sub in nonKorean) {
+            val langLabel = sub.displayName.ifBlank { sub.languageCode }
+            labels.add("🤖 [AI 번역] $langLabel → 한국어")
+            callbacks.add { translateAndApply(sub) }
         }
 
         // ★ AI 번역 옵션 (영어 자막 있으면)
@@ -1616,7 +1619,7 @@ class PlayerActivity : AppCompatActivity() {
     // ========== 🤖 AI 번역 자막 ==========
     private var translating = false
 
-    private fun translateAndApply(englishSub: SubtitleTrack) {
+    private fun translateAndApply(sub: SubtitleTrack) {
         if (translating) {
             Toast.makeText(this, "이미 번역 중입니다", Toast.LENGTH_SHORT).show()
             return
@@ -1624,9 +1627,10 @@ class PlayerActivity : AppCompatActivity() {
         if (currentVideoId.isBlank()) return
 
         translating = true
+        val langLabel = sub.displayName.ifBlank { sub.languageCode }
         val progressDialog = android.app.ProgressDialog(this).apply {
             setTitle("🤖 AI 번역 중")
-            setMessage("영어 자막을 한국어로 번역하고 있습니다...")
+            setMessage("$langLabel 자막을 한국어로 번역하고 있습니다...")
             setCancelable(false)
             show()
         }
@@ -1636,8 +1640,9 @@ class PlayerActivity : AppCompatActivity() {
                 val vttFile = SubtitleTranslator.translateToVtt(
                     applicationContext,
                     currentVideoId,
-                    englishSub.url,
-                    "ko"
+                    sub.url,
+                    "ko",
+                    sub.languageCode   // ★ 원문 언어 전달 (캐시용)
                 )
                 progressDialog.dismiss()
                 translating = false

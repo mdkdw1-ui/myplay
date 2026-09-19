@@ -1,6 +1,7 @@
 package com.example.myplayer
 
 import android.content.Context
+import android.text.Html
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
@@ -11,25 +12,32 @@ import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * YouTube 영어 자막 → Groq AI 번역 → 로컬 VTT
- * (YouTube 429 우회)
- */
 object SubtitleTranslator {
 
     private const val TAG = "SubtitleTranslator"
 
-    /** 번역 캐시 폴더 */
     fun cacheDir(ctx: Context): File = File(ctx.filesDir, "subs").apply { mkdirs() }
 
-    /**
-     * VTT 한 줄씩 파싱해서 문장 배열로 반환
-     */
     private data class Cue(
         val start: String,
         val end: String,
         val text: String
     )
+
+    private fun stripHtml(input: String): String {
+        if (input.isBlank()) return ""
+        return try {
+            val noHtml = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                Html.fromHtml(input, Html.FROM_HTML_MODE_LEGACY).toString()
+            } else {
+                @Suppress("DEPRECATION")
+                Html.fromHtml(input).toString()
+            }
+            noHtml.replace(Regex("\\s+"), " ").trim()
+        } catch (e: Exception) {
+            input.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim()
+        }
+    }
 
     private fun parseVtt(raw: String): List<Cue> {
         val out = mutableListOf<Cue>()
@@ -62,12 +70,9 @@ object SubtitleTranslator {
         return out
     }
 
-    /**
-     * VTT 다운로드
-     */
     private suspend fun downloadVtt(url: String): String = withContext(Dispatchers.IO) {
         try {
-            val conn = URL(url).openConnection() as HttpURLConnection
+            val conn = URL(ensureVtt(url)).openConnection() as HttpURLConnection
             conn.connectTimeout = 10000
             conn.readTimeout = 15000
             conn.setRequestProperty("User-Agent", "Mozilla/5.0")
@@ -80,7 +85,7 @@ object SubtitleTranslator {
     }
 
     /**
-     * Groq로 문장 묶음 번역
+     * ★ 언어 무관 번역: 원문 언어 감지 없이 Groq이 알아서 번역
      */
     private suspend fun translateBatch(texts: List<String>, apiKey: String): List<String> =
         withContext(Dispatchers.IO) {
@@ -88,13 +93,14 @@ object SubtitleTranslator {
             try {
                 val numbered = texts.mapIndexed { i, s -> "${i + 1}. $s" }.joinToString("\n")
                 val prompt = """
-다음 영어 문장들을 자연스러운 한국어로 번역해줘.
+다음 문장들을 자연스러운 한국어로 번역해줘.
 
 **규칙:**
-1. 번호 순서를 그대로 유지
-2. 각 줄은 "번호. 번역문" 형식으로
-3. 설명 없이 번역만
-4. 문장은 자연스럽게 (직역 X)
+1. 원문 언어는 상관없음 (영어/일본어/중국어 등 뭐든)
+2. 번호 순서를 그대로 유지
+3. 각 줄은 "번호. 번역문" 형식으로
+4. 설명 없이 번역만
+5. 문장은 자연스럽게 (직역 X)
 
 $numbered
 """.trimIndent()
@@ -104,7 +110,7 @@ $numbered
                     put("messages", JSONArray().apply {
                         put(JSONObject().apply {
                             put("role", "system")
-                            put("content", "You are a professional Korean translator.")
+                            put("content", "You are a professional Korean translator. Translate any language to natural Korean.")
                         })
                         put(JSONObject().apply {
                             put("role", "user")
@@ -136,7 +142,6 @@ $numbered
                     ?.optJSONObject("message")
                     ?.optString("content") ?: ""
 
-                // 파싱: "1. 번역\n2. 번역..."
                 val result = mutableListOf<String>()
                 val lines = content.split("\n").filter { it.isNotBlank() }
                 for (line in lines) {
@@ -148,7 +153,6 @@ $numbered
                     }
                 }
 
-                // 개수 맞추기
                 while (result.size < texts.size) result.add("")
                 result.take(texts.size)
             } catch (e: Exception) {
@@ -158,37 +162,34 @@ $numbered
         }
 
     /**
-     * 메인: VTT URL → 번역된 로컬 VTT 경로
+     * @param sourceLang 원문 언어 (로그/캐시용, 번역엔 영향 X)
      */
     suspend fun translateToVtt(
         ctx: Context,
         videoId: String,
         vttUrl: String,
-        targetLang: String = "ko"
+        targetLang: String = "ko",
+        sourceLang: String = "auto"
     ): File? = withContext(Dispatchers.IO) {
         try {
-            val cacheFile = File(cacheDir(ctx), "${videoId}_${targetLang}.vtt")
+            val cacheFile = File(cacheDir(ctx), "${videoId}_${sourceLang}_${targetLang}.vtt")
             if (cacheFile.exists() && cacheFile.length() > 100) {
                 Log.d(TAG, "cache hit: ${cacheFile.absolutePath}")
                 return@withContext cacheFile
             }
 
-            // 1. 영어 VTT 다운로드
-            val raw = downloadVtt(ensureVtt(vttUrl))
+            val raw = downloadVtt(vttUrl)
             if (raw.isBlank()) return@withContext null
 
-            // 2. 파싱
             val cues = parseVtt(raw)
             if (cues.isEmpty()) return@withContext null
 
-            // 3. Groq API 키
             val apiKey = BuildConfig.GROQ_API_KEY
             if (apiKey.isBlank()) {
                 Log.e(TAG, "no GROQ_API_KEY")
                 return@withContext null
             }
 
-            // 4. 배치 번역 (한 번에 30줄)
             val translated = mutableListOf<String>()
             val batchSize = 30
             for (i in cues.indices step batchSize) {
@@ -196,9 +197,9 @@ $numbered
                 val texts = batch.map { it.text }
                 val results = translateBatch(texts, apiKey)
                 translated.addAll(results)
+                Log.d(TAG, "batch ${i / batchSize + 1} done (${results.size})")
             }
 
-            // 5. VTT 생성
             val sb = StringBuilder()
             sb.append("WEBVTT\n\n")
             for (i in cues.indices) {
@@ -221,7 +222,6 @@ $numbered
         if (url.contains("fmt=")) url.replace(Regex("fmt=[a-zA-Z0-9]+"), "fmt=vtt")
         else if (url.contains("?")) "$url&fmt=vtt" else "$url?fmt=vtt"
 
-    /** 캐시 삭제 */
     fun clearCache(ctx: Context) {
         cacheDir(ctx).listFiles()?.forEach { it.delete() }
     }
