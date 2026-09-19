@@ -2,8 +2,10 @@ package com.example.myplayer
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -11,6 +13,16 @@ import androidx.media3.session.MediaSessionService
 class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
+
+    /** ★ Activity가 화면 꺼져도 다음 곡 요청 가능하도록 */
+    private val endListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED) {
+                Log.d("PlaybackService", "STATE_ENDED → nextTrackHandler 호출")
+                nextTrackHandler?.invoke()
+            }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -30,6 +42,7 @@ class PlaybackService : MediaSessionService() {
             .setLoadControl(loadControl)
             .build()
 
+        player.addListener(endListener)
         exoPlayer = player
 
         val sessionActivity = PendingIntent.getActivity(
@@ -50,6 +63,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         mediaSession?.run {
+            player.removeListener(endListener)
             player.release()
             release()
         }
@@ -59,8 +73,13 @@ class PlaybackService : MediaSessionService() {
     }
 
     companion object {
-        /** Equalizer 등에서 접근용 */
         var exoPlayer: ExoPlayer? = null
             private set
+
+        /** ★ AudioPlayerActivity가 여기에 다음 곡 함수 등록 */
+        var nextTrackHandler: (() -> Unit)? = null
+
+        /** ★ 화면 꺼져도 다음 곡 로드하도록 이어주는 브리지 */
+        var pendingNextRequest: Boolean = false
     }
 }
