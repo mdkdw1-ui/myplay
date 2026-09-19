@@ -54,6 +54,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var currentSubtitleUrl: String = ""
     private var sameArtistMode: Boolean = false
     private var loadingNext = false
+    private var reuseStreamUrl: String = ""
+    private var reuseSubtitleUrl: String = ""
 
     private val audioHistory = mutableListOf<AudioHistoryItem>()
     private var historyIndex = -1
@@ -104,6 +106,9 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         val fromPlaylist = intent.getBooleanExtra("FROM_PLAYLIST", false)
         if (!fromPlaylist) QueueManager.clear(this)
+
+        reuseStreamUrl = intent.getStringExtra("REUSE_STREAM_URL") ?: ""
+        reuseSubtitleUrl = intent.getStringExtra("REUSE_SUBTITLE_URL") ?: ""
 
         updateUI()
 
@@ -216,6 +221,35 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
         bgScope.launch {
+            // ★ URL 재사용 (첫 곡만)
+            if (isInitial && reuseStreamUrl.isNotBlank() && videoId == currentVideoId) {
+                currentSubtitleUrl = reuseSubtitleUrl
+                val artist = currentArtist.ifBlank { currentChannel }
+                val metadata = MediaMetadata.Builder()
+                    .setTitle(currentTitle)
+                    .setArtist(artist)
+                    .setAlbumTitle(currentChannel)
+                    .setArtworkUri(android.net.Uri.parse(currentThumb))
+                    .build()
+                val mediaItem = MediaItem.Builder()
+                    .setUri(reuseStreamUrl)
+                    .setMediaId(videoId)
+                    .setMediaMetadata(metadata)
+                    .build()
+                runOnUiThread {
+                    mediaController?.setMediaItem(mediaItem)
+                    mediaController?.prepare()
+                    mediaController?.playWhenReady = true
+                }
+                addToHistory(videoId, currentTitle, currentChannel, currentThumb)
+                reuseStreamUrl = ""
+                reuseSubtitleUrl = ""
+                delay(500)
+                attachEqualizer()
+                loadingNext = false
+                return@launch
+            }
+
             if (isInitial) {
                 runOnUiThread {
                     Toast.makeText(this@AudioPlayerActivity, "오디오 추출 중...", Toast.LENGTH_SHORT).show()
@@ -320,7 +354,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                     val artist = currentArtist.ifBlank { currentChannel }
                     YouTubeArtist.fetchSongs(artist, currentVideoId).filter { it.videoId !in disliked }
                 } else {
-                    YouTubeRadio.fetchRelated(currentVideoId).filter { it.videoId !in disliked }
+                    YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel).filter { it.videoId !in disliked }
                 }
             } catch (e: Exception) {
                 emptyList()

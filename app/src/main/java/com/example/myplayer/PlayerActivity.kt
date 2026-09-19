@@ -1452,8 +1452,13 @@ class PlayerActivity : AppCompatActivity() {
             Toast.makeText(this, "오디오 모드로 전환 불가", Toast.LENGTH_SHORT).show()
             return
         }
-        // ★ 큐 초기화 (다른 영상의 큐 섞임 방지)
         QueueManager.clear(this)
+
+        val subUrl = subtitleTracks
+            .firstOrNull { it.languageCode.startsWith("ko") }?.url
+            ?: subtitleTracks.firstOrNull { it.languageCode.startsWith("en") }?.url
+            ?: subtitleTracks.firstOrNull()?.url
+            ?: ""
 
         startActivity(Intent(this, AudioPlayerActivity::class.java).apply {
             putExtra("VIDEO_ID", currentVideoId)
@@ -1461,6 +1466,8 @@ class PlayerActivity : AppCompatActivity() {
             putExtra("VIDEO_CHANNEL", currentChannel)
             putExtra("VIDEO_THUMB", currentThumb)
             putExtra("FROM_PLAYLIST", false)
+            putExtra("REUSE_STREAM_URL", currentStreamUrl ?: "")
+            putExtra("REUSE_SUBTITLE_URL", subUrl)
         })
         finish()
     }
