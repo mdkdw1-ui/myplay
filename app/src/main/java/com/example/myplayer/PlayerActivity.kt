@@ -119,7 +119,6 @@ class PlayerActivity : AppCompatActivity() {
     private val pref by lazy { getSharedPreferences("subtitle_prefs", Context.MODE_PRIVATE) }
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var audioManager: AudioManager
-    private var gestureOverlay: View? = null
     private val gestureHideRunnable = Runnable {
         findViewById<View>(R.id.gestureBar)?.visibility = View.GONE
     }
