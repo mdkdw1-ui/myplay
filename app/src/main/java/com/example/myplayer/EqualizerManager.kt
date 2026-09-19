@@ -16,7 +16,7 @@ object EqualizerManager {
         return try {
             equalizer = Equalizer(0, audioSessionId).apply { enabled = true }
             sessionId = audioSessionId
-            Log.d(TAG, "attached to session $audioSessionId, bands=${equalizer?.numberOfBands}")
+            Log.d(TAG, "attached session=$audioSessionId bands=${equalizer?.numberOfBands}")
             true
         } catch (e: Exception) {
             Log.e(TAG, "attach err: ${e.message}", e)
@@ -30,37 +30,48 @@ object EqualizerManager {
         sessionId = 0
     }
 
-    fun bandCount(): Int = equalizer?.numberOfBands?.toInt() ?: 5
+    fun bandCount(): Int = try {
+        equalizer?.numberOfBands?.toInt() ?: 5
+    } catch (e: Exception) { 5 }
 
     fun centerFreqHz(band: Int): Int {
         return try {
-            val range = equalizer?.bandFreqRange( band.toShort()) ?: return 0
+            val eq = equalizer ?: return 0
+            val range = eq.getBandFreqRange(band.toShort())
             ((range[0] + range[1]) / 2 / 1000).toInt()
-        } catch (e: Exception) { 0 }
+        } catch (e: Exception) {
+            Log.e(TAG, "centerFreqHz err: ${e.message}")
+            0
+        }
     }
 
     fun levelRange(): Pair<Int, Int> {
         return try {
-            val r = equalizer?.bandLevelRange() ?: return Pair(-1500, 1500)
+            val eq = equalizer ?: return Pair(-1500, 1500)
+            val r = eq.bandLevelRange
             Pair(r[0].toInt(), r[1].toInt())
-        } catch (e: Exception) { Pair(-1500, 1500) }
+        } catch (e: Exception) {
+            Log.e(TAG, "levelRange err: ${e.message}")
+            Pair(-1500, 1500)
+        }
     }
 
     fun getLevel(band: Int): Int {
-        return try { equalizer?.getBandLevel(band.toShort())?.toInt() ?: 0 }
-        catch (e: Exception) { 0 }
+        return try {
+            equalizer?.getBandLevel(band.toShort())?.toInt() ?: 0
+        } catch (e: Exception) { 0 }
     }
 
     fun setLevel(band: Int, level: Int) {
-        try { equalizer?.setBandLevel(band.toShort(), level.toShort()) }
-        catch (e: Exception) { }
+        try {
+            equalizer?.setBandLevel(band.toShort(), level.toShort())
+        } catch (e: Exception) { }
     }
 
-    /** 프리셋 적용 (0=평탄, 1=저음강조, 2=고음강조, 3=V자) */
+    /** 0=평탄, 1=저음강조, 2=고음강조, 3=V자 */
     fun applyPreset(preset: Int) {
         val bands = bandCount()
         val (minL, maxL) = levelRange()
-        val range = (maxL - minL).toFloat()
         for (i in 0 until bands) {
             val factor = i.toFloat() / (bands - 1).coerceAtLeast(1)
             val level = when (preset) {
@@ -80,5 +91,7 @@ object EqualizerManager {
         try { equalizer?.enabled = enabled } catch (e: Exception) { }
     }
 
-    fun isEnabled(): Boolean = try { equalizer?.enabled == true } catch (e: Exception) { false }
+    fun isEnabled(): Boolean = try {
+        equalizer?.enabled == true
+    } catch (e: Exception) { false }
 }
