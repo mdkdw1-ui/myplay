@@ -58,7 +58,18 @@ object YouTubeStream {
             val title = info.name ?: ""
             val channelName = try { info.uploaderName ?: "" } catch (e: Exception) { "" }
             val description = try { info.description?.content ?: "" } catch (e: Exception) { "" }
-            val isLive = try { info.isLive } catch (e: Exception) { false }
+            // ★ NewPipe 버전별 isLive API 차이 대응
+            val isLive = try {
+                val m = info.javaClass.getMethod("isLive")
+                m.invoke(info) as? Boolean ?: false
+            } catch (e: Exception) {
+                try {
+                    val m = info.javaClass.getMethod("isLiveStream")
+                    m.invoke(info) as? Boolean ?: false
+                } catch (e2: Exception) {
+                    false
+                }
+            }
 
             // 자막
             val subtitleList = mutableListOf<SubtitleTrack>()

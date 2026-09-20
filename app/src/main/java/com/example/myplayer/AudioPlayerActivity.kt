@@ -549,6 +549,10 @@ class AudioPlayerActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnLyrics).setOnClickListener { openLyrics() }
         findViewById<MaterialButton>(R.id.btnEq).setOnClickListener { showEqDialog() }
         findViewById<MaterialButton>(R.id.btnDislike).setOnClickListener { dislikeCurrent() }
+        findViewById<MaterialButton>(R.id.btnDislike).setOnLongClickListener {
+            startActivity(Intent(this, LiveSubtitleActivity::class.java))
+            true
+        }
         findViewById<MaterialButton>(R.id.btnVideoMode).setOnClickListener {
             startActivity(Intent(this, PlayerActivity::class.java).apply {
                 putExtra("VIDEO_ID", currentVideoId)
