@@ -1138,6 +1138,7 @@ class PlayerActivity : AppCompatActivity() {
 
     companion object {
         private const val REQ_TRANSCRIPT = 1001
+        private const val REQ_LIVE_MP = 7100
     }
 
 
@@ -1991,10 +1992,6 @@ class PlayerActivity : AppCompatActivity() {
                 Toast.makeText(this, "이동: ${formatTime(seekMs)}", Toast.LENGTH_SHORT).show()
             }
         }
-    }
-
-    companion object {
-        private const val REQ_LIVE_MP = 7100
     }
 
     override fun onDestroy() {
