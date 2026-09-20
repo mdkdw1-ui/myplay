@@ -543,6 +543,19 @@ class AudioPlayerActivity : AppCompatActivity() {
         updateAudioLiveSubButton()
     }
 
+
+    private fun updateAudioLiveSubButton() {
+        try {
+            if (audioLiveActive) {
+                btnLiveSub.setTextColor(0xFFFF2D55.toInt())
+                btnLiveSub.text = "🎙 ON"
+            } else {
+                btnLiveSub.setTextColor(0xFF8E8E93.toInt())
+                btnLiveSub.text = "🎙"
+            }
+        } catch (e: Exception) { }
+    }
+
     private fun attachListeners() {
         val mc = mediaController ?: return
 
