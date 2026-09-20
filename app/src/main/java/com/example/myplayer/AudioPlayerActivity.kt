@@ -87,6 +87,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     private lateinit var btnPlay: ImageButton
     private lateinit var btnSpeed: MaterialButton
     private lateinit var btnRepeat: MaterialButton
+    private lateinit var btnLiveSub: MaterialButton
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -105,6 +106,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         btnPlay = findViewById(R.id.btnPlay)
         btnSpeed = findViewById(R.id.btnSpeed)
         btnRepeat = findViewById(R.id.btnRepeat)
+        btnLiveSub = findViewById(R.id.btnLiveSub)
 
         currentVideoId = intent.getStringExtra("VIDEO_ID") ?: ""
         currentTitle = intent.getStringExtra("VIDEO_TITLE") ?: ""
@@ -559,6 +561,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         if (audioLiveGroq == null) audioLiveGroq = GroqSttManager(BuildConfig.GROQ_API_KEY)
         audioLiveGroq?.reset()
         audioLiveActive = true
+        updateAudioLiveSubButton()
         showAudioLiveOverlay()
 
         audioLiveCapture = AudioCaptureManager(this) { chunk ->
@@ -579,6 +582,7 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     private fun stopAudioLiveSubtitle() {
         audioLiveActive = false
+        updateAudioLiveSubButton()
         audioLiveCapture?.stop()
         audioLiveCapture = null
         try { audioLiveProjection?.stop() } catch (e: Exception) { }
@@ -647,6 +651,19 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
+
+    private fun updateAudioLiveSubButton() {
+        try {
+            if (audioLiveActive) {
+                btnLiveSub.setTextColor(0xFFFF2D55.toInt())
+                btnLiveSub.text = "🎙 ON"
+            } else {
+                btnLiveSub.setTextColor(0xFF8E8E93.toInt())
+                btnLiveSub.text = "🎙"
+            }
+        } catch (e: Exception) { }
+    }
+
     private fun attachListeners() {
         val mc = mediaController ?: return
 
@@ -663,6 +680,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnNext).setOnClickListener { playNextManual() }
 
         btnRepeat.setOnClickListener { toggleRepeat() }
+        btnLiveSub.setOnClickListener { toggleAudioLiveSubtitle() }
         btnRepeat.setOnLongClickListener { dislikeCurrent(); true }
         btnSpeed.setOnClickListener { showSpeedDialog() }
 
