@@ -148,6 +148,9 @@ class PlayerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
 
+        // ★ 화면 항상 켜짐 (기본 ON)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
         playerView = findViewById(R.id.playerView)
         liveSubtitleOverlay = findViewById(R.id.liveSubtitleOverlay)
         tvLiveSubtitle = findViewById(R.id.tvLiveSubtitle)

@@ -123,18 +123,6 @@ class AudioPlayerActivity : AppCompatActivity() {
             pref?.edit()?.putBoolean("same_artist_mode", checked)?.apply()
         }
 
-        PlaybackService.nextTrackHandler = {
-            runOnUiThread {
-                if (!loadingNext) {
-                    loadingNext = true
-                    bgScope.launch {
-                        delay(1000)
-                        playNextRelatedBg()
-                    }
-                }
-            }
-        }
-
         acquireWakeLock()
 
         updateAudioLiveSubButton()
@@ -312,6 +300,16 @@ class AudioPlayerActivity : AppCompatActivity() {
                 .setMediaMetadata(metadata)
                 .build()
 
+            // ★ prefs에 현재 곡 저장 (Service가 다음 곡 결정 시 사용)
+            pref?.edit()
+                ?.putString("current_video_id", videoId)
+                ?.putString("current_title", currentTitle)
+                ?.putString("current_channel", currentChannel)
+                ?.putString("current_thumbnail", currentThumb)
+                ?.putString("current_artist", currentArtist)
+                ?.putString("current_subtitle_url", currentSubtitleUrl)
+                ?.apply()
+
             runOnUiThread {
                 mediaController?.setMediaItem(mediaItem)
                 mediaController?.prepare()
@@ -331,6 +329,22 @@ class AudioPlayerActivity : AppCompatActivity() {
         mediaController?.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) startAnimation() else stopAnimation()
+            }
+
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                val newId = mediaItem?.mediaId ?: return
+                if (newId == currentVideoId) return
+                android.util.Log.d("AudioPlayer", "external transition to $newId")
+                currentVideoId = newId
+                currentTitle = mediaItem.mediaMetadata.title?.toString() ?: ""
+                currentChannel = mediaItem.mediaMetadata.artist?.toString() ?: ""
+                currentThumb = mediaItem.mediaMetadata.artworkUri?.toString() ?: ""
+                currentArtist = ""
+                currentSubtitleUrl = pref?.getString("current_subtitle_url", "") ?: ""
+                runOnUiThread {
+                    updateUI()
+                    updateLyricsButtonLabel()
+                }
             }
         })
     }
@@ -558,6 +572,18 @@ class AudioPlayerActivity : AppCompatActivity() {
         } catch (e: Exception) { }
     }
 
+
+    private fun toggleKeepScreenOn() {
+        val on = (window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0
+        if (on) {
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            Toast.makeText(this, "🔴 화면 꺼짐 허용", Toast.LENGTH_SHORT).show()
+        } else {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            Toast.makeText(this, "🟢 화면 켜짐 유지 ON", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun attachListeners() {
         val mc = mediaController ?: return
 
@@ -578,15 +604,17 @@ class AudioPlayerActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnMoreAudio).setOnClickListener {
             AlertDialog.Builder(this)
                 .setItems(arrayOf(
+                    "💡 화면 켜짐 유지 (토글)",
                     "🎛 이퀄라이저",
                     "👎 싫어요 (다음부터 제외)",
                     "📺 영상 모드로 전환",
                     "🎚 재생 속도"
                 )) { _, which ->
                     when (which) {
-                        0 -> showEqDialog()
-                        1 -> dislikeCurrent()
-                        2 -> {
+                        0 -> toggleKeepScreenOn()
+                        1 -> showEqDialog()
+                        2 -> dislikeCurrent()
+                        3 -> {
                             val pos = mediaController?.currentPosition ?: 0L
                             startActivity(Intent(this, PlayerActivity::class.java).apply {
                                 putExtra("VIDEO_ID", currentVideoId)
@@ -598,7 +626,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                             })
                             finish()
                         }
-                        3 -> showSpeedDialog()
+                        4 -> showSpeedDialog()
                     }
                 }
                 .show()
