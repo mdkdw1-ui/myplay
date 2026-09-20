@@ -79,6 +79,7 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var btnLock: MaterialButton
     private lateinit var btnMore: MaterialButton
     private lateinit var btnLiveSub: MaterialButton
+    private lateinit var btnAudioMode: MaterialButton
     private lateinit var lockOverlay: View
     private var isLocked = false
     private var pipAspect: Float = 16f / 9f
@@ -159,6 +160,7 @@ class PlayerActivity : AppCompatActivity() {
         btnLock = findViewById(R.id.btnLock)
         btnMore = findViewById(R.id.btnMore)
         btnLiveSub = findViewById(R.id.btnLiveSub)
+        btnAudioMode = findViewById(R.id.btnAudioMode)
         val btnAb = findViewById<MaterialButton>(R.id.btnAbRepeat)
         lockOverlay = findViewById(R.id.lockOverlay)
         btnDownload = findViewById(R.id.btnDownload)
@@ -286,6 +288,7 @@ class PlayerActivity : AppCompatActivity() {
         btnLock.setOnClickListener { toggleLock() }
         btnMore.setOnClickListener { showMoreMenu() }
         btnLiveSub.setOnClickListener { toggleLiveSubtitle() }
+        btnAudioMode.setOnClickListener { switchToAudioMode() }
         btnAb.setOnClickListener { cycleAbRepeat() }
         lockOverlay.setOnClickListener { toggleLock() }
         btnDownload.setOnClickListener { startDownload() }
@@ -1861,7 +1864,6 @@ class PlayerActivity : AppCompatActivity() {
     // ========== ⋯ 더보기 메뉴 ==========
     private fun showMoreMenu() {
         val items = arrayOf(
-            "🎵 오디오 모드로 전환",
             "✏️ 현재 시점에 메모",
             "📒 메모 목록",
             "🎞 화질 선택",
@@ -1880,7 +1882,6 @@ class PlayerActivity : AppCompatActivity() {
             .setTitle("더보기")
             .setItems(items) { _, i ->
                 when (i) {
-                    0 -> switchToAudioMode()
                     1 -> addNote()
                     2 -> showNoteList()
                     3 -> showQualityDialog()
