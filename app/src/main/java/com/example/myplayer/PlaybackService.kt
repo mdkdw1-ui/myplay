@@ -195,5 +195,8 @@ class PlaybackService : MediaSessionService() {
     companion object {
         var exoPlayer: ExoPlayer? = null
             private set
+
+        /** (호환용) 예전 Activity 핸들러 */
+        var nextTrackHandler: (() -> Unit)? = null
     }
 }
