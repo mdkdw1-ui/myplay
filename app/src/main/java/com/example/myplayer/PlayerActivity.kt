@@ -78,6 +78,7 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var btnShare: MaterialButton
     private lateinit var btnLock: MaterialButton
     private lateinit var btnMore: MaterialButton
+    private lateinit var btnLiveSub: MaterialButton
     private lateinit var lockOverlay: View
     private var isLocked = false
     private var pipAspect: Float = 16f / 9f
@@ -157,6 +158,7 @@ class PlayerActivity : AppCompatActivity() {
         btnShare = findViewById(R.id.btnShare)
         btnLock = findViewById(R.id.btnLock)
         btnMore = findViewById(R.id.btnMore)
+        btnLiveSub = findViewById(R.id.btnLiveSub)
         val btnAb = findViewById<MaterialButton>(R.id.btnAbRepeat)
         lockOverlay = findViewById(R.id.lockOverlay)
         btnDownload = findViewById(R.id.btnDownload)
@@ -283,6 +285,7 @@ class PlayerActivity : AppCompatActivity() {
         findViewById<View>(R.id.tvChannel).setOnClickListener { openChannelFromPlayer() }
         btnLock.setOnClickListener { toggleLock() }
         btnMore.setOnClickListener { showMoreMenu() }
+        btnLiveSub.setOnClickListener { toggleLiveSubtitle() }
         btnAb.setOnClickListener { cycleAbRepeat() }
         lockOverlay.setOnClickListener { toggleLock() }
         btnDownload.setOnClickListener { startDownload() }
@@ -1786,6 +1789,21 @@ class PlayerActivity : AppCompatActivity() {
         try { mediaProjection?.stop() } catch (e: Exception) { }
         mediaProjection = null
         liveSubtitleOverlay.visibility = View.GONE
+    }
+
+
+    private fun updateLiveSubButton() {
+        try {
+            if (liveSubtitleActive) {
+                btnLiveSub.setBackgroundColor(0xFFFF2D55.toInt())
+                btnLiveSub.setTextColor(0xFFFFFFFF.toInt())
+                btnLiveSub.text = "🎙 ON"
+            } else {
+                btnLiveSub.setBackgroundColor(0x33FFFFFF)
+                btnLiveSub.setTextColor(0xFFFFFFFF.toInt())
+                btnLiveSub.text = "🎙"
+            }
+        } catch (e: Exception) { }
     }
 
     private fun toggleFullscreen() {
