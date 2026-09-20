@@ -22,7 +22,7 @@ class GroqSttManager(private val apiKey: String) {
 
     private val api: GroqSttApi by lazy {
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
+            level = HttpLoggingInterceptor.Level.NONE
         }
         val client = OkHttpClient.Builder()
             .addInterceptor(logging)
@@ -40,6 +40,13 @@ class GroqSttManager(private val apiKey: String) {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val busy = AtomicBoolean(false)
+
+    // ★ Whisper 컨텍스트 (이전 텍스트)
+    private var lastContext: String = ""
+
+    fun reset() {
+        lastContext = ""
+    }
 
     fun transcribeChunk(
         pcmData: ByteArray,
@@ -61,13 +68,22 @@ class GroqSttManager(private val apiKey: String) {
                     file = body,
                     model = "whisper-large-v3-turbo".toRequestBody("text/plain".toMediaType()),
                     language = language.toRequestBody("text/plain".toMediaType()),
-                    format = "json".toRequestBody("text/plain".toMediaType())
+                    format = "json".toRequestBody("text/plain".toMediaType()),
+                    // ★ 이전 텍스트를 컨텍스트로 (Whisper 정확도↑)
+                    prompt = lastContext.toRequestBody("text/plain".toMediaType()),
+                    // ★ 0.0 = 일관성 최우선
+                    temperature = "0.0".toRequestBody("text/plain".toMediaType())
                 )
 
                 if (response.isSuccessful) {
-                    val text = response.body()?.text?.trim() ?: ""
-                    if (text.isNotBlank()) {
-                        withContext(Dispatchers.Main) { onResult(text) }
+                    val raw = response.body()?.text?.trim() ?: ""
+                    if (raw.isNotBlank()) {
+                        // ★ 이전 결과와 겹치는 부분 제거
+                        val cleaned = removeOverlap(lastContext, raw)
+                        if (cleaned.isNotBlank()) {
+                            lastContext = raw
+                            withContext(Dispatchers.Main) { onResult(cleaned) }
+                        }
                     }
                 } else {
                     val err = response.errorBody()?.string() ?: ""
@@ -81,6 +97,28 @@ class GroqSttManager(private val apiKey: String) {
                 busy.set(false)
             }
         }
+    }
+
+    /**
+     * ★ 이전 텍스트와 겹치는 접두사 제거
+     * 예: prev="안녕하세요 오늘은", curr="오늘은 날씨가" → "날씨가"
+     */
+    private fun removeOverlap(prev: String, curr: String): String {
+        if (prev.isBlank()) return curr
+        val prevWords = prev.split(" ").filter { it.isNotBlank() }
+        val currWords = curr.split(" ").filter { it.isNotBlank() }
+        if (prevWords.isEmpty() || currWords.isEmpty()) return curr
+
+        // 겹치는 접두사 탐색 (3~10단어)
+        val maxCheck = minOf(prevWords.size, currWords.size, 10)
+        for (n in maxCheck downTo 3) {
+            val prevTail = prevWords.takeLast(n).joinToString(" ")
+            val currHead = currWords.take(n).joinToString(" ")
+            if (prevTail == currHead) {
+                return currWords.drop(n).joinToString(" ").trim()
+            }
+        }
+        return curr
     }
 
     private fun pcmToWav(pcm: ByteArray, sampleRate: Int, channels: Int, bitsPerSample: Int): ByteArray {

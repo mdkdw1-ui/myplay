@@ -1751,6 +1751,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun startLiveCapture() {
         val mp = mediaProjection ?: return
         if (liveGroqManager == null) liveGroqManager = GroqSttManager(BuildConfig.GROQ_API_KEY)
+        liveGroqManager?.reset()
         liveSubtitleActive = true
         liveSubtitleOverlay.visibility = View.VISIBLE
         liveBuilder.setLength(0)
@@ -1855,7 +1856,7 @@ class PlayerActivity : AppCompatActivity() {
             "📐 PIP 크기",
             "🖼 홈 누르면 자동 PiP",
             "⚙️ 자막 스타일",
-            "🎙 실시간 자막 " + (if (liveSubtitleActive) "OFF" else "ON")
+            if (liveSubtitleActive) "🔴 실시간 자막 끄기" else "🟢 실시간 자막 켜기"
         )
         AlertDialog.Builder(this)
             .setTitle("더보기")
