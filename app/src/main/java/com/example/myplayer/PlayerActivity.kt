@@ -268,6 +268,8 @@ class PlayerActivity : AppCompatActivity() {
             if (!videoId.isNullOrBlank()) refreshBookmarkState(videoId)
         }, MoreExecutors.directExecutor())
 
+        updateLiveSubButton()
+
         btnSpeed.setOnClickListener { showSpeedDialog() }
         findViewById<View>(R.id.btnFullscreen).setOnClickListener { toggleFullscreen() }
         findViewById<View>(R.id.btnPip).apply {
@@ -1759,6 +1761,7 @@ class PlayerActivity : AppCompatActivity() {
         if (liveGroqManager == null) liveGroqManager = GroqSttManager(BuildConfig.GROQ_API_KEY)
         liveGroqManager?.reset()
         liveSubtitleActive = true
+        updateLiveSubButton()
         liveSubtitleOverlay.visibility = View.VISIBLE
         liveBuilder.setLength(0)
         tvLiveSubtitle.text = ""
@@ -1787,6 +1790,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun stopLiveSubtitle() {
         liveSubtitleActive = false
+        updateLiveSubButton()
         liveCaptureManager?.stop()
         liveCaptureManager = null
         try { mediaProjection?.stop() } catch (e: Exception) { }
@@ -1797,15 +1801,10 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun updateLiveSubButton() {
         try {
-            if (liveSubtitleActive) {
-                btnLiveSub.setBackgroundColor(0xFFFF2D55.toInt())
-                btnLiveSub.setTextColor(0xFFFFFFFF.toInt())
-                btnLiveSub.text = "🎙 ON"
-            } else {
-                btnLiveSub.setBackgroundColor(0x33FFFFFF)
-                btnLiveSub.setTextColor(0xFFFFFFFF.toInt())
-                btnLiveSub.text = "🎙"
-            }
+            val color = if (liveSubtitleActive) 0xFFFF2D55.toInt() else 0x33FFFFFF.toInt()
+            btnLiveSub.backgroundTintList = android.content.res.ColorStateList.valueOf(color)
+            btnLiveSub.setTextColor(0xFFFFFFFF.toInt())
+            btnLiveSub.text = if (liveSubtitleActive) "🎙 ON" else "🎙"
         } catch (e: Exception) { }
     }
 
@@ -2002,6 +2001,11 @@ class PlayerActivity : AppCompatActivity() {
                 val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
                 mediaProjection = mpm.getMediaProjection(resultCode, data)
                 startLiveCapture()
+            } else {
+                // ★ 권한 취소 → 상태 OFF 유지
+                liveSubtitleActive = false
+                updateLiveSubButton()
+                Toast.makeText(this, "화면 캡처 권한 취소됨", Toast.LENGTH_SHORT).show()
             }
             return
         }
