@@ -3,8 +3,6 @@ package com.example.myplayer
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.media.projection.MediaProjection
-import android.media.projection.MediaProjectionManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
@@ -57,10 +55,6 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var sameArtistMode: Boolean = false
     private var loadingNext = false
     private var audioLiveActive = false
-    private var audioLiveGroq: GroqSttManager? = null
-    private var audioLiveCapture: AudioCaptureManager? = null
-    private var audioLiveProjection: MediaProjection? = null
-    private var audioLiveDotAnimator: android.animation.ValueAnimator? = null
     private var reuseStreamUrl: String = ""
     private var reuseSubtitleUrl: String = ""
 
@@ -539,129 +533,14 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     // ========== 🎙 실시간 자막 (오디오 모드) ==========
     private fun toggleAudioLiveSubtitle() {
-        if (audioLiveActive) {
-            stopAudioLiveSubtitle()
-            return
-        }
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
-            Toast.makeText(this, "Android 10+ 필요", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (BuildConfig.GROQ_API_KEY.isBlank()) {
-            Toast.makeText(this, "GROQ_API_KEY 없음", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        @Suppress("DEPRECATION")
-        startActivityForResult(mpm.createScreenCaptureIntent(), REQ_AUDIO_LIVE_MP)
+        startActivity(Intent(this, LiveSubtitleActivity::class.java))
     }
 
-    private fun startAudioLiveCapture() {
-        val mp = audioLiveProjection ?: return
-        if (audioLiveGroq == null) audioLiveGroq = GroqSttManager(BuildConfig.GROQ_API_KEY)
-        audioLiveGroq?.reset()
-        audioLiveActive = true
-        updateAudioLiveSubButton()
-        showAudioLiveOverlay()
-
-        audioLiveCapture = AudioCaptureManager(this) { chunk ->
-            audioLiveGroq?.transcribeChunk(chunk, "ko",
-                onResult = { text ->
-                    runOnUiThread { appendAudioLiveText(text) }
-                },
-                onError = { }
-            )
-        }
-        if (audioLiveCapture?.start(mp) != true) {
-            Toast.makeText(this, "캡처 실패", Toast.LENGTH_SHORT).show()
-            stopAudioLiveSubtitle()
-            return
-        }
-        Toast.makeText(this, "🟢 실시간 자막 ON", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun stopAudioLiveSubtitle() {
+    override fun onResume() {
+        super.onResume()
+        // LiveSubtitleActivity에서 돌아오면 상태 재확인
         audioLiveActive = false
         updateAudioLiveSubButton()
-        audioLiveCapture?.stop()
-        audioLiveCapture = null
-        try { audioLiveProjection?.stop() } catch (e: Exception) { }
-        audioLiveProjection = null
-        hideAudioLiveOverlay()
-        Toast.makeText(this, "🔴 실시간 자막 OFF", Toast.LENGTH_SHORT).show()
-    }
-
-    private var audioLiveOverlay: android.widget.TextView? = null
-    private val audioLiveBuilder = StringBuilder()
-    private var audioLiveLast = ""
-
-    private fun showAudioLiveOverlay() {
-        if (audioLiveOverlay != null) return
-        audioLiveBuilder.setLength(0)
-        audioLiveLast = ""
-        val tv = android.widget.TextView(this).apply {
-            setTextColor(0xFFF5F5F7.toInt())
-            textSize = 15f
-            setPadding(30, 30, 30, 30)
-            setBackgroundColor(0xCC000000.toInt())
-            maxLines = 3
-            ellipsize = android.text.TextUtils.TruncateAt.START
-            layoutParams = android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = android.view.Gravity.BOTTOM
-                bottomMargin = 200
-                marginStart = 20
-                marginEnd = 20
-            }
-        }
-        (findViewById<android.view.View>(android.R.id.content) as android.widget.FrameLayout)
-            .addView(tv)
-        audioLiveOverlay = tv
-    }
-
-    private fun hideAudioLiveOverlay() {
-        audioLiveOverlay?.let {
-            (it.parent as? android.view.ViewGroup)?.removeView(it)
-        }
-        audioLiveOverlay = null
-    }
-
-    private fun appendAudioLiveText(text: String) {
-        val cleaned = if (audioLiveLast.isNotEmpty() && text.startsWith(audioLiveLast))
-            text.removePrefix(audioLiveLast).trim() else text
-        if (cleaned.isNotBlank()) {
-            audioLiveLast = text
-            audioLiveBuilder.append(cleaned).append(" ")
-            audioLiveOverlay?.text = audioLiveBuilder.toString().trim()
-        }
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_AUDIO_LIVE_MP) {
-            if (resultCode == RESULT_OK && data != null) {
-                val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                audioLiveProjection = mpm.getMediaProjection(resultCode, data)
-                startAudioLiveCapture()
-            }
-            return
-        }
-    }
-
-
-    private fun updateAudioLiveSubButton() {
-        try {
-            if (audioLiveActive) {
-                btnLiveSub.setTextColor(0xFFFF2D55.toInt())
-                btnLiveSub.text = "🎙 ON"
-            } else {
-                btnLiveSub.setTextColor(0xFF8E8E93.toInt())
-                btnLiveSub.text = "🎙"
-            }
-        } catch (e: Exception) { }
     }
 
     private fun attachListeners() {
@@ -807,13 +686,8 @@ class AudioPlayerActivity : AppCompatActivity() {
         else String.format("%d:%02d", m, s)
     }
 
-    companion object {
-        private const val REQ_AUDIO_LIVE_MP = 7200
-    }
-
     override fun onDestroy() {
         super.onDestroy()
-        if (audioLiveActive) stopAudioLiveSubtitle()
         PlaybackService.nextTrackHandler = null
         releaseWakeLock()
         stopAnimation()
