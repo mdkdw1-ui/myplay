@@ -35,7 +35,8 @@ object YouTubeStream {
         val debug: String,
         val subtitles: List<SubtitleTrack> = emptyList(),
         val qualities: List<VideoQuality> = emptyList(),
-        val audioUrlBest: String? = null
+        val audioUrlBest: String? = null,
+        val isLive: Boolean = false
     ) {
         val hasAny: Boolean
             get() = muxedUrl != null || videoUrl != null || audioUrl != null
@@ -57,6 +58,7 @@ object YouTubeStream {
             val title = info.name ?: ""
             val channelName = try { info.uploaderName ?: "" } catch (e: Exception) { "" }
             val description = try { info.description?.content ?: "" } catch (e: Exception) { "" }
+            val isLive = try { info.isLive } catch (e: Exception) { false }
 
             // 자막
             val subtitleList = mutableListOf<SubtitleTrack>()
@@ -123,11 +125,11 @@ object YouTubeStream {
 
             when {
                 video != null && audio != null ->
-                    StreamResult(video.content, audio.content, null, title, channelName, description, sb.toString(), subtitleList, sortedQualities, bestAudio)
+                    StreamResult(video.content, audio.content, null, title, channelName, description, sb.toString(), subtitleList, sortedQualities, bestAudio, isLive)
                 video != null ->
-                    StreamResult(video.content, null, null, title, channelName, description, sb.toString(), subtitleList, sortedQualities, bestAudio)
+                    StreamResult(video.content, null, null, title, channelName, description, sb.toString(), subtitleList, sortedQualities, bestAudio, isLive)
                 audio != null ->
-                    StreamResult(null, audio.content, null, title, channelName, description, sb.toString(), subtitleList, sortedQualities, bestAudio)
+                    StreamResult(null, audio.content, null, title, channelName, description, sb.toString(), subtitleList, sortedQualities, bestAudio, isLive)
                 else -> StreamResult(null, null, null, title, channelName, description, sb.toString(), subtitleList, sortedQualities, bestAudio)
             }
         } catch (e: Exception) {

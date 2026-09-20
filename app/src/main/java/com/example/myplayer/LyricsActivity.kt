@@ -36,9 +36,8 @@ class LyricsActivity : AppCompatActivity() {
         val videoId = intent.getStringExtra("VIDEO_ID") ?: ""
         val title = intent.getStringExtra("VIDEO_TITLE") ?: ""
         val channel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
+        val artist = intent.getStringExtra("VIDEO_ARTIST") ?: channel
         val subtitleUrl = intent.getStringExtra("SUBTITLE_URL") ?: ""
-
-        Log.d("LyricsActivity", "videoId=$videoId, subUrl=${subtitleUrl.take(80)}")
 
         findViewById<TextView>(R.id.tvTitle).text = title
         findViewById<TextView>(R.id.tvChannel).text = channel
@@ -60,42 +59,43 @@ class LyricsActivity : AppCompatActivity() {
             startSync()
         }, MoreExecutors.directExecutor())
 
-        if (subtitleUrl.isBlank()) {
-            tvEmpty.visibility = View.VISIBLE
-            tvEmpty.text = "🎤\n\n이 곡은 자막/가사가 없습니다"
-            progress.visibility = View.GONE
-            return
-        }
-
         progress.visibility = View.VISIBLE
+
         lifecycleScope.launch {
-            lyricLines = LyricsParser.fetchLyrics(subtitleUrl)
+            // 1차: YouTube 자막 시도
+            var lines: List<LyricLine> = emptyList()
+            if (subtitleUrl.isNotBlank()) {
+                lines = LyricsParser.fetchLyrics(subtitleUrl)
+                Log.d("LyricsActivity", "YouTube subs: ${lines.size}")
+            }
+
+            // 2차: YouTube 자막 없으면 lyrics.ovh
+            if (lines.isEmpty()) {
+                Log.d("LyricsActivity", "fallback to lyrics.ovh")
+                val text = LyricsFetcher.fetch(artist, title)
+                if (text != null) {
+                    // 가사 텍스트를 LyricLine으로 변환 (타임스탬프 없이)
+                    val textLines = text.split("\n")
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                    lines = textLines.mapIndexed { i, t ->
+                        LyricLine((i * 5000L), t)  // 5초 간격 가짜 타임스탬프
+                    }
+                    Log.d("LyricsActivity", "lyrics.ovh: ${lines.size}")
+                }
+            }
+
             progress.visibility = View.GONE
 
-            Log.d("LyricsActivity", "loaded ${lyricLines.size} lines")
-
-            if (lyricLines.isEmpty()) {
+            if (lines.isEmpty()) {
                 tvEmpty.visibility = View.VISIBLE
-                tvEmpty.text = "🎤\n\n가사를 불러올 수 없습니다\n(자막 URL: ${subtitleUrl.take(40)}...)"
-                Toast.makeText(
-                    this@LyricsActivity,
-                    "가사 0줄 (자막 서버 응답 없음)",
-                    Toast.LENGTH_LONG
-                ).show()
+                tvEmpty.text = "🎤\n\n가사를 찾을 수 없습니다\n(YouTube 자막 X, lyrics.ovh 실패)"
+                Toast.makeText(this@LyricsActivity, "가사 없음", Toast.LENGTH_LONG).show()
             } else {
                 tvEmpty.visibility = View.GONE
                 recycler.visibility = View.VISIBLE
-                adapter.submit(lyricLines)
-
-                // 초기 스크롤
-                val pos = mediaController?.currentPosition ?: 0L
-                val idx = lyricLines.indexOfLast { it.startMs <= pos }
-                if (idx >= 0) {
-                    recycler.post {
-                        (recycler.layoutManager as? LinearLayoutManager)
-                            ?.scrollToPositionWithOffset(idx, recycler.height / 3)
-                    }
-                }
+                lyricLines = lines
+                adapter.submit(lines)
             }
         }
     }
@@ -115,7 +115,7 @@ class LyricsActivity : AppCompatActivity() {
                             ?.scrollToPositionWithOffset(idx, recycler.height / 3)
                     }
                 }
-                delay(300)
+                delay(500)
             }
         }
     }
