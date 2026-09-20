@@ -137,6 +137,8 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         acquireWakeLock()
 
+        updateAudioLiveSubButton()
+
         val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
         controllerFuture.addListener({
@@ -573,16 +575,40 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         btnRepeat.setOnClickListener { toggleRepeat() }
         btnLiveSub.setOnClickListener { toggleAudioLiveSubtitle() }
+        findViewById<MaterialButton>(R.id.btnMoreAudio).setOnClickListener {
+            AlertDialog.Builder(this)
+                .setItems(arrayOf(
+                    "🎛 이퀄라이저",
+                    "👎 싫어요 (다음부터 제외)",
+                    "📺 영상 모드로 전환",
+                    "🎚 재생 속도"
+                )) { _, which ->
+                    when (which) {
+                        0 -> showEqDialog()
+                        1 -> dislikeCurrent()
+                        2 -> {
+                            val pos = mediaController?.currentPosition ?: 0L
+                            startActivity(Intent(this, PlayerActivity::class.java).apply {
+                                putExtra("VIDEO_ID", currentVideoId)
+                                putExtra("VIDEO_TITLE", currentTitle)
+                                putExtra("VIDEO_CHANNEL", currentChannel)
+                                putExtra("VIDEO_THUMB", currentThumb)
+                                putExtra("IS_SAME_VIDEO", true)
+                                putExtra("CURRENT_POS", pos)
+                            })
+                            finish()
+                        }
+                        3 -> showSpeedDialog()
+                    }
+                }
+                .show()
+        }
         btnRepeat.setOnLongClickListener { dislikeCurrent(); true }
         btnSpeed.setOnClickListener { showSpeedDialog() }
 
         findViewById<MaterialButton>(R.id.btnLyrics).setOnClickListener { openLyrics() }
         findViewById<MaterialButton>(R.id.btnEq).setOnClickListener { showEqDialog() }
         findViewById<MaterialButton>(R.id.btnDislike).setOnClickListener { dislikeCurrent() }
-        findViewById<MaterialButton>(R.id.btnDislike).setOnLongClickListener {
-            toggleAudioLiveSubtitle()
-            true
-        }
         findViewById<MaterialButton>(R.id.btnVideoMode).setOnClickListener {
             startActivity(Intent(this, PlayerActivity::class.java).apply {
                 putExtra("VIDEO_ID", currentVideoId)
