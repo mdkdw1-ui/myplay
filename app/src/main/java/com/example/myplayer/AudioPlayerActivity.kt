@@ -257,6 +257,19 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
 
             val result = YouTubeStream.extract(videoId)
+
+            // ★ 라이브 스킵
+            if (result.isLive) {
+                android.util.Log.d("AudioPlayer", "skip LIVE: $videoId")
+                runOnUiThread {
+                    Toast.makeText(this@AudioPlayerActivity, "라이브는 오디오 모드 제외", Toast.LENGTH_SHORT).show()
+                }
+                loadingNext = false
+                // 자동으로 다음 곡
+                bgScope.launch { delay(500); playNextRelatedBg() }
+                return@launch
+            }
+
             val url = result.audioUrlBest
                 ?: result.audioUrl
                 ?: result.muxedUrl
@@ -429,6 +442,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             putExtra("VIDEO_ID", currentVideoId)
             putExtra("VIDEO_TITLE", currentTitle)
             putExtra("VIDEO_CHANNEL", currentChannel)
+            putExtra("VIDEO_ARTIST", currentArtist.ifBlank { currentChannel })
             putExtra("SUBTITLE_URL", currentSubtitleUrl)
         })
     }
