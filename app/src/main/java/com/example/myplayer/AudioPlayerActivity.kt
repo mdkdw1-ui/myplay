@@ -584,6 +584,14 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
+
+    private fun updateLyricsButtonLabel() {
+        try {
+            val btn = findViewById<MaterialButton>(R.id.btnLyrics) ?: return
+            btn.text = if (currentSubtitleUrl.isNotBlank()) "📝" else "📜"
+        } catch (e: Exception) { }
+    }
+
     private fun attachListeners() {
         val mc = mediaController ?: return
 
