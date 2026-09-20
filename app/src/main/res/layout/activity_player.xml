@@ -303,6 +303,36 @@
                 android:textSize="13sp" />
         </LinearLayout>
 
+        <!-- 실시간 자막 오버레이 -->
+        <LinearLayout
+            android:id="@+id/liveSubtitleOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:background="#CC000000"
+            android:orientation="vertical"
+            android:padding="10dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🎙 실시간 자막 (Groq)"
+                android:textColor="#AAAAAA"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/tvLiveSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="#F5F5F7"
+                android:textSize="15sp"
+                android:lineSpacingExtra="2dp"
+                android:maxLines="3"
+                android:ellipsize="start" />
+        </LinearLayout>
+
         <!-- 자동 다음 오버레이 -->
         <LinearLayout
             android:id="@+id/autoNextOverlay"

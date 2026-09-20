@@ -13,6 +13,8 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.media.AudioManager
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -98,6 +100,14 @@ class PlayerActivity : AppCompatActivity() {
     private var mediaController: MediaController? = null
 
     private var isFullscreen = false
+    private var liveSubtitleActive = false
+    private var mediaProjection: MediaProjection? = null
+    private var liveCaptureManager: AudioCaptureManager? = null
+    private var liveGroqManager: GroqSttManager? = null
+    private lateinit var liveSubtitleOverlay: View
+    private lateinit var tvLiveSubtitle: TextView
+    private val liveBuilder = StringBuilder()
+    private var lastLiveText = ""
     private var currentSpeed = 1.0f
 
     private var subtitleTracks: List<SubtitleTrack> = emptyList()
@@ -137,6 +147,8 @@ class PlayerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_player)
 
         playerView = findViewById(R.id.playerView)
+        liveSubtitleOverlay = findViewById(R.id.liveSubtitleOverlay)
+        tvLiveSubtitle = findViewById(R.id.tvLiveSubtitle)
         btnSpeed = findViewById(R.id.btnSpeed)
         btnCc = findViewById(R.id.btnCc)
         btnTranscript = findViewById(R.id.btnTranscript)
@@ -1714,6 +1726,66 @@ class PlayerActivity : AppCompatActivity() {
         ).show()
     }
 
+
+    // ========== 🎙 실시간 자막 (Groq Whisper) ==========
+    private fun toggleLiveSubtitle() {
+        if (liveSubtitleActive) {
+            stopLiveSubtitle()
+            return
+        }
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+            Toast.makeText(this, "Android 10+ 필요", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val apiKey = BuildConfig.GROQ_API_KEY
+        if (apiKey.isBlank()) {
+            Toast.makeText(this, "GROQ_API_KEY 없음", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        @Suppress("DEPRECATION")
+        startActivityForResult(mpm.createScreenCaptureIntent(), REQ_LIVE_MP)
+    }
+
+    private fun startLiveCapture() {
+        val mp = mediaProjection ?: return
+        if (liveGroqManager == null) liveGroqManager = GroqSttManager(BuildConfig.GROQ_API_KEY)
+        liveSubtitleActive = true
+        liveSubtitleOverlay.visibility = View.VISIBLE
+        liveBuilder.setLength(0)
+        tvLiveSubtitle.text = ""
+        lastLiveText = ""
+        liveCaptureManager = AudioCaptureManager(this) { chunk ->
+            liveGroqManager?.transcribeChunk(chunk, "ko",
+                onResult = { text ->
+                    val newText = if (lastLiveText.isNotEmpty() && text.startsWith(lastLiveText))
+                        text.removePrefix(lastLiveText).trim() else text
+                    if (newText.isNotBlank()) {
+                        lastLiveText = text
+                        liveBuilder.append(newText).append(" ")
+                        tvLiveSubtitle.text = liveBuilder.toString().trim()
+                    }
+                },
+                onError = { }
+            )
+        }
+        if (liveCaptureManager?.start(mp) != true) {
+            Toast.makeText(this, "캡처 실패", Toast.LENGTH_SHORT).show()
+            stopLiveSubtitle()
+            return
+        }
+        Toast.makeText(this, "🎙 실시간 자막 시작", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun stopLiveSubtitle() {
+        liveSubtitleActive = false
+        liveCaptureManager?.stop()
+        liveCaptureManager = null
+        try { mediaProjection?.stop() } catch (e: Exception) { }
+        mediaProjection = null
+        liveSubtitleOverlay.visibility = View.GONE
+    }
+
     private fun toggleFullscreen() {
         val controller = window.insetsController ?: return
         if (!isFullscreen) {
@@ -1781,7 +1853,8 @@ class PlayerActivity : AppCompatActivity() {
             "📋 재생 대기열",
             "📐 PIP 크기",
             "🖼 홈 누르면 자동 PiP",
-            "⚙️ 자막 스타일"
+            "⚙️ 자막 스타일",
+            "🎙 실시간 자막 " + (if (liveSubtitleActive) "OFF" else "ON")
         )
         AlertDialog.Builder(this)
             .setTitle("더보기")
@@ -1800,7 +1873,9 @@ class PlayerActivity : AppCompatActivity() {
                     9 -> showPipSizeDialog()
                     10 -> toggleAutoPip()
                     11 -> showSubtitleStyleDialog()
-                }
+                
+                12 -> toggleLiveSubtitle()
+            }
             }
             .show()
     }
@@ -1888,6 +1963,7 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        if (liveSubtitleActive) stopLiveSubtitle()
         sbCheckJob?.cancel()
         previewJob?.cancel()
         abJob?.cancel()
@@ -1900,6 +1976,14 @@ class PlayerActivity : AppCompatActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_LIVE_MP) {
+            if (resultCode == RESULT_OK && data != null) {
+                val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                mediaProjection = mpm.getMediaProjection(resultCode, data)
+                startLiveCapture()
+            }
+            return
+        }
         if (requestCode == REQ_TRANSCRIPT && resultCode == RESULT_OK) {
             val seekMs = data?.getLongExtra("SEEK_MS", -1L) ?: -1L
             if (seekMs >= 0) {
@@ -1907,6 +1991,10 @@ class PlayerActivity : AppCompatActivity() {
                 Toast.makeText(this, "이동: ${formatTime(seekMs)}", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    companion object {
+        private const val REQ_LIVE_MP = 7100
     }
 
     override fun onDestroy() {
