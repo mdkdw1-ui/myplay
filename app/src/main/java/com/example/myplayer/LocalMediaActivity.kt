@@ -202,8 +202,10 @@ class LocalMediaActivity : AppCompatActivity() {
         val idx = list.indexOfFirst { it.id == media.id }
         if (idx < 0) return
 
+        // ★ 원형 순환: 선택한 곡부터 끝까지, 그다음 처음부터 선택곡 직전까지
         QueueManager.clear(this)
-        for (m in list) {
+        val rotated = list.drop(idx) + list.take(idx)
+        for (m in rotated) {
             QueueManager.addLocal(this, m)
         }
         QueueManager.setCurrent(this, "local:${media.id}")
