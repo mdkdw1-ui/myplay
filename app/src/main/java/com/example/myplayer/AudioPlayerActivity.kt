@@ -1,6 +1,7 @@
 package com.example.myplayer
 
 import android.content.ComponentName
+import android.view.View
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -176,7 +177,7 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         // Feature: 로컬 파일이면 영상 모드 버튼 숨김
         val isLocal = currentVideoId.startsWith("local:") || currentVideoId.isBlank()
-        findViewById<View?>(R.id.btnVideoMode)?.visibility = if (isLocal) View.GONE else View.VISIBLE
+        findViewById<View>(R.id.btnVideoMode)?.visibility = if (isLocal) View.GONE else View.VISIBLE
                 tvTitle.text = currentTitle
         tvChannel.text = currentChannel
         if (currentThumb.isNotEmpty()) {
