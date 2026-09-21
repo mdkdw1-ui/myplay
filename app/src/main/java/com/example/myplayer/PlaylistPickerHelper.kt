@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.LifecycleCoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -24,13 +25,13 @@ object PlaylistPickerHelper {
 
         scope.launch {
             val dao = HistoryDatabase.get(ctx).savedPlaylistDao()
-            val existing = try {
+            val existing: List<SavedPlaylistEntity> = try {
                 withContext(Dispatchers.IO) {
-                    // 기존 플레이리스트 목록 가져오기
-                    val flow = dao.getAllPlaylists()
-                    kotlinx.coroutines.flow.first(flow)
+                    dao.getAllPlaylists().first()
                 }
-            } catch (e: Exception) { emptyList() }
+            } catch (e: Exception) {
+                emptyList<SavedPlaylistEntity>()
+            }
 
             val options = mutableListOf<String>()
             options.add("➕ 새 플레이리스트 만들기")
