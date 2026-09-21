@@ -247,18 +247,44 @@ class AudioPlayerActivity : AppCompatActivity() {
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
         // 로컬 파일이면 YouTubeStream.extract 스킵
         if (videoId.startsWith("local:")) {
-            val uri = intent.getStringExtra("LOCAL_URI")
-            if (uri != null) {
-                bgScope.launch {
-                    try {
+            bgScope.launch {
+                try {
+                    // ★ 로컬 큐 전체를 ExoPlayer에 넣기 → 자동 다음곡
+                    val queue = QueueManager.get(this@AudioPlayerActivity)
+                    val localQueue = queue.filter { it.videoId.startsWith("local:") }
+                    if (localQueue.size >= 1) {
+                        // MediaStore에서 각 항목의 URI 조회
+                        val scan = LocalMediaScanner.scan(this@AudioPlayerActivity)
+                        val items = mutableListOf<MediaItem>()
+                        var startIdx = 0
+                        localQueue.forEachIndexed { idx, item ->
+                            val localId = item.videoId.removePrefix("local:").toLongOrNull()
+                            val found = scan.firstOrNull { it.id == localId }
+                            if (found != null) {
+                                items.add(MediaItem.fromUri(found.uri.toString()))
+                                if (item.videoId == videoId) startIdx = items.size - 1
+                            }
+                        }
+                        if (items.isNotEmpty()) {
+                            runOnUiThread {
+                                mediaController?.setMediaItems(items, startIdx, 0L)
+                                mediaController?.prepare()
+                                mediaController?.playWhenReady = true
+                            }
+                            return@launch
+                        }
+                    }
+                    // 폴백: LOCAL_URI 하나만
+                    val uri = intent.getStringExtra("LOCAL_URI")
+                    if (uri != null) {
                         val mi = MediaItem.fromUri(uri)
                         runOnUiThread {
                             mediaController?.setMediaItem(mi)
                             mediaController?.prepare()
                             mediaController?.playWhenReady = true
                         }
-                    } catch (e: Exception) { }
-                }
+                    }
+                } catch (e: Exception) { }
             }
             return
         }
@@ -446,8 +472,21 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
 
-        // ★ 로컬 전용 모드: 큐 소진 시 정지
+        // ★ 로컬 전용 모드: 큐에 로컬곡 남아있으면 그걸 재생, 없으면 정지
         if (localOnlyMode) {
+            val remainingLocal = QueueManager.get(this)
+                .filter { it.videoId.startsWith("local:") && it.videoId != currentVideoId }
+            if (remainingLocal.isNotEmpty()) {
+                val next = remainingLocal.first()
+                currentVideoId = next.videoId
+                currentTitle = next.title
+                currentChannel = next.channel
+                currentThumb = next.thumbnail
+                runOnUiThread { updateUI() }
+                loadAudio(next.videoId, isInitial = false)
+                loadingNext = false
+                return
+            }
             loadingNext = false
             runOnUiThread {
                 Toast.makeText(this@AudioPlayerActivity, "로컬 큐 끝", Toast.LENGTH_SHORT).show()

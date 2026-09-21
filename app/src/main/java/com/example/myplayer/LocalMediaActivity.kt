@@ -68,7 +68,10 @@ class LocalMediaActivity : AppCompatActivity() {
         tabs.addTab(tabs.newTab().setText("🎤 아티스트"))
         tabs.addTab(tabs.newTab().setText("🎵 전체"))
 
-        adapter = MediaAdapter { media -> playMedia(media) }
+        adapter = MediaAdapter(
+            onClick = { media -> playMedia(media) },
+            onDelete = { media -> confirmDelete(media) }
+        )
         groupAdapter = GroupAdapter { name ->
             currentGroup = name
             groupedMode = false
@@ -164,6 +167,28 @@ class LocalMediaActivity : AppCompatActivity() {
         }
     }
 
+    private fun confirmDelete(media: LocalMedia) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("삭제")
+            .setMessage("\"${media.title}\" 을(를) 기기에서 삭제할까요?")
+            .setPositiveButton("삭제") { _, _ ->
+                lifecycleScope.launch {
+                    val ok = LocalMediaScanner.delete(this@LocalMediaActivity, media)
+                    if (ok) {
+                        allMedia = allMedia.filter { it.id != media.id }
+                        Toast.makeText(this@LocalMediaActivity, "삭제됨", Toast.LENGTH_SHORT).show()
+                        render(findViewById(R.id.recycler))
+                    } else {
+                        Toast.makeText(this@LocalMediaActivity,
+                            "삭제 실패 (권한 또는 시스템 제약)",
+                            Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
     private fun playMedia(media: LocalMedia) {
         val list = if (currentGroup == null) allMedia else {
             when (currentTab) {
@@ -189,7 +214,10 @@ class LocalMediaActivity : AppCompatActivity() {
         })
     }
 
-    class MediaAdapter(val onClick: (LocalMedia) -> Unit) : RecyclerView.Adapter<MediaAdapter.VH>() {
+    class MediaAdapter(
+        val onClick: (LocalMedia) -> Unit,
+        val onDelete: (LocalMedia) -> Unit
+    ) : RecyclerView.Adapter<MediaAdapter.VH>() {
         private val items = mutableListOf<LocalMedia>()
         fun submit(list: List<LocalMedia>) {
             items.clear(); items.addAll(list); notifyDataSetChanged()
@@ -209,6 +237,15 @@ class LocalMediaActivity : AppCompatActivity() {
             holder.t2.textSize = 12f
             holder.itemView.setPadding(24, 28, 24, 28)
             holder.itemView.setOnClickListener { onClick(item) }
+            holder.itemView.setOnLongClickListener {
+                androidx.appcompat.app.AlertDialog.Builder(holder.itemView.context)
+                    .setTitle(item.title)
+                    .setItems(arrayOf("🗑 기기에서 삭제", "❌ 취소")) { _, w ->
+                        if (w == 0) onDelete(item)
+                    }
+                    .show()
+                true
+            }
         }
         override fun getItemCount() = items.size
         class VH(v: View) : RecyclerView.ViewHolder(v) {

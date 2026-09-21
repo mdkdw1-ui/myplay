@@ -1938,21 +1938,20 @@ class PlayerActivity : AppCompatActivity() {
             .setTitle("더보기")
             .setItems(items) { _, i ->
                 when (i) {
-                    1 -> addNote()
-                    2 -> showNoteList()
-                    3 -> showQualityDialog()
-                    4 -> toggleRepeat()
-                    5 -> toggleKeepScreenOn()
-                    6 -> showShareDialog()
-                    7 -> startDownload()
-                    8 -> openTranscript()
-                    9 -> startActivity(Intent(this, QueueActivity::class.java))
+                    0 -> addNote()
+                    1 -> showNoteList()
+                    2 -> showQualityDialog()
+                    3 -> toggleRepeat()
+                    4 -> toggleKeepScreenOn()
+                    5 -> showShareDialog()
+                    6 -> startDownload()
+                    7 -> openTranscript()
+                    8 -> startActivity(Intent(this, QueueActivity::class.java))
                     9 -> showPipSizeDialog()
                     10 -> toggleAutoPip()
                     11 -> showSubtitleStyleDialog()
-                
-                12 -> toggleLiveSubtitle()
-            }
+                    12 -> toggleLiveSubtitle()
+                }
             }
             .show()
     }

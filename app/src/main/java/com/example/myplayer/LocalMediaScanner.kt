@@ -95,4 +95,25 @@ object LocalMediaScanner {
         }
         out
     }
+
+    /** MediaStore에서 오디오 삭제 (Android 10+는 RecoverableSecurityException 가능) */
+    suspend fun delete(ctx: Context, media: LocalMedia): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val collection = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+            } else {
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            }
+            val uri = Uri.withAppendedPath(collection, media.id.toString())
+            val rows = ctx.contentResolver.delete(uri, null, null)
+            rows > 0
+        } catch (e: SecurityException) {
+            // Android 11+ 앱이 만든 파일 아니면 사용자 확인 필요
+            e.printStackTrace()
+            false
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
 }
