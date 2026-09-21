@@ -1,13 +1,18 @@
 package com.example.myplayer
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -24,6 +29,32 @@ class LocalMediaActivity : AppCompatActivity() {
     private lateinit var adapter: MediaAdapter
     private lateinit var groupAdapter: GroupAdapter
     private var currentGroup: String? = null
+
+    private val permLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        if (grants.values.all { it }) {
+            doScan()
+        } else {
+            Toast.makeText(this, "오디오 접근 권한이 필요합니다", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun requiredPerms(): Array<String> =
+        if (Build.VERSION.SDK_INT >= 33) {
+            arrayOf(Manifest.permission.READ_MEDIA_AUDIO)
+        } else {
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+
+    private fun ensurePermission(): Boolean {
+        val perms = requiredPerms()
+        val ok = perms.all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+        }
+        if (!ok) permLauncher.launch(perms)
+        return ok
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,12 +98,32 @@ class LocalMediaActivity : AppCompatActivity() {
             override fun onTabReselected(tab: TabLayout.Tab?) {}
         })
 
+        if (ensurePermission()) {
+            doScan()
+        } else {
+            progress.visibility = View.GONE
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 권한 부여 후 돌아오거나, 다른 앱에서 파일 추가한 경우 재스캔
+        if (allMedia.isEmpty() && ensurePermission()) {
+            doScan()
+        }
+    }
+
+    private fun doScan() {
+        val recycler = findViewById<RecyclerView>(R.id.recycler)
+        val progress = findViewById<View>(R.id.progress)
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
             allMedia = LocalMediaScanner.scan(this@LocalMediaActivity)
             progress.visibility = View.GONE
             if (allMedia.isEmpty()) {
-                Toast.makeText(this@LocalMediaActivity, "로컬 오디오 없음", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@LocalMediaActivity,
+                    "로컬 오디오 없음 · Music 폴더에 파일을 넣어주세요",
+                    Toast.LENGTH_LONG).show()
             } else {
                 Toast.makeText(this@LocalMediaActivity, "${allMedia.size}곡 발견", Toast.LENGTH_SHORT).show()
             }
@@ -125,10 +176,10 @@ class LocalMediaActivity : AppCompatActivity() {
         if (idx < 0) return
 
         QueueManager.clear(this)
-        for (i in (idx + 1) until list.size) {
-            val m = list[i]
+        for (m in list) {
             QueueManager.addLocal(this, m)
         }
+        QueueManager.setCurrent(this, "local:${media.id}")
 
         startActivity(Intent(this, AudioPlayerActivity::class.java).apply {
             putExtra("LOCAL_URI", media.uri.toString())

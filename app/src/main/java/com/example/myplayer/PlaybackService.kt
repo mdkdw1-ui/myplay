@@ -91,15 +91,17 @@ class PlaybackService : MediaSessionService() {
 
             if (currentVideoId.isBlank()) return null
 
-            // 1) 큐
+            // 1) 큐 (인덱스 기반, 삭제하지 않음)
             val queue = QueueManager.get(this)
-            val queueNext = queue.firstOrNull { it.videoId != currentVideoId }
-            if (queueNext != null) {
-                QueueManager.remove(this, queueNext.videoId)
-                return VideoItem(
-                    queueNext.videoId, queueNext.title,
-                    queueNext.channel, queueNext.thumbnail
-                )
+            val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+            if (curIdx >= 0 && curIdx < queue.size - 1) {
+                val next = queue[curIdx + 1]
+                if (next.videoId !in disliked) {
+                    return VideoItem(
+                        next.videoId, next.title,
+                        next.channel, next.thumbnail
+                    )
+                }
             }
 
             // 2) YouTubeRadio / YouTubeArtist

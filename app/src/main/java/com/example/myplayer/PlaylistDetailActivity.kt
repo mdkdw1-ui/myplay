@@ -79,11 +79,12 @@ class PlaylistDetailActivity : AppCompatActivity() {
         val idx = items.indexOfFirst { it.id == startItem.id }
         if (idx < 0) return
 
+        // Feature 8: 전체 플레이리스트를 큐에 넣음
         QueueManager.clear(this)
-        for (i in (idx + 1) until items.size) {
-            val v = items[i]
+        for (v in items) {
             QueueManager.add(this, HomeVideo(v.videoId, v.title, v.channel, v.thumbnail))
         }
+        QueueManager.setCurrent(this, startItem.videoId)
         startActivity(Intent(this, AudioPlayerActivity::class.java).apply {
             putExtra("VIDEO_ID", startItem.videoId)
             putExtra("VIDEO_TITLE", startItem.title)
