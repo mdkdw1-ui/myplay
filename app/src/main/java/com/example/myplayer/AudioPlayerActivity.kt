@@ -71,6 +71,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     )
 
     private var pref: android.content.SharedPreferences? = null
+    private var localOnlyMode: Boolean = false
 
     private lateinit var ivArt: ImageView
     private lateinit var ivBackground: ImageView
@@ -130,6 +131,19 @@ class AudioPlayerActivity : AppCompatActivity() {
         updateUI()
 
         sameArtistMode = pref?.getBoolean("same_artist_mode", false) ?: false
+        localOnlyMode = pref?.getBoolean("local_only_mode", false) ?: false
+        val swLocalOnly = findViewById<SwitchMaterial>(R.id.swLocalOnly)
+        swLocalOnly.isChecked = localOnlyMode
+        swLocalOnly.setOnCheckedChangeListener { _, checked ->
+            localOnlyMode = checked
+            pref?.edit()?.putBoolean("local_only_mode", checked)?.apply()
+            Toast.makeText(
+                this,
+                if (checked) "🎧 로컬 큐만 재생" else "🌐 유튜브 연관곡 사용",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
         val swArtist = findViewById<SwitchMaterial>(R.id.swSameArtist)
         swArtist.isChecked = sameArtistMode
         swArtist.setOnCheckedChangeListener { _, checked ->
@@ -432,6 +446,15 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
 
+        // ★ 로컬 전용 모드: 큐 소진 시 정지
+        if (localOnlyMode) {
+            loadingNext = false
+            runOnUiThread {
+                Toast.makeText(this@AudioPlayerActivity, "로컬 큐 끝", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
         QueueManager.clear(this)
 
         bgScope.launch {
@@ -442,7 +465,9 @@ class AudioPlayerActivity : AppCompatActivity() {
                     val artist = currentArtist.ifBlank { currentChannel }
                     YouTubeArtist.fetchSongs(artist, currentVideoId).filter { it.videoId !in disliked }
                 } else {
-                    YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel).filter { it.videoId !in disliked }
+                    YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                        .filter { it.videoId !in disliked }
+                        .filter { isMusicLike(it.title) }
                 }
             } catch (e: Exception) {
                 emptyList()
@@ -646,6 +671,17 @@ class AudioPlayerActivity : AppCompatActivity() {
             val btn = findViewById<MaterialButton>(R.id.btnLyrics) ?: return
             btn.text = if (currentSubtitleUrl.isNotBlank()) "📝" else "📜"
         } catch (e: Exception) { }
+    }
+
+    /** 음악 아닌 영상(말 많은 것) 필터 */
+    private fun isMusicLike(title: String): Boolean {
+        val badKeywords = listOf(
+            "뉴스", "속보", "인터뷰", "강연", "토크", "팟캐스트", "podcast",
+            "ep.", "회차", "라이브", "생방송", "예능", "드라마", "시사",
+            "뉴스룸", "긴급", "특집", "다큐", "설명", "강의",
+            "한국사", "역사", "과학", "다큐멘터리", "웨비나", "세미나"
+        )
+        return badKeywords.none { title.contains(it, ignoreCase = true) }
     }
 
     private fun attachListeners() {

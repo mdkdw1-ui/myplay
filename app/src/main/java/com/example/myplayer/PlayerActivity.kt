@@ -392,6 +392,21 @@ class PlayerActivity : AppCompatActivity() {
         autoNextOverlay.visibility = View.GONE
     }
 
+    /** 음악 아닌 영상(말 많은 것) 필터 */
+    private fun isMusicLike(item: com.example.myplayer.VideoItem): Boolean {
+        // 제목 키워드 필터
+        val badKeywords = listOf(
+            "뉴스", "속보", "인터뷰", "강연", "토크", "팟캐스트", "podcast",
+            "ep.", "회차", "라이브", "생방송", "예능", "드라마", "시사",
+            "뉴스룸", "속보", "긴급", "특집", "다큐", "설명", "강의",
+            "한국사", "역사", "과학", "다큐멘터리", "웨비나", "세미나"
+        )
+        if (badKeywords.any { item.title.contains(it, ignoreCase = true) }) return false
+        // 너무 짧은 영상 (쇼츠/클립) 제외
+        // (VideoItem에 durationMs가 없으면 스킵)
+        return true
+    }
+
     private fun playNextRelated() {
         // ★ 큐에 다음 영상이 있으면 큐 우선
         val queue = QueueManager.get(this)
@@ -1840,8 +1855,12 @@ class PlayerActivity : AppCompatActivity() {
 
 
     private fun showControls() {
-        val scroll = findViewById<View>(R.id.controlScroll) ?: return
-        scroll.visibility = View.VISIBLE
+        // 잠금 상태면 복원 안 함
+        if (isLocked) return
+        val scroll = findViewById<View>(R.id.controlScroll)
+        val bar = findViewById<View>(R.id.controlBar)
+        scroll?.visibility = View.VISIBLE
+        bar?.visibility = View.VISIBLE
         mainHandler.removeCallbacks(hideControlsRunnable)
         mainHandler.postDelayed(hideControlsRunnable, 180_000)
     }
