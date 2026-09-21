@@ -14,8 +14,8 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 class SearchAdapter(
-    private val onClick: (VideoItem) -> Unit,
-    private val onMultiSave: ((List<VideoItem>) -> Unit)? = null
+    private val onMultiSave: ((List<VideoItem>) -> Unit)? = null,
+    private val onClick: (VideoItem) -> Unit
 ) : RecyclerView.Adapter<SearchAdapter.VH>() {
 
     private val items = mutableListOf<VideoItem>()

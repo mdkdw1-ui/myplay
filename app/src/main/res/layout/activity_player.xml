@@ -548,4 +548,10 @@
                 android:textColor="@color/text_secondary" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+    <View
+        android:id="@+id/dragHintBox"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
+
 </LinearLayout>
