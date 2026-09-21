@@ -23,17 +23,22 @@ object LocalMediaScanner {
     suspend fun scan(ctx: Context): List<LocalMedia> = withContext(Dispatchers.IO) {
         val out = mutableListOf<LocalMedia>()
         try {
+            val isQ = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
+            val folderColumn = if (isQ)
+                MediaStore.Audio.Media.RELATIVE_PATH
+            else
+                MediaStore.Audio.Media.DATA
             val projection = arrayOf(
                 MediaStore.Audio.Media._ID,
                 MediaStore.Audio.Media.TITLE,
                 MediaStore.Audio.Media.ARTIST,
                 MediaStore.Audio.Media.ALBUM,
                 MediaStore.Audio.Media.DURATION,
-                MediaStore.Audio.Media.DATA,
+                folderColumn,
                 MediaStore.Audio.Media.MIME_TYPE,
                 MediaStore.Audio.Media.SIZE
             )
-            val collection = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val collection = if (isQ) {
                 MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
             } else {
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
@@ -48,7 +53,7 @@ object LocalMediaScanner {
                 val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
                 val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
                 val durCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-                val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                val dataCol = cursor.getColumnIndexOrThrow(folderColumn)
                 val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
                 val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
 
@@ -62,7 +67,15 @@ object LocalMediaScanner {
                     val mime = cursor.getString(mimeCol) ?: "audio/*"
                     val size = cursor.getLong(sizeCol)
 
-                    val folder = path.substringBeforeLast("/").substringAfterLast("/")
+                    val folder = if (isQ) {
+                        // RELATIVE_PATH 예: "Music/rock/" → "rock"
+                        val rel = path.trimEnd('/')
+                        rel.substringAfterLast('/').ifBlank { "내부 저장소" }
+                    } else {
+                        // DATA 경로에서 상위 폴더명
+                        path.substringBeforeLast("/").substringAfterLast("/")
+                            .ifBlank { "내부 저장소" }
+                    }
 
                     val uri = Uri.withAppendedPath(
                         MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id.toString()

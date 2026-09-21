@@ -37,17 +37,12 @@ class PlaylistActivity : AppCompatActivity() {
             // ★ 탭한 영상 + 나머지를 큐에 채워 순차 재생
             val all = currentList
             if (all.size > 1) {
+                // Feature 8: 전체 플레이리스트를 큐에 넣고 현재곡 지정
                 QueueManager.clear(this)
-                val idx = all.indexOfFirst { it.videoId == item.videoId }
-                if (idx >= 0) {
-                    // 현재 + 이후 영상만 큐에
-                    for (i in idx until all.size) {
-                        val v = all[i]
-                        if (v.videoId != item.videoId) {
-                            QueueManager.add(this, HomeVideo(v.videoId, v.title, v.channel, v.thumbnail))
-                        }
-                    }
+                for (v in all) {
+                    QueueManager.add(this, HomeVideo(v.videoId, v.title, v.channel, v.thumbnail))
                 }
+                QueueManager.setCurrent(this, item.videoId)
             }
 
             startActivity(Intent(this, PlayerActivity::class.java).apply {

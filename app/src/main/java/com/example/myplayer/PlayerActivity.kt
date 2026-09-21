@@ -885,7 +885,13 @@ class PlayerActivity : AppCompatActivity() {
             updateCcButton(autoSub != null)
             loadSponsorSegments(videoId)
             startPreviewWatcher()
-            buildSummary(videoId, finalTitle, result.description)
+            summaryCard.visibility = View.VISIBLE
+            tvSummaryBadge.text = "AI 요약 · 탭해서 생성"
+            tvSummary.text = "탭하면 Gemini가 자막을 요약합니다."
+            summaryCard.setOnClickListener {
+                summaryCard.setOnClickListener(null)
+                buildSummary(videoId, finalTitle, result.description)
+            }
             saveHistory(videoId, finalTitle, finalChannel, thumb, startPosMs)
         }
     }
@@ -1826,7 +1832,7 @@ class PlayerActivity : AppCompatActivity() {
         val scroll = findViewById<View>(R.id.controlScroll) ?: return
         scroll.visibility = View.VISIBLE
         mainHandler.removeCallbacks(hideControlsRunnable)
-        mainHandler.postDelayed(hideControlsRunnable, 3000)
+        mainHandler.postDelayed(hideControlsRunnable, 180_000)
     }
 
     private fun toggleFullscreen() {
