@@ -256,6 +256,23 @@
                 app:thumbTint="@color/switch_thumb"
                 app:trackTint="@color/switch_track"
                 app:useMaterialThemeColors="false" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:text="🎧 로컬 전용"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swLocalOnly"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                app:thumbTint="@color/switch_thumb"
+                app:trackTint="@color/switch_track"
+                app:useMaterialThemeColors="false" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>
