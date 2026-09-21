@@ -121,7 +121,8 @@ class LocalMediaActivity : AppCompatActivity() {
         val progress = findViewById<View>(R.id.progress)
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
-            allMedia = LocalMediaScanner.scan(this@LocalMediaActivity)
+            // 사용자가 화면 열 때 명시적 스캔 → 캐시 무효화 후 재스캔
+            allMedia = LocalMediaScanner.scan(this@LocalMediaActivity, forceRefresh = true)
             progress.visibility = View.GONE
             if (allMedia.isEmpty()) {
                 Toast.makeText(this@LocalMediaActivity,
@@ -175,6 +176,7 @@ class LocalMediaActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     val ok = LocalMediaScanner.delete(this@LocalMediaActivity, media)
                     if (ok) {
+                        LocalMediaScanner.invalidateCache()
                         allMedia = allMedia.filter { it.id != media.id }
                         Toast.makeText(this@LocalMediaActivity, "삭제됨", Toast.LENGTH_SHORT).show()
                         render(findViewById(R.id.recycler))

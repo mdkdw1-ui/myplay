@@ -394,6 +394,7 @@ class PlayerActivity : AppCompatActivity() {
 
     /** 음악 아닌 영상(말 많은 것) 필터 */
     private fun isMusicLike(item: com.example.myplayer.VideoItem): Boolean {
+        // 1) 제목 키워드 필터
         // 제목 키워드 필터
         val badKeywords = listOf(
             "뉴스", "속보", "인터뷰", "강연", "토크", "팟캐스트", "podcast",
@@ -435,7 +436,9 @@ class PlayerActivity : AppCompatActivity() {
                     list = YouTubeSearch.search(kw).filter { it.videoId != vid }
                 }
             }
-            val next = list.firstOrNull() ?: return@launch
+            // ★ 음악 아닌 영상(말 많은 것) 필터
+            val musicOnly = list.filter { isMusicLike(it) }
+            val next = (musicOnly.ifEmpty { list }).firstOrNull() ?: return@launch
 
             // ★ 같은 Activity에서 다음 영상 재생
             currentVideoId = next.videoId

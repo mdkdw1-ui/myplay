@@ -20,7 +20,32 @@ data class LocalMedia(
 
 object LocalMediaScanner {
 
-    suspend fun scan(ctx: Context): List<LocalMedia> = withContext(Dispatchers.IO) {
+    // ★ 캐시 (1분 TTL) — 매번 스캔하지 않음
+    @Volatile private var cached: List<LocalMedia>? = null
+    @Volatile private var cacheTime: Long = 0L
+    private const val CACHE_TTL_MS = 60_000L
+
+    fun invalidateCache() {
+        cached = null
+        cacheTime = 0L
+    }
+
+    suspend fun scan(
+        ctx: Context,
+        forceRefresh: Boolean = false
+    ): List<LocalMedia> = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val c = cached
+        if (!forceRefresh && c != null && now - cacheTime < CACHE_TTL_MS) {
+            return@withContext c
+        }
+        val result = scanInternal(ctx)
+        cached = result
+        cacheTime = System.currentTimeMillis()
+        result
+    }
+
+    private suspend fun scanInternal(ctx: Context): List<LocalMedia> = withContext(Dispatchers.IO) {
         val out = mutableListOf<LocalMedia>()
         try {
             val isQ = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
@@ -106,6 +131,7 @@ object LocalMediaScanner {
             }
             val uri = Uri.withAppendedPath(collection, media.id.toString())
             val rows = ctx.contentResolver.delete(uri, null, null)
+            if (rows > 0) invalidateCache()
             rows > 0
         } catch (e: SecurityException) {
             // Android 11+ 앱이 만든 파일 아니면 사용자 확인 필요

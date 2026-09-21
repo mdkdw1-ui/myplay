@@ -253,8 +253,8 @@ class AudioPlayerActivity : AppCompatActivity() {
                     val queue = QueueManager.get(this@AudioPlayerActivity)
                     val localQueue = queue.filter { it.videoId.startsWith("local:") }
                     if (localQueue.size >= 1) {
-                        // MediaStore에서 각 항목의 URI 조회
-                        val scan = LocalMediaScanner.scan(this@AudioPlayerActivity)
+                        // MediaStore에서 각 항목의 URI 조회 (캐시 활용)
+                        val scan = LocalMediaScanner.scan(this@AudioPlayerActivity, forceRefresh = false)
                         val items = mutableListOf<MediaItem>()
                         var startIdx = 0
                         localQueue.forEachIndexed { idx, item ->
@@ -477,7 +477,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 val localId = next.videoId.removePrefix("local:").toLongOrNull()
                 if (localId != null) {
                     bgScope.launch {
-                        val local = LocalMediaScanner.scan(this@AudioPlayerActivity)
+                        val local = LocalMediaScanner.scan(this@AudioPlayerActivity, forceRefresh = false)
                             .firstOrNull { it.id == localId }
                         if (local != null) {
                             runOnUiThread {
