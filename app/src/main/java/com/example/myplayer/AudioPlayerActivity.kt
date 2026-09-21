@@ -398,16 +398,37 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
         isPlayingFromHistory = false
 
+        // ★ Feature 8: 인덱스 기반 큐 (로컬 파일도 지원)
         val queue = QueueManager.get(this)
-        val queueNext = queue.firstOrNull { it.videoId != currentVideoId }
-        if (queueNext != null) {
-            QueueManager.remove(this, queueNext.videoId)
-            currentVideoId = queueNext.videoId
-            currentTitle = queueNext.title
-            currentChannel = queueNext.channel
-            currentThumb = queueNext.thumbnail
+        val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+        if (curIdx >= 0 && curIdx < queue.size - 1) {
+            val next = queue[curIdx + 1]
+            currentVideoId = next.videoId
+            currentTitle = next.title
+            currentChannel = next.channel
+            currentThumb = next.thumbnail
             runOnUiThread { updateUI() }
-            loadAudio(queueNext.videoId, isInitial = false)
+            // 로컬 파일이면 LOCAL_URI로 재생
+            if (next.videoId.startsWith("local:")) {
+                // QueueManager에서 저장한 로컬 정보가 없을 수 있어 LocalMedia에서 찾기
+                val localId = next.videoId.removePrefix("local:").toLongOrNull()
+                if (localId != null) {
+                    bgScope.launch {
+                        val local = LocalMediaScanner.scan(this@AudioPlayerActivity)
+                            .firstOrNull { it.id == localId }
+                        if (local != null) {
+                            runOnUiThread {
+                                val mi = androidx.media3.common.MediaItem.fromUri(local.uri.toString())
+                                mediaController?.setMediaItem(mi)
+                                mediaController?.prepare()
+                                mediaController?.playWhenReady = true
+                            }
+                        }
+                    }
+                }
+            } else {
+                loadAudio(next.videoId, isInitial = false)
+            }
             return
         }
 

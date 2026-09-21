@@ -308,6 +308,9 @@ class PlayerActivity : AppCompatActivity() {
         btnMore.setOnClickListener { showMoreMenu() }
         btnLiveSub.setOnClickListener { toggleLiveSubtitle() }
         btnAudioMode.setOnClickListener { switchToAudioMode() }
+
+        // ★ 하단 고정 컨트롤바
+        setupBottomControls()
         btnAb.setOnClickListener { cycleAbRepeat() }
         lockOverlay.setOnClickListener { toggleLock() }
         btnDownload.setOnClickListener { startDownload() }
@@ -2061,4 +2064,63 @@ class PlayerActivity : AppCompatActivity() {
         mediaController?.removeListener(playerListener)
         MediaController.releaseFuture(controllerFuture)
     }
+
+
+    /** 하단 고정 컨트롤바 (이전/5초뒤/재생/5초앞/다음) */
+    private fun setupBottomControls() {
+        val btnPrev = findViewById<android.widget.ImageButton>(R.id.btnPrevTrack)
+        val btnBack5 = findViewById<android.widget.ImageButton>(R.id.btnBack5)
+        val btnPlayPause = findViewById<android.widget.ImageButton>(R.id.btnPlayPause)
+        val btnFwd5 = findViewById<android.widget.ImageButton>(R.id.btnFwd5)
+        val btnNext = findViewById<android.widget.ImageButton>(R.id.btnNextTrack)
+
+        btnPrev.setOnClickListener {
+            val p = playerView.player ?: return@setOnClickListener
+            // 이전 곡: 큐에서 현재 위치 -1
+            val queue = QueueManager.get(this)
+            val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+            if (curIdx > 0) {
+                val prev = queue[curIdx - 1]
+                currentVideoId = prev.videoId
+                extractAndPlay(prev.videoId, prev.title, prev.channel, prev.thumbnail, 0L)
+            } else {
+                p.seekTo(0)   // 큐 처음이면 처음으로
+            }
+        }
+
+        btnBack5.setOnClickListener {
+            val p = playerView.player ?: return@setOnClickListener
+            p.seekTo((p.currentPosition - 5_000).coerceAtLeast(0))
+        }
+
+        btnPlayPause.setOnClickListener {
+            val p = playerView.player ?: return@setOnClickListener
+            if (p.isPlaying) p.pause() else p.play()
+        }
+
+        btnFwd5.setOnClickListener {
+            val p = playerView.player ?: return@setOnClickListener
+            val dur = p.duration
+            val newPos = p.currentPosition + 5_000
+            p.seekTo(if (dur > 0) newPos.coerceAtMost(dur) else newPos)
+        }
+
+        btnNext.setOnClickListener {
+            val queue = QueueManager.get(this)
+            val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+            if (curIdx >= 0 && curIdx < queue.size - 1) {
+                val next = queue[curIdx + 1]
+                currentVideoId = next.videoId
+                extractAndPlay(next.videoId, next.title, next.channel, next.thumbnail, 0L)
+            } else {
+                // 큐 끝: 유튜브 radio/artist 자동 확장
+                playNextRelated()
+            }
+        }
+
+        // playerView 탭 → 컨트롤 재표시
+        playerView.setOnClickListener { showControls() }
+    }
+
+
 }
