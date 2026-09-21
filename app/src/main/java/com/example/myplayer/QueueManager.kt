@@ -72,5 +72,21 @@ object QueueManager {
         save(ctx, list)
     }
 
+    
+    /** 로컬 파일 큐 추가 */
+    fun addLocal(ctx: Context, media: LocalMedia) {
+        val list = get(ctx)
+        if (list.any { it.videoId == "local:${media.id}" }) return
+        list.add(
+            HomeVideo(
+                videoId = "local:${media.id}",
+                title = media.title,
+                channel = media.artist,
+                thumbnail = ""
+            )
+        )
+        save(ctx, list)
+    }
+
     fun size(ctx: Context): Int = get(ctx).size
 }

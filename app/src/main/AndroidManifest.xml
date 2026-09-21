@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
     <application
         android:allowBackup="true"
@@ -39,6 +41,8 @@
         <activity android:name=".AudioHomeActivity" android:exported="false" android:label="오디오 홈" />
         <activity android:name=".AudioPlayerActivity" android:exported="false" android:label="오디오 모드" android:theme="@style/Theme.MyPlayer" />
         <activity android:name=".LyricsActivity" android:exported="false" android:label="가사" />
+        <activity android:name=".LocalMediaActivity" android:exported="false" android:label="로컬 파일" />
+        <activity android:name=".PlaylistDetailActivity" android:exported="false" android:label="플레이리스트" />
         <activity android:name=".LiveSubtitleActivity" android:exported="false" android:label="실시간 자막" android:theme="@style/Theme.MyPlayer" />
 
         <activity

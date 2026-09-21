@@ -21,219 +21,171 @@
             app:use_controller="true"
             app:show_buffering="when_playing" />
 
-        <LinearLayout
-            android:id="@+id/controlBar"
-            android:layout_width="wrap_content"
+        <!-- ★ 컨트롤바: HorizontalScrollView로 감싸서 넘침 방지 -->
+        <HorizontalScrollView
+            android:id="@+id/controlScroll"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom|end"
-            android:orientation="horizontal"
-            android:padding="8dp">
+            android:layout_gravity="bottom"
+            android:scrollbars="none"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="6dp">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnBookmark"
-                style="@style/Widget.MaterialComponents.Button"
+            <LinearLayout
+                android:id="@+id/controlBar"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="☆"
-                android:textSize="16sp"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="20dp" />
+                android:orientation="horizontal">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnShare"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:text="📤"
-                android:textSize="14sp"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:visibility="gone"
-                app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="20dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnBookmark"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="☆"
+                    android:textSize="14sp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    app:backgroundTint="#33FFFFFF"
+                    app:cornerRadius="20dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnDownload"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:text="📥"
-                android:textSize="14sp"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:visibility="gone"
-                app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="20dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSpeed"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:text="1.0x"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    app:backgroundTint="#33FFFFFF"
+                    app:cornerRadius="20dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnSpeed"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:text="1.0x"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="20dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCc"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:text="CC"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    app:backgroundTint="#33FFFFFF"
+                    app:cornerRadius="20dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnTranscript"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:text="📝"
-                android:textSize="14sp"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:visibility="gone"
-                app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="20dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnLiveSub"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:text="🎙"
+                    android:textSize="14sp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    app:backgroundTint="#33FFFFFF"
+                    app:cornerRadius="20dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnCc"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:text="CC"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="20dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAudioMode"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:text="🎵"
+                    android:textSize="14sp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    app:backgroundTint="#33FFFFFF"
+                    app:cornerRadius="20dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnQueue"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:text="📋"
-                android:textSize="14sp"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:visibility="gone"
-                app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="20dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPip"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:text="PiP"
+                    android:textSize="11sp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    app:backgroundTint="#33FFFFFF"
+                    app:cornerRadius="20dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnAbRepeat"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:text="A-B"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="20dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnFullscreen"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:text="Full"
+                    android:textSize="11sp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    app:backgroundTint="#33FFFFFF"
+                    app:cornerRadius="20dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnPip"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:text="PiP"
-                android:textSize="11sp"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="20dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnMore"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:text="⋯"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    app:backgroundTint="#33FFFFFF"
+                    app:cornerRadius="20dp" />
+            </LinearLayout>
+        </HorizontalScrollView>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnFullscreen"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:text="Full"
-                android:textSize="11sp"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="20dp" />
+        <!-- 숨겨진 (코드 호환용) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnShare"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDownload"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnTranscript"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnQueue"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnAbRepeat"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLock"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnAudioMode"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:text="🎵"
-                android:textSize="14sp"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="20dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnLiveSub"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:text="🎙"
-                android:textSize="14sp"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="20dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnLock"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:text="🔓"
-                android:textSize="14sp"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="20dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnMore"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:text="⋯"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="20dp" />
-        </LinearLayout>
-
-        <!-- 시크 오버레이 -->
         <FrameLayout
             android:id="@+id/seekOverlayLeft"
             android:layout_width="120dp"
@@ -268,70 +220,6 @@
                 android:textStyle="bold" />
         </FrameLayout>
 
-        <!-- ★ 자막 드래그 힌트 (강화) -->
-        <LinearLayout
-            android:id="@+id/dragHintBox"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top|center_horizontal"
-            android:layout_marginTop="16dp"
-            android:padding="10dp"
-            android:background="#CC000000"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="✋"
-                android:textSize="18sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="자막 이동 가능 · 손 떼면 저장"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/tvSubtitleHint"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top|center_horizontal"
-            android:layout_marginTop="16dp"
-            android:padding="8dp"
-            android:background="#CC000000"
-            android:text="👆 자막을 드래그해서 이동"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
-            android:visibility="gone" />
-
-        <!-- 잠금 오버레이 -->
-        <LinearLayout
-            android:id="@+id/lockOverlay"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="#00000000"
-            android:visibility="gone"
-            android:clickable="true"
-            android:focusable="true">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:padding="12dp"
-                android:background="#99000000"
-                android:text="🔒 잠금됨 · 탭해서 해제"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp" />
-        </LinearLayout>
-
-        <!-- 실시간 자막 오버레이 -->
         <LinearLayout
             android:id="@+id/liveSubtitleOverlay"
             android:layout_width="match_parent"
@@ -341,14 +229,25 @@
             android:orientation="vertical"
             android:padding="10dp"
             android:visibility="gone">
-
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="🎙 실시간 자막 (Groq)"
-                android:textColor="#AAAAAA"
-                android:textSize="10sp" />
-
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <View
+                    android:id="@+id/liveSubDot"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:background="@drawable/bg_live_dot" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="REC · 실시간 자막 (Groq)"
+                    android:textColor="#FF2D55"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
             <TextView
                 android:id="@+id/tvLiveSubtitle"
                 android:layout_width="match_parent"
@@ -361,7 +260,6 @@
                 android:ellipsize="start" />
         </LinearLayout>
 
-        <!-- 자동 다음 오버레이 -->
         <LinearLayout
             android:id="@+id/autoNextOverlay"
             android:layout_width="match_parent"
@@ -397,7 +295,6 @@
                 app:cornerRadius="20dp" />
         </LinearLayout>
 
-        <!-- 제스처 HUD -->
         <LinearLayout
             android:id="@+id/gestureBar"
             android:layout_width="80dp"
@@ -438,6 +335,26 @@
                 android:textColor="#FFFFFF"
                 android:gravity="center"
                 android:paddingTop="4dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/lockOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="#00000000"
+            android:visibility="gone"
+            android:clickable="true"
+            android:focusable="true">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="12dp"
+                android:background="#99000000"
+                android:text="🔒 잠금됨 · 탭해서 해제"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
         </LinearLayout>
     </FrameLayout>
 

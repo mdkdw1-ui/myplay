@@ -97,6 +97,12 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnSmartPlaylist).setOnClickListener {
             startActivity(Intent(this, SmartPlaylistActivity::class.java))
         }
+        try {
+            findViewById<View>(R.id.btnLocalMedia)?.setOnClickListener {
+                startActivity(Intent(this, LocalMediaActivity::class.java))
+            }
+        } catch (e: Exception) { }
+
         findViewById<View>(R.id.btnAudioHome).setOnClickListener {
             startActivity(Intent(this, AudioHomeActivity::class.java))
         }
