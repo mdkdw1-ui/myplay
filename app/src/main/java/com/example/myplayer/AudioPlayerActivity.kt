@@ -261,7 +261,17 @@ class AudioPlayerActivity : AppCompatActivity() {
                             val localId = item.videoId.removePrefix("local:").toLongOrNull()
                             val found = scan.firstOrNull { it.id == localId }
                             if (found != null) {
-                                items.add(MediaItem.fromUri(found.uri.toString()))
+                                // ★ mediaId = "local:${id}" 형식 유지 → onMediaItemTransition 매칭
+                                val meta = androidx.media3.common.MediaMetadata.Builder()
+                                    .setTitle(item.title)
+                                    .setArtist(item.channel)
+                                    .build()
+                                val mi = MediaItem.Builder()
+                                    .setUri(found.uri.toString())
+                                    .setMediaId(item.videoId)
+                                    .setMediaMetadata(meta)
+                                    .build()
+                                items.add(mi)
                                 if (item.videoId == videoId) startIdx = items.size - 1
                             }
                         }
@@ -411,11 +421,24 @@ class AudioPlayerActivity : AppCompatActivity() {
                 if (newId == currentVideoId) return
                 android.util.Log.d("AudioPlayer", "external transition to $newId")
                 currentVideoId = newId
-                currentTitle = mediaItem.mediaMetadata.title?.toString() ?: ""
-                currentChannel = mediaItem.mediaMetadata.artist?.toString() ?: ""
-                currentThumb = mediaItem.mediaMetadata.artworkUri?.toString() ?: ""
+                currentTitle = mediaItem.mediaMetadata.title?.toString() ?: currentTitle
+                currentChannel = mediaItem.mediaMetadata.artist?.toString() ?: currentChannel
+                currentThumb = mediaItem.mediaMetadata.artworkUri?.toString() ?: currentThumb
                 currentArtist = ""
                 currentSubtitleUrl = pref?.getString("current_subtitle_url", "") ?: ""
+
+                // ★ QueueManager 현재곡 동기화 (localOnlyMode 큐 필터 정확도)
+                QueueManager.setCurrent(this@AudioPlayerActivity, newId)
+
+                // ★ 로컬 파일이면 prefs도 갱신
+                if (newId.startsWith("local:")) {
+                    pref?.edit()
+                        ?.putString("current_video_id", newId)
+                        ?.putString("current_title", currentTitle)
+                        ?.putString("current_channel", currentChannel)
+                        ?.apply()
+                }
+
                 runOnUiThread {
                     updateUI()
                     updateLyricsButtonLabel()
@@ -474,14 +497,19 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         // ★ 로컬 전용 모드: 큐에 로컬곡 남아있으면 그걸 재생, 없으면 정지
         if (localOnlyMode) {
-            val remainingLocal = QueueManager.get(this)
-                .filter { it.videoId.startsWith("local:") && it.videoId != currentVideoId }
-            if (remainingLocal.isNotEmpty()) {
-                val next = remainingLocal.first()
+            // 큐 인덱스 기반: 현재 위치 다음 로컬곡
+            val queue = QueueManager.get(this)
+            val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+            val nextIdx = if (curIdx >= 0) curIdx + 1 else 0
+            val next = queue.drop(nextIdx).firstOrNull {
+                it.videoId.startsWith("local:")
+            }
+            if (next != null) {
                 currentVideoId = next.videoId
                 currentTitle = next.title
                 currentChannel = next.channel
                 currentThumb = next.thumbnail
+                QueueManager.setCurrent(this, next.videoId)
                 runOnUiThread { updateUI() }
                 loadAudio(next.videoId, isInitial = false)
                 loadingNext = false
