@@ -128,6 +128,10 @@ class PlayerActivity : AppCompatActivity() {
     private var previewShown = false
     private var previewJob: kotlinx.coroutines.Job? = null
 
+    private val hideControlsRunnable = Runnable {
+        findViewById<View>(R.id.controlScroll)?.visibility = View.GONE
+    }
+
     private val pref by lazy { getSharedPreferences("subtitle_prefs", Context.MODE_PRIVATE) }
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var audioManager: AudioManager
@@ -270,6 +274,8 @@ class PlayerActivity : AppCompatActivity() {
 
             if (!videoId.isNullOrBlank()) refreshBookmarkState(videoId)
         }, MoreExecutors.directExecutor())
+
+        showControls()
 
         updateLiveSubButton()
 
@@ -440,6 +446,10 @@ class PlayerActivity : AppCompatActivity() {
 
         playerView.setOnTouchListener { _, event ->
             gestureDetector.onTouchEvent(event)
+            // ★ 컨트롤 자동 숨김 재시작
+            if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+                showControls()
+            }
 
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
@@ -1811,6 +1821,14 @@ class PlayerActivity : AppCompatActivity() {
         } catch (e: Exception) { }
     }
 
+
+    private fun showControls() {
+        val scroll = findViewById<View>(R.id.controlScroll) ?: return
+        scroll.visibility = View.VISIBLE
+        mainHandler.removeCallbacks(hideControlsRunnable)
+        mainHandler.postDelayed(hideControlsRunnable, 3000)
+    }
+
     private fun toggleFullscreen() {
         val controller = window.insetsController ?: return
         if (!isFullscreen) {
@@ -1965,8 +1983,8 @@ class PlayerActivity : AppCompatActivity() {
     // ========== PIP 자동 진입 (홈 버튼) ==========
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        // 설정에서 켰을 때만
-        val autoPip = pref.getBoolean("auto_pip", false)
+        // ★ 기본 활성화 (설정 없이도 자동 PiP)
+        val autoPip = pref.getBoolean("auto_pip", true)
         if (!autoPip) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (mediaController?.isPlaying == true && !isInPictureInPictureMode) {

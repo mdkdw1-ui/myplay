@@ -131,6 +131,16 @@
             android:text="📃 YouTube 재생목록 열기" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLocalMedia"
+            style="@style/GhostButton"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginStart="20dp"
+            android:layout_marginEnd="20dp"
+            android:layout_marginTop="12dp"
+            android:text="🎧 로컬 파일 재생" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnAudioHome"
             style="@style/GhostButton"
             android:layout_width="match_parent"

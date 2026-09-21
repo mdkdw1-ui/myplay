@@ -103,6 +103,19 @@ class AudioPlayerActivity : AppCompatActivity() {
         btnLiveSub = findViewById(R.id.btnLiveSub)
 
         currentVideoId = intent.getStringExtra("VIDEO_ID") ?: ""
+        val localUri = intent.getStringExtra("LOCAL_URI") ?: ""
+        if (localUri.isNotBlank()) {
+            // 로컬 파일 바로 재생
+            lifecycleScope.launch {
+                delay(500)
+                try {
+                    val mi = MediaItem.fromUri(localUri)
+                    mediaController?.setMediaItem(mi)
+                    mediaController?.prepare()
+                    mediaController?.playWhenReady = true
+                } catch (e: Exception) { }
+            }
+        }
         currentTitle = intent.getStringExtra("VIDEO_TITLE") ?: ""
         currentChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
         currentThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
@@ -213,6 +226,23 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
+        // 로컬 파일이면 YouTubeStream.extract 스킵
+        if (videoId.startsWith("local:")) {
+            val uri = intent.getStringExtra("LOCAL_URI")
+            if (uri != null) {
+                bgScope.launch {
+                    try {
+                        val mi = MediaItem.fromUri(uri)
+                        runOnUiThread {
+                            mediaController?.setMediaItem(mi)
+                            mediaController?.prepare()
+                            mediaController?.playWhenReady = true
+                        }
+                    } catch (e: Exception) { }
+                }
+            }
+            return
+        }
         bgScope.launch {
             // ★ URL 재사용 (첫 곡만)
             if (isInitial && reuseStreamUrl.isNotBlank() && videoId == currentVideoId) {
