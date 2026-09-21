@@ -548,6 +548,66 @@
                 android:textColor="@color/text_secondary" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+
+    <!-- ★ 항상 보이는 하단 컨트롤바 (PlayerActivity) -->
+    <LinearLayout
+        android:id="@+id/bottomControls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:background="#CC000000">
+
+        <ImageButton
+            android:id="@+id/btnPrevTrack"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_media_previous"
+            android:tint="@color/text_primary"
+            android:contentDescription="이전 곡" />
+
+        <ImageButton
+            android:id="@+id/btnBack5"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_media_rew"
+            android:tint="@color/text_primary"
+            android:contentDescription="5초 뒤로" />
+
+        <ImageButton
+            android:id="@+id/btnPlayPause"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_media_play"
+            android:tint="@color/text_primary"
+            android:contentDescription="재생/일시정지" />
+
+        <ImageButton
+            android:id="@+id/btnFwd5"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_media_ff"
+            android:tint="@color/text_primary"
+            android:contentDescription="5초 앞으로" />
+
+        <ImageButton
+            android:id="@+id/btnNextTrack"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_media_next"
+            android:tint="@color/text_primary"
+            android:contentDescription="다음 곡" />
+    </LinearLayout>
+
     <View
         android:id="@+id/dragHintBox"
         android:layout_width="1dp"
