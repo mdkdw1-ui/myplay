@@ -173,7 +173,11 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun updateUI() {
-        tvTitle.text = currentTitle
+
+        // Feature: 로컬 파일이면 영상 모드 버튼 숨김
+        val isLocal = currentVideoId.startsWith("local:") || currentVideoId.isBlank()
+        findViewById<View?>(R.id.btnVideoMode)?.visibility = if (isLocal) View.GONE else View.VISIBLE
+                tvTitle.text = currentTitle
         tvChannel.text = currentChannel
         if (currentThumb.isNotEmpty()) {
             Glide.with(this).load(currentThumb).into(ivArt)
@@ -653,16 +657,20 @@ class AudioPlayerActivity : AppCompatActivity() {
                         1 -> showEqDialog()
                         2 -> dislikeCurrent()
                         3 -> {
-                            val pos = mediaController?.currentPosition ?: 0L
-                            startActivity(Intent(this, PlayerActivity::class.java).apply {
-                                putExtra("VIDEO_ID", currentVideoId)
-                                putExtra("VIDEO_TITLE", currentTitle)
-                                putExtra("VIDEO_CHANNEL", currentChannel)
-                                putExtra("VIDEO_THUMB", currentThumb)
-                                putExtra("IS_SAME_VIDEO", true)
-                                putExtra("CURRENT_POS", pos)
-                            })
-                            finish()
+                            if (currentVideoId.startsWith("local:") || currentVideoId.isBlank()) {
+                                Toast.makeText(this, "로컬 파일은 영상 모드가 없습니다", Toast.LENGTH_SHORT).show()
+                            } else {
+                                val pos = mediaController?.currentPosition ?: 0L
+                                startActivity(Intent(this, PlayerActivity::class.java).apply {
+                                    putExtra("VIDEO_ID", currentVideoId)
+                                    putExtra("VIDEO_TITLE", currentTitle)
+                                    putExtra("VIDEO_CHANNEL", currentChannel)
+                                    putExtra("VIDEO_THUMB", currentThumb)
+                                    putExtra("IS_SAME_VIDEO", true)
+                                    putExtra("CURRENT_POS", pos)
+                                })
+                                finish()
+                            }
                         }
                         4 -> showSpeedDialog()
                     }
@@ -676,13 +684,17 @@ class AudioPlayerActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnEq).setOnClickListener { showEqDialog() }
         findViewById<MaterialButton>(R.id.btnDislike).setOnClickListener { dislikeCurrent() }
         findViewById<MaterialButton>(R.id.btnVideoMode).setOnClickListener {
-            startActivity(Intent(this, PlayerActivity::class.java).apply {
-                putExtra("VIDEO_ID", currentVideoId)
-                putExtra("VIDEO_TITLE", currentTitle)
-                putExtra("VIDEO_CHANNEL", currentChannel)
-                putExtra("VIDEO_THUMB", currentThumb)
-            })
-            finish()
+            if (currentVideoId.startsWith("local:") || currentVideoId.isBlank()) {
+                Toast.makeText(this, "로컬 파일은 영상 모드가 없습니다", Toast.LENGTH_SHORT).show()
+            } else {
+                startActivity(Intent(this, PlayerActivity::class.java).apply {
+                    putExtra("VIDEO_ID", currentVideoId)
+                    putExtra("VIDEO_TITLE", currentTitle)
+                    putExtra("VIDEO_CHANNEL", currentChannel)
+                    putExtra("VIDEO_THUMB", currentThumb)
+                })
+                finish()
+            }
         }
 
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
