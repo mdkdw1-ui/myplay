@@ -89,4 +89,21 @@ object QueueManager {
     }
 
     fun size(ctx: Context): Int = get(ctx).size
+
+    fun setCurrent(ctx: Context, videoId: String) {
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+            .edit().putString("current_id", videoId).apply()
+    }
+
+    fun getCurrent(ctx: Context): String? =
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+            .getString("current_id", null)
+
+    fun move(ctx: Context, from: Int, to: Int) {
+        val list = get(ctx)
+        if (from !in list.indices || to !in list.indices || from == to) return
+        val item = list.removeAt(from)
+        list.add(to, item)
+        save(ctx, list)
+    }
 }

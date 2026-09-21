@@ -16,9 +16,12 @@ class QueueAdapter(
 
     private val items = mutableListOf<HomeVideo>()
 
-    fun submit(list: List<HomeVideo>) {
+    private var currentId: String? = null
+
+    fun submit(list: List<HomeVideo>, current: String? = null) {
         items.clear()
         items.addAll(list)
+        currentId = current
         notifyDataSetChanged()
     }
 
@@ -34,6 +37,16 @@ class QueueAdapter(
         holder.title.text = item.title
         holder.channel.text = item.channel
         Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
+
+        val isCurrent = item.videoId == currentId
+        holder.title.setTypeface(
+            null,
+            if (isCurrent) android.graphics.Typeface.BOLD
+            else android.graphics.Typeface.NORMAL
+        )
+        holder.itemView.setBackgroundColor(
+            if (isCurrent) 0x2233B5E5 else android.graphics.Color.TRANSPARENT
+        )
 
         holder.itemView.setOnClickListener { onClick(position, item) }
         holder.btnRemove.setOnClickListener { onRemove(item) }
