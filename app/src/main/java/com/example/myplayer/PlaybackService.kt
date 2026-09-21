@@ -150,6 +150,7 @@ class PlaybackService : MediaSessionService() {
                 .putString("current_thumbnail", item.thumbnail)
                 .putString("current_subtitle_url", subUrl)
                 .apply()
+            QueueManager.setCurrent(this@PlaybackService, item.videoId)
 
             val metadata = MediaMetadata.Builder()
                 .setTitle(item.title)
@@ -178,6 +179,16 @@ class PlaybackService : MediaSessionService() {
     override fun onGetSession(
         controllerInfo: MediaSession.ControllerInfo
     ): MediaSession? = mediaSession
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val player = exoPlayer
+        if (player != null && player.playWhenReady) {
+            Log.d("PlaybackService", "task removed, keep playing")
+        } else {
+            stopSelf()
+        }
+        super.onTaskRemoved(rootIntent)
+    }
 
     override fun onDestroy() {
         mediaSession?.run {

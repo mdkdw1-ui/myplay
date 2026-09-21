@@ -14,6 +14,14 @@ class QueueActivity : AppCompatActivity() {
 
     private lateinit var adapter: QueueAdapter
 
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val pollRunnable = object : Runnable {
+        override fun run() {
+            reload()
+            handler.postDelayed(this, 5000)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_queue)
@@ -47,6 +55,27 @@ class QueueActivity : AppCompatActivity() {
         recycler.layoutManager = LinearLayoutManager(this)
         recycler.adapter = adapter
 
+        val touch = androidx.recyclerview.widget.ItemTouchHelper(
+            object : androidx.recyclerview.widget.ItemTouchHelper.SimpleCallback(
+                androidx.recyclerview.widget.ItemTouchHelper.UP or
+                androidx.recyclerview.widget.ItemTouchHelper.DOWN, 0
+            ) {
+                override fun onMove(
+                    rv: RecyclerView,
+                    vh: RecyclerView.ViewHolder,
+                    target: RecyclerView.ViewHolder
+                ): Boolean {
+                    val from = vh.bindingAdapterPosition
+                    val to = target.bindingAdapterPosition
+                    QueueManager.move(this@QueueActivity, from, to)
+                    adapter.submit(QueueManager.get(this@QueueActivity))
+                    return true
+                }
+                override fun onSwiped(vh: RecyclerView.ViewHolder, dir: Int) {}
+            }
+        )
+        touch.attachToRecyclerView(recycler)
+
         tvClear.setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle("대기열")
@@ -67,9 +96,19 @@ class QueueActivity : AppCompatActivity() {
         reload()
     }
 
+    override fun onStart() {
+        super.onStart()
+        handler.post(pollRunnable)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        handler.removeCallbacks(pollRunnable)
+    }
+
     private fun reload() {
         val list = QueueManager.get(this)
-        adapter.submit(list)
+        adapter.submit(list, QueueManager.getCurrent(this))
 
         val emptyBox = findViewById<View>(R.id.emptyBox)
         val recycler = findViewById<View>(R.id.recycler)
