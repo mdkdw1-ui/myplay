@@ -24,8 +24,6 @@ class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val mainScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-
     private var resolvingNext = false
 
     private val endListener = object : Player.Listener {
@@ -34,11 +32,8 @@ class PlaybackService : MediaSessionService() {
                 Log.d("PlaybackService", "STATE_ENDED → resolveNext")
                 serviceScope.launch {
                     val next = resolveNext()
-                    if (next != null) {
-                        playNext(next)
-                    } else {
-                        Log.d("PlaybackService", "no next track")
-                    }
+                    if (next != null) playNext(next)
+                    else Log.d("PlaybackService", "no next track")
                 }
             }
         }
@@ -76,35 +71,58 @@ class PlaybackService : MediaSessionService() {
             .build()
     }
 
-    /** ★ 다음 곡 결정 — Service에서 자체 처리 */
+    /**
+     * ★ 다음 곡 결정 — 로컬/YouTube 모두 지원
+     */
     private suspend fun resolveNext(): VideoItem? {
         if (resolvingNext) return null
         resolvingNext = true
         try {
             val prefs = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
             val currentVideoId = prefs.getString("current_video_id", "") ?: ""
+
+            // ===== 1) 큐 (로컬 + YouTube) =====
+            val queue = QueueManager.get(this)
+            val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+            if (curIdx >= 0 && curIdx < queue.size - 1) {
+                val next = queue[curIdx + 1]
+                QueueManager.remove(this, next.videoId)
+                Log.d("PlaybackService", "queue next: ${next.videoId}")
+                return VideoItem(
+                    next.videoId, next.title, next.channel, next.thumbnail
+                )
+            }
+
+            // ===== 2) 로컬 파일 → LocalMedia 스캔 다음 곡 =====
+            if (currentVideoId.startsWith("local:")) {
+                val localId = currentVideoId.removePrefix("local:").toLongOrNull()
+                if (localId != null) {
+                    val local = LocalMediaScanner.scan(this)
+                    val idx = local.indexOfFirst { it.id == localId }
+                    if (idx >= 0 && idx < local.size - 1) {
+                        val nxt = local[idx + 1]
+                        Log.d("PlaybackService", "local next: ${nxt.title}")
+                        return VideoItem(
+                            "local:${nxt.id}",
+                            nxt.title,
+                            nxt.artist,
+                            ""
+                        )
+                    }
+                    Log.d("PlaybackService", "local 끝 (마지막 곡)")
+                }
+                return null
+            }
+
+            // ===== 3) YouTube 관련곡 =====
+            if (currentVideoId.isBlank()) return null
+
             val currentTitle = prefs.getString("current_title", "") ?: ""
             val currentChannel = prefs.getString("current_channel", "") ?: ""
             val currentArtist = prefs.getString("current_artist", "") ?: ""
             val sameArtist = prefs.getBoolean("same_artist_mode", false)
             val disliked = prefs.getStringSet("disliked_ids", emptySet()) ?: emptySet()
 
-            if (currentVideoId.isBlank()) return null
-
-            // 1) 큐 (인덱스 기반, 삭제하지 않음)
-            val queue = QueueManager.get(this)
-            val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
-            if (curIdx >= 0 && curIdx < queue.size - 1) {
-                val next = queue[curIdx + 1]
-                if (next.videoId !in disliked) {
-                    return VideoItem(
-                        next.videoId, next.title,
-                        next.channel, next.thumbnail
-                    )
-                }
-            }
-
-            // 2) YouTubeRadio / YouTubeArtist
             val related = if (sameArtist && currentArtist.isNotBlank()) {
                 YouTubeArtist.fetchSongs(currentArtist, currentVideoId)
             } else {
@@ -122,10 +140,41 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    /** ★ 다음 곡 재생 — Service에서 직접 */
+    /**
+     * ★ 다음 곡 재생 — 로컬/YouTube 모두
+     */
     private suspend fun playNext(item: VideoItem) {
         val player = exoPlayer ?: return
         try {
+            // ===== 로컬 파일 =====
+            if (item.videoId.startsWith("local:")) {
+                val localId = item.videoId.removePrefix("local:").toLongOrNull() ?: return
+                val uri = Uri.withAppendedPath(
+                    android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    localId.toString()
+                )
+                val mi = MediaItem.Builder()
+                    .setUri(uri)
+                    .setMediaId(item.videoId)
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(item.title)
+                            .setArtist(item.channel)
+                            .build()
+                    )
+                    .build()
+
+                savePrefs(item, "")
+                withContext(Dispatchers.Main) {
+                    player.setMediaItem(mi)
+                    player.prepare()
+                    player.playWhenReady = true
+                }
+                Log.d("PlaybackService", "played local: ${item.title}")
+                return
+            }
+
+            // ===== YouTube =====
             val result = YouTubeStream.extract(item.videoId)
             val url = result.audioUrlBest
                 ?: result.audioUrl
@@ -136,35 +185,24 @@ class PlaybackService : MediaSessionService() {
                 return
             }
 
-            // 자막 URL 저장
             val subUrl = result.subtitles
                 .firstOrNull { it.languageCode.startsWith("ko") }?.url
                 ?: result.subtitles.firstOrNull { it.languageCode.startsWith("en") }?.url
                 ?: result.subtitles.firstOrNull()?.url
                 ?: ""
 
-            // 현재 곡 정보 prefs에 저장
-            val prefs = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
-            prefs.edit()
-                .putString("current_video_id", item.videoId)
-                .putString("current_title", item.title)
-                .putString("current_channel", item.channel)
-                .putString("current_thumbnail", item.thumbnail)
-                .putString("current_subtitle_url", subUrl)
-                .apply()
-            QueueManager.setCurrent(this@PlaybackService, item.videoId)
-
-            val metadata = MediaMetadata.Builder()
-                .setTitle(item.title)
-                .setArtist(item.channel)
-                .setAlbumTitle(item.channel)
-                .setArtworkUri(Uri.parse(item.thumbnail))
-                .build()
+            savePrefs(item, subUrl)
 
             val mi = MediaItem.Builder()
                 .setUri(url)
                 .setMediaId(item.videoId)
-                .setMediaMetadata(metadata)
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(item.title)
+                        .setArtist(item.channel)
+                        .setArtworkUri(Uri.parse(item.thumbnail))
+                        .build()
+                )
                 .build()
 
             withContext(Dispatchers.Main) {
@@ -178,19 +216,20 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    private fun savePrefs(item: VideoItem, subUrl: String) {
+        getSharedPreferences("audio_prefs", Context.MODE_PRIVATE).edit()
+            .putString("current_video_id", item.videoId)
+            .putString("current_title", item.title)
+            .putString("current_channel", item.channel)
+            .putString("current_thumbnail", item.thumbnail)
+            .putString("current_artist", item.channel)
+            .putString("current_subtitle_url", subUrl)
+            .apply()
+    }
+
     override fun onGetSession(
         controllerInfo: MediaSession.ControllerInfo
     ): MediaSession? = mediaSession
-
-    override fun onTaskRemoved(rootIntent: Intent?) {
-        val player = exoPlayer
-        if (player != null && player.playWhenReady) {
-            Log.d("PlaybackService", "task removed, keep playing")
-        } else {
-            stopSelf()
-        }
-        super.onTaskRemoved(rootIntent)
-    }
 
     override fun onDestroy() {
         mediaSession?.run {
@@ -201,15 +240,12 @@ class PlaybackService : MediaSessionService() {
         mediaSession = null
         exoPlayer = null
         serviceScope.cancel()
-        mainScope.cancel()
         super.onDestroy()
     }
 
     companion object {
         var exoPlayer: ExoPlayer? = null
             private set
-
-        /** (호환용) 예전 Activity 핸들러 */
         var nextTrackHandler: (() -> Unit)? = null
     }
 }
