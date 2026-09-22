@@ -416,6 +416,20 @@ class AudioPlayerActivity : AppCompatActivity() {
                 if (isPlaying) startAnimation() else stopAnimation()
             }
 
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                // ExoPlayer 큐 다 소진 → 다음곡 로직 발동 (한 번만)
+                if (playbackState == Player.STATE_ENDED) {
+                    android.util.Log.d("AudioPlayer", "STATE_ENDED → playNextRelatedBg")
+                    if (!loadingNext) {
+                        loadingNext = true
+                        bgScope.launch {
+                            kotlinx.coroutines.delay(300)
+                            playNextRelatedBg()
+                        }
+                    }
+                }
+            }
+
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val newId = mediaItem?.mediaId ?: return
                 if (newId == currentVideoId) return
@@ -448,6 +462,14 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun playNextRelatedBg() {
+        // ★ ExoPlayer 큐에 다음 곡 남아있으면 처리하지 않음 (ExoPlayer가 자동 진행)
+        val mc = mediaController
+        if (mc != null && mc.hasNextMediaItem()) {
+            android.util.Log.d("AudioPlayer", "ExoPlayer 큐 있음 → playNextRelatedBg skip")
+            loadingNext = false
+            return
+        }
+
         if (!isPlayingFromHistory && historyIndex >= 0 && historyIndex < audioHistory.size - 1) {
             historyIndex++
             val next = audioHistory[historyIndex]
@@ -559,6 +581,13 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun playNextManual() {
+        val mc = mediaController
+        // ★ ExoPlayer 큐에 다음 곡이 있으면 ExoPlayer에 위임 (큐 리셋 X)
+        if (mc != null && mc.hasNextMediaItem()) {
+            mc.seekToNextMediaItem()
+            return
+        }
+        // 큐 끝: 기존 로직
         if (loadingNext) return
         loadingNext = true
         bgScope.launch { playNextRelatedBg() }
@@ -572,6 +601,13 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun playPrevious() {
+        val mc = mediaController
+        // ★ ExoPlayer 큐에 이전 곡이 있으면 ExoPlayer에 위임
+        if (mc != null && mc.hasPreviousMediaItem()) {
+            mc.seekToPreviousMediaItem()
+            return
+        }
+        // ExoPlayer 큐 없음: audioHistory 기반
         if (historyIndex > 0) {
             historyIndex--
             val prev = audioHistory[historyIndex]
@@ -583,7 +619,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             updateUI()
             loadAudio(prev.videoId, isInitial = false)
         } else {
-            mediaController?.seekTo(0)
+            mc?.seekTo(0)
         }
     }
 
