@@ -158,8 +158,14 @@ class LocalMediaActivity : AppCompatActivity() {
                 recycler.adapter = adapter
             } else {
                 groupAdapter.submit(
-                    groups.map { (k, v) -> k to v.size }
-                        .sortedBy { it.first.lowercase() }
+                    groups.map { (k, v) ->
+                        GroupInfo(
+                            name = k,
+                            count = v.size,
+                            totalMs = v.sumOf { it.durationMs },
+                            albumArt = v.firstOrNull { it.albumArtUri != null }?.albumArtUri
+                        )
+                    }.sortedBy { it.name.lowercase() }
                 )
                 recycler.adapter = groupAdapter
             }
@@ -228,23 +234,32 @@ class LocalMediaActivity : AppCompatActivity() {
         }
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
             val v = LayoutInflater.from(parent.context)
-                .inflate(android.R.layout.simple_list_item_2, parent, false)
+                .inflate(R.layout.item_local_media, parent, false)
             return VH(v)
         }
         override fun onBindViewHolder(holder: VH, position: Int) {
             val item = items[position]
-            holder.t1.text = item.title
-            holder.t1.setTextColor(0xFFF5F5F7.toInt())
-            holder.t1.textSize = 15f
-            holder.t2.text = "${item.artist} · ${fmt(item.durationMs)}"
-            holder.t2.setTextColor(0xFF8E8E93.toInt())
-            holder.t2.textSize = 12f
-            holder.itemView.setPadding(24, 28, 24, 28)
+            holder.tvTitle.text = item.title
+            holder.tvSub.text = item.artist
+            holder.tvDuration.text = fmt(item.durationMs)
+
+            // 앨범아트
+            val art = item.albumArtUri
+            if (art != null) {
+                com.bumptech.glide.Glide.with(holder.albumArt)
+                    .load(art)
+                    .placeholder(android.R.drawable.ic_media_play)
+                    .error(android.R.drawable.ic_media_play)
+                    .into(holder.albumArt)
+            } else {
+                holder.albumArt.setImageResource(android.R.drawable.ic_media_play)
+            }
+
             holder.itemView.setOnClickListener { onClick(item) }
             holder.itemView.setOnLongClickListener {
                 androidx.appcompat.app.AlertDialog.Builder(holder.itemView.context)
                     .setTitle(item.title)
-                    .setItems(arrayOf("🗑 기기에서 삭제", "❌ 취소")) { _, w ->
+                    .setItems(arrayOf("🗑 기기에서 삭제")) { _, w ->
                         if (w == 0) onDelete(item)
                     }
                     .show()
@@ -253,8 +268,10 @@ class LocalMediaActivity : AppCompatActivity() {
         }
         override fun getItemCount() = items.size
         class VH(v: View) : RecyclerView.ViewHolder(v) {
-            val t1: TextView = v.findViewById(android.R.id.text1)
-            val t2: TextView = v.findViewById(android.R.id.text2)
+            val albumArt: android.widget.ImageView = v.findViewById(R.id.albumArt)
+            val tvTitle: TextView = v.findViewById(R.id.tvTitle)
+            val tvSub: TextView = v.findViewById(R.id.tvSub)
+            val tvDuration: TextView = v.findViewById(R.id.tvDuration)
         }
         private fun fmt(ms: Long): String {
             val s = ms / 1000
@@ -262,31 +279,86 @@ class LocalMediaActivity : AppCompatActivity() {
         }
     }
 
+    data class GroupInfo(
+        val name: String,
+        val count: Int,
+        val totalMs: Long,
+        val albumArt: android.net.Uri?
+    )
+
     class GroupAdapter(val onClick: (String) -> Unit) : RecyclerView.Adapter<GroupAdapter.VH>() {
-        private val items = mutableListOf<Pair<String, Int>>()
-        fun submit(list: List<Pair<String, Int>>) {
+        private val items = mutableListOf<GroupInfo>()
+        fun submit(list: List<GroupInfo>) {
             items.clear(); items.addAll(list); notifyDataSetChanged()
         }
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
             val v = LayoutInflater.from(parent.context)
-                .inflate(android.R.layout.simple_list_item_2, parent, false)
+                .inflate(R.layout.item_local_group, parent, false)
             return VH(v)
         }
         override fun onBindViewHolder(holder: VH, position: Int) {
-            val (name, count) = items[position]
-            holder.t1.text = "📂 $name"
-            holder.t1.setTextColor(0xFFF5F5F7.toInt())
-            holder.t1.textSize = 15f
-            holder.t2.text = "${count}곡"
-            holder.t2.setTextColor(0xFF8E8E93.toInt())
-            holder.t2.textSize = 12f
-            holder.itemView.setPadding(24, 32, 24, 32)
-            holder.itemView.setOnClickListener { onClick(name) }
+            val g = items[position]
+            holder.tvName.text = g.name
+            holder.tvMeta.text = formatMeta(g.count, g.totalMs)
+            holder.tvBadge.text = "${g.count}"
+
+            // ★ 폴더명 해시 → 컬러 배경 + 이모지
+            val palette = intArrayOf(
+                0xFFE91E63.toInt(),  // 핑크
+                0xFF9C27B0.toInt(),  // 보라
+                0xFF3F51B5.toInt(),  // 남색
+                0xFF03A9F4.toInt(),  // 하늘
+                0xFF009688.toInt(),  // 청록
+                0xFF4CAF50.toInt(),  // 초록
+                0xFFFF9800.toInt(),  // 주황
+                0xFFFF5722.toInt()   // 빨강
+            )
+            val idx = Math.abs(g.name.hashCode()) % palette.size
+            val baseColor = palette[idx]
+            // 반투명 배경
+            val bg = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 28f
+                setColor((baseColor and 0x00FFFFFF) or 0x33000000)
+            }
+            holder.iconWrap.background = bg
+            holder.tvIconEmoji.text = emojiFor(g.name)
+
+            holder.itemView.setOnClickListener { onClick(g.name) }
         }
+
+        private fun emojiFor(name: String): String {
+            val lower = name.lowercase()
+            return when {
+                lower.contains("kpop") || lower.contains("k-pop") -> "🎤"
+                lower.contains("music") -> "🎵"
+                lower.contains("calm") || lower.contains("relax") -> "🌙"
+                lower.contains("gear") || lower.contains("game") -> "🎮"
+                lower.contains("podcast") -> "🎙"
+                lower.contains("rock") || lower.contains("metal") -> "🎸"
+                lower.contains("jazz") -> "🎷"
+                lower.contains("classic") -> "🎻"
+                lower.contains("hiphop") || lower.contains("hip-hop") -> "🎧"
+                lower.contains("ost") || lower.contains("soundtrack") -> "🎬"
+                else -> "📁"
+            }
+        }
+
+        private fun formatMeta(count: Int, ms: Long): String {
+            if (ms <= 0L) return "${count}곡"
+            val totalSec = (ms / 1000).toInt()
+            val h = totalSec / 3600
+            val m = (totalSec % 3600) / 60
+            val timeStr = if (h > 0) "${h}시간 ${m}분" else "${m}분"
+            return "${count}곡 · ${timeStr}"
+        }
+
         override fun getItemCount() = items.size
         class VH(v: View) : RecyclerView.ViewHolder(v) {
-            val t1: TextView = v.findViewById(android.R.id.text1)
-            val t2: TextView = v.findViewById(android.R.id.text2)
+            val iconWrap: android.view.View = v.findViewById(R.id.iconWrap)
+            val tvIconEmoji: TextView = v.findViewById(R.id.tvIconEmoji)
+            val tvName: TextView = v.findViewById(R.id.tvName)
+            val tvMeta: TextView = v.findViewById(R.id.tvMeta)
+            val tvBadge: TextView = v.findViewById(R.id.tvBadge)
         }
     }
 }
