@@ -12,11 +12,20 @@ data class LocalMedia(
     val title: String,
     val artist: String,
     val album: String,
+    val albumId: Long,
     val durationMs: Long,
     val folder: String,
     val mimeType: String,
     val sizeBytes: Long
-)
+) {
+    /** 앨범아트 URI (없으면 null) */
+    val albumArtUri: Uri?
+        get() = if (albumId > 0L)
+            android.content.ContentUris.withAppendedId(
+                Uri.parse("content://media/external/audio/albumart"), albumId
+            )
+        else null
+}
 
 object LocalMediaScanner {
 
@@ -58,6 +67,7 @@ object LocalMediaScanner {
                 MediaStore.Audio.Media.TITLE,
                 MediaStore.Audio.Media.ARTIST,
                 MediaStore.Audio.Media.ALBUM,
+                MediaStore.Audio.Media.ALBUM_ID,
                 MediaStore.Audio.Media.DURATION,
                 folderColumn,
                 MediaStore.Audio.Media.MIME_TYPE,
@@ -77,6 +87,7 @@ object LocalMediaScanner {
                 val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
                 val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
                 val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
                 val durCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val dataCol = cursor.getColumnIndexOrThrow(folderColumn)
                 val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
@@ -87,6 +98,7 @@ object LocalMediaScanner {
                     val title = cursor.getString(titleCol) ?: ""
                     val artist = cursor.getString(artistCol) ?: "<unknown>"
                     val album = cursor.getString(albumCol) ?: ""
+                    val albumId = cursor.getLong(albumIdCol)
                     val dur = cursor.getLong(durCol)
                     val path = cursor.getString(dataCol) ?: ""
                     val mime = cursor.getString(mimeCol) ?: "audio/*"
@@ -109,7 +121,8 @@ object LocalMediaScanner {
                     out.add(
                         LocalMedia(
                             id = id, uri = uri, title = title,
-                            artist = artist, album = album, durationMs = dur,
+                            artist = artist, album = album, albumId = albumId,
+                            durationMs = dur,
                             folder = folder, mimeType = mime, sizeBytes = size
                         )
                     )
@@ -118,7 +131,15 @@ object LocalMediaScanner {
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        out
+        // ★ 시스템 폴더 + 짧은 효과음 제외
+        val systemFolders = setOf(
+            "Call", "Calls", "Notifications", "Ringtones", "Alarms",
+            "Recordings", "Voice Recorder", "Sounds", "Audio"
+        )
+        out.filter { m ->
+            m.folder !in systemFolders &&
+            (m.durationMs == 0L || m.durationMs >= 30_000L)
+        }.toMutableList()
     }
 
     /** MediaStore에서 오디오 삭제 (Android 10+는 RecoverableSecurityException 가능) */
