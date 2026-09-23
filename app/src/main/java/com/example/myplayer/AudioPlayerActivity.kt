@@ -261,13 +261,19 @@ class AudioPlayerActivity : AppCompatActivity() {
                             val localId = item.videoId.removePrefix("local:").toLongOrNull()
                             val found = scan.firstOrNull { it.id == localId }
                             if (found != null) {
-                                // ★ mediaId = "local:${id}" 형식 유지 → onMediaItemTransition 매칭
+                                // ★ filePath 우선 (content URI가 ExoPlayer에서 실패하는 경우 대비)
+                                val playbackUri = if (found.filePath.isNotBlank() &&
+                                    java.io.File(found.filePath).exists()) {
+                                    android.net.Uri.fromFile(java.io.File(found.filePath))
+                                } else {
+                                    found.uri
+                                }
                                 val meta = androidx.media3.common.MediaMetadata.Builder()
                                     .setTitle(item.title)
                                     .setArtist(item.channel)
                                     .build()
                                 val mi = MediaItem.Builder()
-                                    .setUri(found.uri.toString())
+                                    .setUri(playbackUri.toString())
                                     .setMediaId(item.videoId)
                                     .setMediaMetadata(meta)
                                     .build()
@@ -414,10 +420,27 @@ class AudioPlayerActivity : AppCompatActivity() {
         mediaController?.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) startAnimation() else stopAnimation()
+                android.util.Log.d("AudioPlayer", "isPlaying=$isPlaying")
+            }
+
+            override fun onIsLoadingChanged(isLoading: Boolean) {
+                android.util.Log.d("AudioPlayer", "isLoading=$isLoading")
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
-                // ExoPlayer 큐 다 소진 → 다음곡 로직 발동 (한 번만)
+                // ★ 진단: 상태를 타이틀에 표시
+                val stateName = when (playbackState) {
+                    Player.STATE_IDLE -> "IDLE"
+                    Player.STATE_BUFFERING -> "BUFFERING"
+                    Player.STATE_READY -> "READY"
+                    Player.STATE_ENDED -> "ENDED"
+                    else -> "?"
+                }
+                runOnUiThread {
+                    tvTitle.text = "[$stateName] $currentTitle"
+                }
+                android.util.Log.d("AudioPlayer", "state=$stateName")
+
                 if (playbackState == Player.STATE_ENDED) {
                     android.util.Log.d("AudioPlayer", "STATE_ENDED → playNextRelatedBg")
                     if (!loadingNext) {
@@ -433,6 +456,14 @@ class AudioPlayerActivity : AppCompatActivity() {
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 android.util.Log.e("AudioPlayer",
                     "onPlayerError: ${error.errorCodeName} / ${error.message}", error)
+                // ★ 진단: 화면에 에러 표시
+                runOnUiThread {
+                    tvTitle.text = "[ERR ${error.errorCodeName}] $currentTitle"
+                }
+                // ★ 진단: 화면에 에러 표시
+                runOnUiThread {
+                    tvTitle.text = "[ERR ${error.errorCodeName}] $currentTitle"
+                }
                 // ★ 재생 실패 시 다음 곡으로 강제 진행
                 runOnUiThread {
                     android.widget.Toast.makeText(
