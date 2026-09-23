@@ -430,6 +430,23 @@ class AudioPlayerActivity : AppCompatActivity() {
                 }
             }
 
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                android.util.Log.e("AudioPlayer",
+                    "onPlayerError: ${error.errorCodeName} / ${error.message}", error)
+                // ★ 재생 실패 시 다음 곡으로 강제 진행
+                runOnUiThread {
+                    android.widget.Toast.makeText(
+                        this@AudioPlayerActivity,
+                        "재생 실패: ${error.errorCodeName}",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+                val mc = mediaController
+                if (mc != null && mc.hasNextMediaItem()) {
+                    mc.seekToNextMediaItem()
+                }
+            }
+
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val newId = mediaItem?.mediaId ?: return
                 if (newId == currentVideoId) return
