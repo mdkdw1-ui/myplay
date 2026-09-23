@@ -256,6 +256,8 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     /** ★ 블루투스/알림용 메타데이터 갱신 */
     private fun refreshMediaMetadata() {
+        // ★ 로컬 파일은 아티스트 추출 불필요 → 큐 건드리지 않음
+        if (currentVideoId.startsWith("local:")) return
         val mc = mediaController ?: return
         val item = mc.currentMediaItem ?: return
         val url = item.localConfiguration?.uri?.toString() ?: return
@@ -274,11 +276,19 @@ class AudioPlayerActivity : AppCompatActivity() {
             .setMediaMetadata(metadata)
             .build()
 
-        val pos = mc.currentPosition
-        val wasPlaying = mc.isPlaying
-        mc.setMediaItem(newItem, pos)
-        mc.prepare()
-        if (wasPlaying) mc.play()
+        // ★ 큐 유지: replaceMediaItem으로 현재 인덱스의 아이템만 교체
+        val idx = mc.currentMediaItemIndex
+        if (idx >= 0 && idx < mc.mediaItemCount) {
+            mc.replaceMediaItem(idx, newItem)
+            // 재생 위치/상태 유지
+        } else {
+            // 큐가 비었으면 그냥 setMediaItem
+            val pos = mc.currentPosition
+            val wasPlaying = mc.isPlaying
+            mc.setMediaItem(newItem, pos)
+            mc.prepare()
+            if (wasPlaying) mc.play()
+        }
     }
 
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
