@@ -28,6 +28,7 @@ class PlaylistDetailActivity : AppCompatActivity() {
         playlistName = intent.getStringExtra("PLAYLIST_NAME") ?: "플레이리스트"
 
         findViewById<TextView>(R.id.tvTitle).text = playlistName
+        findViewById<View>(R.id.btnBack)?.setOnClickListener { finish() }
 
         val recycler = findViewById<RecyclerView>(R.id.recycler)
         adapter = ItemAdapter(
@@ -132,27 +133,46 @@ class PlaylistDetailActivity : AppCompatActivity() {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
             val v = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_history, parent, false)
+                .inflate(R.layout.item_local_media, parent, false)
             return VH(v)
         }
 
         override fun onBindViewHolder(holder: VH, position: Int) {
             val item = items[position]
-            holder.title.text = item.title
-            holder.channel.text = item.channel
-            holder.btnRelated.text = "✕"
-            holder.btnRelated.setOnClickListener { onDelete(item) }
+            holder.tvTitle.text = item.title
+            holder.tvSub.text = item.channel
+            holder.tvDuration.text = ""
+
+            if (item.thumbnail.isNotBlank()) {
+                com.bumptech.glide.Glide.with(holder.albumArt)
+                    .load(item.thumbnail)
+                    .placeholder(android.R.drawable.ic_media_play)
+                    .error(android.R.drawable.ic_media_play)
+                    .centerCrop()
+                    .into(holder.albumArt)
+            } else {
+                holder.albumArt.setImageResource(android.R.drawable.ic_media_play)
+            }
+
             holder.itemView.setOnClickListener { onClick(item) }
-            holder.progressTrack.visibility = View.GONE
+            holder.itemView.setOnLongClickListener {
+                androidx.appcompat.app.AlertDialog.Builder(holder.itemView.context)
+                    .setTitle(item.title)
+                    .setItems(arrayOf("🗑 이 곡 삭제")) { _, w ->
+                        if (w == 0) onDelete(item)
+                    }
+                    .show()
+                true
+            }
         }
 
         override fun getItemCount() = items.size
 
         class VH(v: View) : RecyclerView.ViewHolder(v) {
-            val title: TextView = v.findViewById(R.id.title)
-            val channel: TextView = v.findViewById(R.id.channel)
-            val btnRelated: TextView = v.findViewById(R.id.btnRelated)
-            val progressTrack: View = v.findViewById(R.id.progressTrack)
+            val albumArt: android.widget.ImageView = v.findViewById(R.id.albumArt)
+            val tvTitle: TextView = v.findViewById(R.id.tvTitle)
+            val tvSub: TextView = v.findViewById(R.id.tvSub)
+            val tvDuration: TextView = v.findViewById(R.id.tvDuration)
         }
     }
 }
