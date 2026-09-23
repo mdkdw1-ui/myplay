@@ -56,15 +56,20 @@ class SearchActivity : AppCompatActivity() {
         chipDuration = findViewById(R.id.chipDuration)
         val recycler = findViewById<RecyclerView>(R.id.recycler)
 
-        adapter = SearchAdapter { item ->
-            val intent = Intent(this, PlayerActivity::class.java).apply {
-                putExtra("VIDEO_ID", item.videoId)
-                putExtra("VIDEO_TITLE", item.title)
-                putExtra("VIDEO_CHANNEL", item.channel)
-                putExtra("VIDEO_THUMB", item.thumbnail)
+        adapter = SearchAdapter(
+            onMultiSave = { videos ->
+                PlaylistPickerHelper.showSaveDialog(this, lifecycleScope, videos)
+            },
+            onClick = { item ->
+                val intent = Intent(this, PlayerActivity::class.java).apply {
+                    putExtra("VIDEO_ID", item.videoId)
+                    putExtra("VIDEO_TITLE", item.title)
+                    putExtra("VIDEO_CHANNEL", item.channel)
+                    putExtra("VIDEO_THUMB", item.thumbnail)
+                }
+                startActivity(intent)
             }
-            startActivity(intent)
-        }
+        )
         recycler.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 2)
         recycler.adapter = adapter
 
@@ -81,15 +86,10 @@ class SearchActivity : AppCompatActivity() {
                     }
                     startActivity(intent)
                 },
-                onItemLongPress = { _, item, child ->
-                    PreviewPlayer.start(this, child as android.view.ViewGroup, item.videoId, item.thumbnail)
+                onItemLongPress = { _, _, _ ->
+                    // ★ 다중선택은 SearchAdapter가 처리 → 여기선 미리보기 비활성화
                 },
-                onItemRelease = { _, item, child ->
-                    // 손 떼면 6초 후 정지
-                    child.postDelayed({
-                        PreviewPlayer.stop()
-                    }, 6000)
-                }
+                onItemRelease = { _, _, _ -> }
             )
         )
 

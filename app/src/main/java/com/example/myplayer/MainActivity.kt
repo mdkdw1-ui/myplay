@@ -128,6 +128,12 @@ class MainActivity : AppCompatActivity() {
                 .setNegativeButton("취소", null)
                 .show()
         }
+        try {
+            findViewById<View>(R.id.btnMyPlaylists)?.setOnClickListener {
+                startActivity(Intent(this, MyPlaylistsActivity::class.java))
+            }
+        } catch (e: Exception) { }
+
         findViewById<View>(R.id.btnStats).setOnClickListener {
             startActivity(Intent(this, StatsActivity::class.java))
         }
