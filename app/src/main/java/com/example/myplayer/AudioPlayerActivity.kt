@@ -105,19 +105,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         btnLiveSub = findViewById(R.id.btnLiveSub)
 
         currentVideoId = intent.getStringExtra("VIDEO_ID") ?: ""
-        val localUri = intent.getStringExtra("LOCAL_URI") ?: ""
-        if (localUri.isNotBlank()) {
-            // 로컬 파일 바로 재생
-            lifecycleScope.launch {
-                delay(500)
-                try {
-                    val mi = MediaItem.fromUri(localUri)
-                    mediaController?.setMediaItem(mi)
-                    mediaController?.prepare()
-                    mediaController?.playWhenReady = true
-                } catch (e: Exception) { }
-            }
-        }
+        // ★ 로컬 파일은 loadAudio()가 큐 전체로 처리 (여기서 setMediaItem 하면 큐 리셋됨)
         currentTitle = intent.getStringExtra("VIDEO_TITLE") ?: ""
         currentChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
         currentThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
