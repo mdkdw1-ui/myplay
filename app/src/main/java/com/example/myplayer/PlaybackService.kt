@@ -27,8 +27,42 @@ class PlaybackService : MediaSessionService() {
     private var resolvingNext = false
 
     private val endListener = object : Player.Listener {
+
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            // ExoPlayer 자동 큐 진행 시 prefs + QueueManager 동기화
+            val newId = mediaItem?.mediaId ?: return
+            if (newId.startsWith("local:")) {
+                val prefs = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putString("current_video_id", newId)
+                    .putString("current_title",
+                        mediaItem.mediaMetadata.title?.toString() ?: "")
+                    .putString("current_channel",
+                        mediaItem.mediaMetadata.artist?.toString() ?: "")
+                    .apply()
+                QueueManager.setCurrent(this@PlaybackService, newId)
+                Log.d("PlaybackService", "transition → $newId")
+            }
+        }
+
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_ENDED) {
+                val p = exoPlayer
+
+                // ★ 큐에 여러 곡이 있으면 ExoPlayer가 자동 진행 중이므로 skip
+                if (p != null && p.mediaItemCount > 1) {
+                    Log.d("PlaybackService",
+                        "STATE_ENDED but mediaItemCount=${p.mediaItemCount} → skip")
+                    return
+                }
+
+                // ★ 큐에 다음 곡이 남아있으면 skip
+                if (p != null && p.hasNextMediaItem()) {
+                    Log.d("PlaybackService", "STATE_ENDED but hasNext → skip")
+                    return
+                }
+
+                // 진짜 큐 소진 → resolveNext
                 Log.d("PlaybackService", "STATE_ENDED → resolveNext")
                 serviceScope.launch {
                     val next = resolveNext()
@@ -149,10 +183,13 @@ class PlaybackService : MediaSessionService() {
             // ===== 로컬 파일 =====
             if (item.videoId.startsWith("local:")) {
                 val localId = item.videoId.removePrefix("local:").toLongOrNull() ?: return
-                val uri = Uri.withAppendedPath(
-                    android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    localId.toString()
-                )
+                val isQ = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
+                val collection = if (isQ)
+                    android.provider.MediaStore.Audio.Media
+                        .getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL)
+                else
+                    android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                val uri = android.content.ContentUris.withAppendedId(collection, localId)
                 val mi = MediaItem.Builder()
                     .setUri(uri)
                     .setMediaId(item.videoId)
