@@ -114,9 +114,8 @@ object LocalMediaScanner {
                             .ifBlank { "내부 저장소" }
                     }
 
-                    val uri = Uri.withAppendedPath(
-                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id.toString()
-                    )
+                    // ★ Q+ 에서는 정확한 collection URI 사용 (EXTERNAL_CONTENT_URI는 deprecated)
+                    val uri = android.content.ContentUris.withAppendedId(collection, id)
 
                     out.add(
                         LocalMedia(
