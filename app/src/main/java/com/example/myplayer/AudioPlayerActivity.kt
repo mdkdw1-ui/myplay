@@ -155,6 +155,12 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         updateAudioLiveSubButton()
 
+        // ★ 진단 로그 보기: 제목 롱프레스
+        findViewById<android.widget.TextView>(R.id.tvTitle)?.setOnLongClickListener {
+            showDiagLog()
+            true
+        }
+
         val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
         controllerFuture.addListener({
@@ -168,13 +174,46 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     /** 진단용 파일 로그 */
+    private val diagLines = java.util.ArrayDeque<String>()
     private fun diag(msg: String) {
+        android.util.Log.d("AudioPlayer", msg)
         try {
-            val f = java.io.File(getExternalFilesDir(null), "audio_diag.log")
+            val f = java.io.File(filesDir, "audio_diag.log")
             val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US)
                 .format(java.util.Date())
             f.appendText("[$ts] $msg\n")
         } catch (_: Exception) {}
+        try {
+            diagLines.addLast(msg)
+            while (diagLines.size > 3) diagLines.removeFirst()
+            val text = diagLines.joinToString("\n")
+            runOnUiThread {
+                try {
+                    val tv = findViewById<android.widget.TextView>(R.id.tvChannel)
+                    if (tv != null) {
+                        tv.text = text
+                        tv.setTextColor(0xFFFFEB3B.toInt())
+                        tv.textSize = 9f
+                    }
+                } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun showDiagLog() {
+        try {
+            val f = java.io.File(filesDir, "audio_diag.log")
+            val content = if (f.exists()) f.readText() else "(로그 없음)"
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("진단 로그 (마지막 100줄)")
+                .setMessage(content.lines().takeLast(100).joinToString("\n"))
+                .setPositiveButton("닫기", null)
+                .setNeutralButton("지우기") { _, _ -> f.delete() }
+                .show()
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(this, "로그 읽기 실패: ${e.message}",
+                android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun acquireWakeLock() {
