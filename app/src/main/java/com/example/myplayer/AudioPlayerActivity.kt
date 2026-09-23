@@ -167,6 +167,16 @@ class AudioPlayerActivity : AppCompatActivity() {
         }, MoreExecutors.directExecutor())
     }
 
+    /** 진단용 파일 로그 */
+    private fun diag(msg: String) {
+        try {
+            val f = java.io.File(getExternalFilesDir(null), "audio_diag.log")
+            val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US)
+                .format(java.util.Date())
+            f.appendText("[$ts] $msg\n")
+        } catch (_: Exception) {}
+    }
+
     private fun acquireWakeLock() {
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -252,6 +262,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                     // ★ 로컬 큐 전체를 ExoPlayer에 넣기 → 자동 다음곡
                     val queue = QueueManager.get(this@AudioPlayerActivity)
                     val localQueue = queue.filter { it.videoId.startsWith("local:") }
+                    diag("loadAudio($videoId): queue=${queue.size} localQueue=${localQueue.size}")
                     if (localQueue.size >= 1) {
                         // MediaStore에서 각 항목의 URI 조회 (캐시 활용)
                         val scan = LocalMediaScanner.scan(this@AudioPlayerActivity, forceRefresh = false)
@@ -281,11 +292,13 @@ class AudioPlayerActivity : AppCompatActivity() {
                                 if (item.videoId == videoId) startIdx = items.size - 1
                             }
                         }
+                        diag("loadAudio: items=${items.size} startIdx=$startIdx")
                         if (items.isNotEmpty()) {
                             runOnUiThread {
                                 mediaController?.setMediaItems(items, startIdx, 0L)
                                 mediaController?.prepare()
                                 mediaController?.playWhenReady = true
+                                diag("setMediaItems 호출: ${items.size}개, start=$startIdx")
                             }
                             return@launch
                         }
@@ -440,6 +453,9 @@ class AudioPlayerActivity : AppCompatActivity() {
                     tvTitle.text = "[$stateName] $currentTitle"
                 }
                 android.util.Log.d("AudioPlayer", "state=$stateName")
+                val mc = mediaController
+                diag("state=$stateName idx=${mc?.currentMediaItemIndex}/${mc?.mediaItemCount} " +
+                     "next=${mc?.hasNextMediaItem()} cur=$currentVideoId")
 
                 if (playbackState == Player.STATE_ENDED) {
                     android.util.Log.d("AudioPlayer", "STATE_ENDED → playNextRelatedBg")
@@ -482,6 +498,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 val newId = mediaItem?.mediaId ?: return
                 if (newId == currentVideoId) return
                 android.util.Log.d("AudioPlayer", "external transition to $newId")
+                diag("transition to $newId reason=$reason")
                 currentVideoId = newId
                 currentTitle = mediaItem.mediaMetadata.title?.toString() ?: currentTitle
                 currentChannel = mediaItem.mediaMetadata.artist?.toString() ?: currentChannel
@@ -512,6 +529,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private fun playNextRelatedBg() {
         // ★ ExoPlayer 큐에 다음 곡 남아있으면 처리하지 않음 (ExoPlayer가 자동 진행)
         val mc = mediaController
+        diag("playNextRelatedBg: mc=${mc != null} next=${mc?.hasNextMediaItem()} " +
+             "idx=${mc?.currentMediaItemIndex}/${mc?.mediaItemCount}")
         if (mc != null && mc.hasNextMediaItem()) {
             android.util.Log.d("AudioPlayer", "ExoPlayer 큐 있음 → playNextRelatedBg skip")
             loadingNext = false
