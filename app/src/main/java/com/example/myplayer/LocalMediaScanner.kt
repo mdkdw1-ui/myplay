@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 data class LocalMedia(
     val id: Long,
     val uri: Uri,
+    val filePath: String,
     val title: String,
     val artist: String,
     val album: String,
@@ -119,7 +120,8 @@ object LocalMediaScanner {
 
                     out.add(
                         LocalMedia(
-                            id = id, uri = uri, title = title,
+                            id = id, uri = uri, filePath = path,
+                            title = title,
                             artist = artist, album = album, albumId = albumId,
                             durationMs = dur,
                             folder = folder, mimeType = mime, sizeBytes = size
