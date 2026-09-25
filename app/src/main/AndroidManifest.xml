@@ -14,6 +14,7 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
     <application
+        android:name=".MyApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -34,6 +35,7 @@
         <activity android:name=".StatsActivity" android:exported="false" android:label="통계" />
         <activity android:name=".DownloadsActivity" android:exported="false" android:label="다운로드" />
         <activity android:name=".SettingsActivity" android:exported="false" android:label="설정" />
+        <activity android:name=".YouTubeLoginActivity" android:exported="false" android:label="YouTube 로그인" />
         <activity android:name=".PlaylistActivity" android:exported="false" android:label="재생목록" />
         <activity android:name=".QueueActivity" android:exported="false" android:label="대기열" />
         <activity android:name=".TranscriptActivity" android:exported="false" android:label="자막" android:windowSoftInputMode="adjustResize" />
