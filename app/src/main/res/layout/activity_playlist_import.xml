@@ -40,7 +40,7 @@
         android:paddingStart="20dp"
         android:paddingEnd="20dp"
         android:paddingTop="4dp"
-        android:text="JSON 형식: {\"name\": \"이름\", \"songs\": [{\"artist\":\"\", \"title\":\"\"}]}"
+        android:text="JSON 형식: {&quot;name&quot;:&quot;이름&quot;, &quot;songs&quot;:[{&quot;artist&quot;:&quot;&quot;, &quot;title&quot;:&quot;&quot;}]}"
         android:textSize="11sp"
         android:textColor="@color/text_tertiary" />
 
@@ -52,7 +52,7 @@
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
         android:layout_marginTop="16dp"
-        android:text="📁 JSON 파일 선택" />
+        android:text="JSON 형식: {&quot;name&quot;:&quot;이름&quot;, &quot;songs&quot;:[{&quot;artist&quot;:&quot;&quot;, &quot;title&quot;:&quot;&quot;}]}" />
 
     <TextView
         android:id="@+id/tvStatus"
