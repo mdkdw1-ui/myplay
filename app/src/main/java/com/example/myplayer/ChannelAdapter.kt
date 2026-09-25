@@ -9,7 +9,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 
 class ChannelAdapter(
-    private val onClick: (ChannelItem) -> Unit
+    private val onClick: (ChannelItem) -> Unit,
+    private val onLongClick: ((ChannelItem) -> Unit)? = null
 ) : RecyclerView.Adapter<ChannelAdapter.VH>() {
 
     private val items = mutableListOf<ChannelItem>()
@@ -43,6 +44,10 @@ class ChannelAdapter(
         }
 
         holder.itemView.setOnClickListener { onClick(item) }
+        holder.itemView.setOnLongClickListener {
+            onLongClick?.invoke(item)
+            true
+        }
     }
 
     override fun getItemCount() = items.size
