@@ -36,6 +36,7 @@
         <activity android:name=".DownloadsActivity" android:exported="false" android:label="다운로드" />
         <activity android:name=".SettingsActivity" android:exported="false" android:label="설정" />
         <activity android:name=".YouTubeLoginActivity" android:exported="false" android:label="YouTube 로그인" />
+        <activity android:name=".PlaylistImportActivity" android:exported="false" android:label="플레이리스트 가져오기" />
         <activity android:name=".PlaylistActivity" android:exported="false" android:label="재생목록" />
         <activity android:name=".QueueActivity" android:exported="false" android:label="대기열" />
         <activity android:name=".TranscriptActivity" android:exported="false" android:label="자막" android:windowSoftInputMode="adjustResize" />

@@ -20,6 +20,13 @@ class MyPlaylistsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_my_playlists)
 
+        // ★ 우측 상단 "가져오기" 버튼 or 헤더 롱프레스
+        try {
+            findViewById<View>(R.id.btnImport)?.setOnClickListener {
+                startActivity(android.content.Intent(this, PlaylistImportActivity::class.java))
+            }
+        } catch (_: Exception) {}
+
         val recycler = findViewById<RecyclerView>(R.id.recycler)
         val emptyBox = findViewById<View>(R.id.emptyBox)
 
