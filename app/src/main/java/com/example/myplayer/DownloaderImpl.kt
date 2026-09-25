@@ -39,6 +39,15 @@ class DownloaderImpl : Downloader() {
         connection.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
         connection.setRequestProperty("Accept", "*/*")
 
+        // ★ YouTube 로그인 쿠키 첨부 (있으면)
+        try {
+            val ctx = MyApp.instance.applicationContext
+            val cookie = YouTubeCookieManager.load(ctx)
+            if (cookie.isNotBlank()) {
+                connection.setRequestProperty("Cookie", cookie)
+            }
+        } catch (_: Exception) {}
+
         if (dataToSend != null) {
             connection.doOutput = true
             connection.outputStream.use { it.write(dataToSend) }

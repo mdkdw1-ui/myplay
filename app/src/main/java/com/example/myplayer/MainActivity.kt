@@ -134,6 +134,12 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (e: Exception) { }
 
+        try {
+            findViewById<View>(R.id.btnSettings)?.setOnClickListener {
+                startActivity(Intent(this, SettingsActivity::class.java))
+            }
+        } catch (e: Exception) { }
+
         findViewById<View>(R.id.btnStats).setOnClickListener {
             startActivity(Intent(this, StatsActivity::class.java))
         }
