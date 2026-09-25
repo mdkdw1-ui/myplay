@@ -160,7 +160,7 @@ class MainActivity : AppCompatActivity() {
 
         historyAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         relatedAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
-        channelAdapter = ChannelAdapter { c -> openChannel(c) }
+        channelAdapter = ChannelAdapter(onClick = { c -> openChannel(c) })
         bookmarkAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         downloadsAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         trendingAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
