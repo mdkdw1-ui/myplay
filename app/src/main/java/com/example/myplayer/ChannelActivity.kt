@@ -20,6 +20,7 @@ import kotlinx.coroutines.withContext
 class ChannelActivity : AppCompatActivity() {
 
     private lateinit var adapter: SearchAdapter
+    private val loadedVideos = mutableListOf<VideoItem>()
     private var nextContinuation: String? = null
     private var loadingMore = false
     private var channelId: String = ""
@@ -81,6 +82,11 @@ class ChannelActivity : AppCompatActivity() {
             toggleSubscribe()
         }
 
+        // ★ 전체 재생
+        findViewById<MaterialButton>(R.id.btnPlayAll)?.setOnClickListener {
+            playAll()
+        }
+
         progress.visibility = View.VISIBLE
         tvStatus.visibility = View.VISIBLE
         tvStatus.text = "채널 정보 불러오는 중..."
@@ -105,6 +111,8 @@ class ChannelActivity : AppCompatActivity() {
             tvStatus.text = if (page.videos.isEmpty()) "영상 없음"
                              else "${page.videos.size}개"
             adapter.submit(page.videos)
+            loadedVideos.clear()
+            loadedVideos.addAll(page.videos)
         }
     }
 
@@ -160,6 +168,29 @@ class ChannelActivity : AppCompatActivity() {
         }
     }
 
+    private fun playAll() {
+        val list = loadedVideos.toList()
+        if (list.isEmpty()) {
+            Toast.makeText(this, "재생할 영상이 없습니다", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        QueueManager.clear(this)
+        for (v in list) {
+            QueueManager.add(this, HomeVideo(v.videoId, v.title, v.channel, v.thumbnail))
+        }
+        val first = list.first()
+        QueueManager.setCurrent(this, first.videoId)
+
+        startActivity(Intent(this, AudioPlayerActivity::class.java).apply {
+            putExtra("VIDEO_ID", first.videoId)
+            putExtra("VIDEO_TITLE", first.title)
+            putExtra("VIDEO_CHANNEL", first.channel)
+            putExtra("VIDEO_THUMB", first.thumbnail)
+            putExtra("FROM_PLAYLIST", true)
+        })
+    }
+
     private fun loadMore() {
         val token = nextContinuation ?: return
         loadingMore = true
@@ -167,6 +198,7 @@ class ChannelActivity : AppCompatActivity() {
             val page = YouTubeChannel.fetchMore(token)
             nextContinuation = page.continuation
             adapter.append(page.videos)
+            loadedVideos.addAll(page.videos)
             loadingMore = false
         }
     }

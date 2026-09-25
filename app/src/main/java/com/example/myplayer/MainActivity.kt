@@ -164,7 +164,10 @@ class MainActivity : AppCompatActivity() {
         bookmarkAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         downloadsAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         trendingAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
-        subAdapter = ChannelAdapter { c -> openChannel(c) }
+        subAdapter = ChannelAdapter(
+            onClick = { c -> openChannel(c) },
+            onLongClick = { c -> playChannelAll(c) }
+        )
 
         findViewById<RecyclerView>(R.id.rvHistory).apply {
             layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
@@ -542,6 +545,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ★ 채널 페이지로 이동
+    private fun playChannelAll(c: ChannelItem) {
+        lifecycleScope.launch {
+            try {
+                val (info, page) = YouTubeChannel.fetch(c.channelId, c.name)
+                val list = page.videos
+                if (list.isEmpty()) {
+                    Toast.makeText(this@MainActivity, "영상 없음", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                QueueManager.clear(this@MainActivity)
+                for (v in list) {
+                    QueueManager.add(this@MainActivity,
+                        HomeVideo(v.videoId, v.title, v.channel, v.thumbnail))
+                }
+                val first = list.first()
+                QueueManager.setCurrent(this@MainActivity, first.videoId)
+                startActivity(Intent(this@MainActivity, AudioPlayerActivity::class.java).apply {
+                    putExtra("VIDEO_ID", first.videoId)
+                    putExtra("VIDEO_TITLE", first.title)
+                    putExtra("VIDEO_CHANNEL", first.channel)
+                    putExtra("VIDEO_THUMB", first.thumbnail)
+                    putExtra("FROM_PLAYLIST", true)
+                })
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "실패: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun openChannel(c: ChannelItem) {
         val intent = Intent(this, ChannelActivity::class.java).apply {
             putExtra("CHANNEL_ID", c.channelId)
