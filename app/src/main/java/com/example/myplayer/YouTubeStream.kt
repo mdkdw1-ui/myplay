@@ -48,10 +48,25 @@ object YouTubeStream {
             try { NewPipe.init(DownloaderImpl()) } catch (e: Exception) { }
 
             val url = "https://www.youtube.com/watch?v=$videoId"
-            val info = try {
-                StreamInfo.getInfo(ServiceList.YouTube, url)
-            } catch (e: Exception) {
-                sb.append("getInfo FAIL: ${e.message}\n")
+
+            // ★ 재시도 (봇 차단 일시적일 수 있음)
+            var info: StreamInfo? = null
+            var lastErr: Exception? = null
+            for (attempt in 0 until 3) {
+                try {
+                    info = StreamInfo.getInfo(ServiceList.YouTube, url)
+                    if (info != null) break
+                } catch (e: Exception) {
+                    lastErr = e
+                    sb.append("getInfo try ${attempt + 1} FAIL: ${e.message}\n")
+                    if (attempt < 2) {
+                        try { Thread.sleep(800L * (attempt + 1)) } catch (_: Exception) {}
+                    }
+                }
+            }
+
+            if (info == null) {
+                sb.append("getInfo FAIL final: ${lastErr?.message}\n")
                 return@withContext StreamResult(null, null, null, "", "", "", sb.toString())
             }
 
