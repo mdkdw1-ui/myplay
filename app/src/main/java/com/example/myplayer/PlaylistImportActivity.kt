@@ -151,7 +151,7 @@ class PlaylistImportActivity : AppCompatActivity() {
             runOnUiThread {
                 progress.visibility = View.GONE
                 tvStatus.text = "✅ 완료: $found / ${songs.size}곡 저장"
-                tvCurrent.text = ""$name" 플레이리스트로 저장됨"
+                tvCurrent.text = "\"$name\" 플레이리스트로 저장됨"
                 Toast.makeText(this@PlaylistImportActivity,
                     "$found 곡 저장됨", Toast.LENGTH_LONG).show()
                 importing = false
