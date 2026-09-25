@@ -23,8 +23,21 @@ class DownloaderImpl : Downloader() {
         connection.instanceFollowRedirects = true
 
         headers?.forEach { entry ->
-            connection.setRequestProperty(entry.key, entry.value.joinToString(","))
+            val key = entry.key
+            if (key.equals("User-Agent", ignoreCase = true)) return@forEach
+            if (key.equals("Accept-Language", ignoreCase = true)) return@forEach
+            connection.setRequestProperty(key, entry.value.joinToString(","))
         }
+
+        // ★ 봇 차단 회피: 실제 브라우저 UA 강제
+        connection.setRequestProperty(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+            "AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "Chrome/120.0.0.0 Safari/537.36"
+        )
+        connection.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
+        connection.setRequestProperty("Accept", "*/*")
 
         if (dataToSend != null) {
             connection.doOutput = true
