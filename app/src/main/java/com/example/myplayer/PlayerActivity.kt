@@ -519,7 +519,9 @@ class PlayerActivity : AppCompatActivity() {
             gestureDetector.onTouchEvent(event)
             scaleDetector.onTouchEvent(event)
 
-            if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+            // ★ 모든 터치 → 컨트롤 즉시 표시
+            if (event.action == android.view.MotionEvent.ACTION_DOWN ||
+                event.action == android.view.MotionEvent.ACTION_POINTER_DOWN) {
                 showControls()
             }
 
@@ -1982,14 +1984,16 @@ class PlayerActivity : AppCompatActivity() {
 
 
     private fun showControls() {
-        // 잠금 상태면 복원 안 함
         if (isLocked) return
-        val scroll = findViewById<View>(R.id.controlScroll)
-        val bar = findViewById<View>(R.id.controlBar)
-        scroll?.visibility = View.VISIBLE
-        bar?.visibility = View.VISIBLE
-        mainHandler.removeCallbacks(hideControlsRunnable)
-        mainHandler.postDelayed(hideControlsRunnable, 180_000)
+        try {
+            val scroll = findViewById<View>(R.id.controlScroll)
+            val bar = findViewById<View>(R.id.controlBar)
+            scroll?.visibility = View.VISIBLE
+            bar?.visibility = View.VISIBLE
+            scroll?.requestLayout()
+            mainHandler.removeCallbacks(hideControlsRunnable)
+            mainHandler.postDelayed(hideControlsRunnable, 180_000)
+        } catch (_: Exception) {}
     }
 
     private fun toggleFullscreen() {
