@@ -292,6 +292,23 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
+        // ★ 다운로드 파일 (오디오만) 재생
+        if (videoId.startsWith("local:download:")) {
+            val fileUri = intent.getStringExtra("FILE_URI")
+            if (!fileUri.isNullOrBlank()) {
+                bgScope.launch {
+                    try {
+                        val mi = MediaItem.fromUri(fileUri)
+                        runOnUiThread {
+                            mediaController?.setMediaItem(mi)
+                            mediaController?.prepare()
+                            mediaController?.playWhenReady = true
+                        }
+                    } catch (e: Exception) { }
+                }
+            }
+            return
+        }
         // 로컬 파일이면 YouTubeStream.extract 스킵
         if (videoId.startsWith("local:")) {
             bgScope.launch {

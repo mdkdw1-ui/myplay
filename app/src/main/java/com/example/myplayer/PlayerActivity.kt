@@ -102,6 +102,17 @@ class PlayerActivity : AppCompatActivity() {
     private var mediaController: MediaController? = null
 
     private var isFullscreen = false
+
+    // ★ 확대/이동 (Pinch Zoom + Pan)
+    private var zoomScale = 1f
+    private var zoomTx = 0f
+    private var zoomTy = 0f
+    private var panStartX = 0f
+    private var panStartY = 0f
+    private var panStartTx = 0f
+    private var panStartTy = 0f
+    private var isPanning = false
+
     private var liveSubtitleActive = false
     private var mediaProjection: MediaProjection? = null
     private var liveCaptureManager: AudioCaptureManager? = null
@@ -289,6 +300,11 @@ class PlayerActivity : AppCompatActivity() {
 
         btnSpeed.setOnClickListener { showSpeedDialog() }
         findViewById<View>(R.id.btnFullscreen).setOnClickListener { toggleFullscreen() }
+        findViewById<View>(R.id.btnFullscreen).setOnLongClickListener {
+            resetZoom()
+            showGestureFeedback("1x")
+            true
+        }
         findViewById<View>(R.id.btnPip).apply {
             setOnClickListener { enterPipMode() }
             setOnLongClickListener {
@@ -451,9 +467,16 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     // ========== 제스처 ==========
+    // ========== 제스처 ==========
     private fun setupGestures() {
         val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
+                // ★ 확대 상태면 더블탭 → 1x로 리셋
+                if (zoomScale > 1.01f) {
+                    resetZoom()
+                    showGestureFeedback("1x")
+                    return true
+                }
                 val width = playerView.width
                 if (width <= 0) return false
                 val x = e.x
@@ -466,6 +489,25 @@ class PlayerActivity : AppCompatActivity() {
             }
         })
 
+        // ★ 핀치 줌
+        val scaleDetector = android.view.ScaleGestureDetector(
+            this,
+            object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScale(detector: android.view.ScaleGestureDetector): Boolean {
+                    val newScale = (zoomScale * detector.scaleFactor).coerceIn(1f, 4f)
+                    zoomScale = newScale
+                    clampPan()
+                    applyZoom()
+                    return true
+                }
+
+                override fun onScaleEnd(detector: android.view.ScaleGestureDetector) {
+                    if (zoomScale < 1.05f) resetZoom()
+                    else showGestureFeedback("🔍 ${"%.1f".format(zoomScale)}x")
+                }
+            }
+        )
+
         var downY = 0f
         var startVol = 0
         var startBright = 0f
@@ -475,9 +517,17 @@ class PlayerActivity : AppCompatActivity() {
 
         playerView.setOnTouchListener { _, event ->
             gestureDetector.onTouchEvent(event)
-            // ★ 컨트롤 자동 숨김 재시작
+            scaleDetector.onTouchEvent(event)
+
             if (event.action == android.view.MotionEvent.ACTION_DOWN) {
                 showControls()
+            }
+
+            // ★ 2손가락 이상 → pan/vol/brightness 무시
+            if (event.pointerCount > 1) {
+                isPanning = false
+                gestureActive = false
+                return@setOnTouchListener true
             }
 
             when (event.action) {
@@ -489,9 +539,29 @@ class PlayerActivity : AppCompatActivity() {
                     }
                     isVolume = event.x < playerView.width / 2f
                     gestureActive = false
+
+                    // ★ 확대 상태 → 드래그는 위치 이동
+                    if (zoomScale > 1.01f) {
+                        isPanning = true
+                        panStartX = event.x
+                        panStartY = event.y
+                        panStartTx = zoomTx
+                        panStartTy = zoomTy
+                    } else {
+                        isPanning = false
+                    }
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val dy = downY - event.y // 위로 = +
+                    // ★ 확대 상태 pan
+                    if (isPanning && zoomScale > 1.01f) {
+                        zoomTx = panStartTx + (event.x - panStartX)
+                        zoomTy = panStartTy + (event.y - panStartY)
+                        clampPan()
+                        applyZoom()
+                        return@setOnTouchListener true
+                    }
+
+                    val dy = downY - event.y
                     if (!gestureActive && Math.abs(dy) > threshold) {
                         gestureActive = true
                     }
@@ -511,6 +581,7 @@ class PlayerActivity : AppCompatActivity() {
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    isPanning = false
                     if (gestureActive) {
                         gestureActive = false
                         mainHandler.postDelayed(gestureHideRunnable, 400)
@@ -520,6 +591,37 @@ class PlayerActivity : AppCompatActivity() {
             false
         }
     }
+
+    /** 확대 상태 적용 */
+    private fun applyZoom() {
+        try {
+            playerView.scaleX = zoomScale
+            playerView.scaleY = zoomScale
+            playerView.translationX = zoomTx
+            playerView.translationY = zoomTy
+        } catch (_: Exception) {}
+    }
+
+    /** 이동 범위 제한 (영상이 화면 밖으로 너무 나가지 않게) */
+    private fun clampPan() {
+        val w = playerView.width.toFloat()
+        val h = playerView.height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        val maxTx = w * (zoomScale - 1f) / 2f
+        val maxTy = h * (zoomScale - 1f) / 2f
+        zoomTx = zoomTx.coerceIn(-maxTx, maxTx)
+        zoomTy = zoomTy.coerceIn(-maxTy, maxTy)
+    }
+
+    /** 확대 초기화 */
+    private fun resetZoom() {
+        zoomScale = 1f
+        zoomTx = 0f
+        zoomTy = 0f
+        isPanning = false
+        applyZoom()
+    }
+
 
     private fun showGestureFeedback(text: String) {
         // 새 HUD
@@ -857,6 +959,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun extractAndPlay(
         videoId: String, title: String, channel: String, thumb: String, startPosMs: Long = 0L
     ) {
+        resetZoom()  // ★ 새 영상 → 확대 초기화
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
             val result = YouTubeStream.extract(videoId)
@@ -1102,7 +1205,22 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
 
-        val streamUrl = currentStreamUrl
+        // ★ 다운로드 형식 선택
+        android.app.AlertDialog.Builder(this)
+            .setTitle("다운로드 형식")
+            .setItems(arrayOf("🎬 영상 포함 (mp4)", "🎵 음악만 (m4a)")) { _, which ->
+                doDownload(which == 1)
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun doDownload(audioOnly: Boolean) {
+        val streamUrl = if (audioOnly) {
+            currentAudioUrl ?: currentStreamUrl
+        } else {
+            currentStreamUrl
+        }
         if (streamUrl.isNullOrBlank()) {
             Toast.makeText(this, "스트림이 없습니다", Toast.LENGTH_SHORT).show()
             return
@@ -1133,7 +1251,8 @@ class PlayerActivity : AppCompatActivity() {
             val file = AppDownloader.download(
                 applicationContext,
                 currentVideoId,
-                streamUrl
+                streamUrl,
+                audioOnly = audioOnly
             ) { pct ->
                 runOnUiThread {
                     progressDialog.progress = pct
@@ -1147,6 +1266,10 @@ class PlayerActivity : AppCompatActivity() {
 
             if (file != null) {
                 val size = file.length()
+                // ★ Download 폴더로 자동 내보내기
+                try {
+                    AppDownloader.exportToPublicDownload(applicationContext, file)
+                } catch (_: Exception) {}
                 HistoryDatabase.get(applicationContext).downloadDao().insert(
                     DownloadEntity(
                         videoId = currentVideoId,
@@ -1155,7 +1278,8 @@ class PlayerActivity : AppCompatActivity() {
                         thumbnail = currentThumb,
                         filePath = file.absolutePath,
                         sizeBytes = size,
-                        downloadedAt = System.currentTimeMillis()
+                        downloadedAt = System.currentTimeMillis(),
+                        isAudioOnly = audioOnly
                     )
                 )
                 Toast.makeText(
@@ -1887,6 +2011,7 @@ class PlayerActivity : AppCompatActivity() {
             lp.height = ViewGroup.LayoutParams.WRAP_CONTENT
             videoContainer.layoutParams = lp
             isFullscreen = false
+            resetZoom()
         }
     }
 
