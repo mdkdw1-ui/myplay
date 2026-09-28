@@ -50,6 +50,9 @@ jobs:
           from PIL import Image, ImageDraw
           candidates = [
               'app/src/main/assets/www/icon.png',
+              'app/src/main/assets/www/icon.jpg',
+              'app/src/main/assets/www/icon.jpeg',
+              'app/src/main/assets/www/icon.webp',
               'www/icon.png', 'www/icon.jpg', 'public/icon.png'
           ]
           icon_path = None

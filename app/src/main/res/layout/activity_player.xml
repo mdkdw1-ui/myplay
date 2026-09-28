@@ -18,7 +18,7 @@
             android:layout_height="wrap_content"
             android:minHeight="220dp"
             app:resize_mode="fit"
-            app:use_controller="true"
+            app:use_controller="false"
             app:show_buffering="when_playing" />
 
         <!-- ★ 컨트롤바: HorizontalScrollView로 감싸서 넘침 방지 -->
