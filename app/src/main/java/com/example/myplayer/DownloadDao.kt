@@ -23,4 +23,7 @@ interface DownloadDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM downloads WHERE videoId = :videoId)")
     suspend fun isDownloaded(videoId: String): Boolean
+
+    @Query("SELECT * FROM downloads")
+    suspend fun getAllOnce(): List<DownloadEntity>
 }

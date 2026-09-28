@@ -11,5 +11,6 @@ data class DownloadEntity(
     val thumbnail: String,
     val filePath: String,
     val sizeBytes: Long,
-    val downloadedAt: Long
+    val downloadedAt: Long,
+    val isAudioOnly: Boolean = false
 )

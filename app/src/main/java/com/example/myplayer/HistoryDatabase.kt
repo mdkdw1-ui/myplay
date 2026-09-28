@@ -15,7 +15,7 @@ import androidx.room.RoomDatabase
         SavedPlaylistEntity::class,
         SavedPlaylistItemEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class HistoryDatabase : RoomDatabase() {

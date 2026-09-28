@@ -31,6 +31,11 @@ class DownloadsActivity : AppCompatActivity() {
         recycler.layoutManager = LinearLayoutManager(this)
         recycler.adapter = adapter
 
+        // ★ Download 폴더에서 가져오기
+        findViewById<View>(R.id.btnImportDownload)?.setOnClickListener {
+            importFromPublic()
+        }
+
         lifecycleScope.launch {
             HistoryDatabase.get(applicationContext).downloadDao().getAll().collect { list ->
                 adapter.submit(list)
@@ -40,6 +45,56 @@ class DownloadsActivity : AppCompatActivity() {
         }
     }
 
+
+    private fun importFromPublic() {
+        lifecycleScope.launch {
+            val dao = HistoryDatabase.get(applicationContext).downloadDao()
+            val existing = withContext(Dispatchers.IO) {
+                try {
+                    dao.getAllOnce().map { it.videoId }.toSet()
+                } catch (e: Exception) { emptySet<String>() }
+            }
+
+            val progress = android.app.ProgressDialog(this@DownloadsActivity).apply {
+                setTitle("가져오는 중")
+                setMessage("Download/MyPlayer 폴더 스캔...")
+                setCancelable(false)
+                show()
+            }
+
+            val result = withContext(Dispatchers.IO) {
+                AppDownloader.importFromPublicDownload(applicationContext, existing)
+            }
+
+            progress.dismiss()
+
+            // DB insert
+            withContext(Dispatchers.IO) {
+                for (e in result.items) {
+                    try {
+                        dao.insert(e)
+                        // 유튜브 메타 조회 시도
+                        try {
+                            val v = YouTubeStream.extract(e.videoId)
+                            if (v.title.isNotBlank()) {
+                                dao.insert(e.copy(
+                                    title = v.title,
+                                    channel = v.channelName,
+                                    thumbnail = v.qualities.firstOrNull()?.url ?: ""
+                                ))
+                            }
+                        } catch (_: Exception) {}
+                    } catch (_: Exception) {}
+                }
+            }
+
+            android.widget.Toast.makeText(
+                this@DownloadsActivity,
+                "가져옴: ${result.imported} · 스킵: ${result.skipped} · 실패: ${result.failed}",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 
     private fun exportToDownload(item: DownloadEntity) {
         try {
@@ -110,13 +165,25 @@ class DownloadsActivity : AppCompatActivity() {
             android.widget.Toast.makeText(this, "파일이 없습니다", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        val intent = Intent(this, PlayerActivity::class.java).apply {
-            putExtra("VIDEO_URI", Uri.fromFile(f).toString())
-            putExtra("VIDEO_TITLE", item.title)
-            putExtra("VIDEO_CHANNEL", item.channel)
-            putExtra("VIDEO_THUMB", item.thumbnail)
+        // ★ 음악만이면 AudioPlayerActivity로
+        if (item.isAudioOnly) {
+            val intent = Intent(this, AudioPlayerActivity::class.java).apply {
+                putExtra("VIDEO_ID", "local:download:${item.videoId}")
+                putExtra("FILE_URI", Uri.fromFile(f).toString())
+                putExtra("VIDEO_TITLE", item.title)
+                putExtra("VIDEO_CHANNEL", item.channel)
+                putExtra("FROM_PLAYLIST", true)
+            }
+            startActivity(intent)
+        } else {
+            val intent = Intent(this, PlayerActivity::class.java).apply {
+                putExtra("VIDEO_URI", Uri.fromFile(f).toString())
+                putExtra("VIDEO_TITLE", item.title)
+                putExtra("VIDEO_CHANNEL", item.channel)
+                putExtra("VIDEO_THUMB", item.thumbnail)
+            }
+            startActivity(intent)
         }
-        startActivity(intent)
     }
 
     private fun confirmDelete(item: DownloadEntity) {
