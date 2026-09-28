@@ -393,6 +393,110 @@
 
 </FrameLayout>
 
+        <!-- ★ 재생 위치 + 하단 컨트롤 (videoContainer 바로 뒤) -->
+    <LinearLayout
+        android:id="@+id/seekbarPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#AA000000"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <SeekBar
+            android:id="@+id/playerSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="1000"
+            android:progressTint="@color/accent"
+            android:thumbTint="@color/accent" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvPlayerPos"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="0:00"
+                android:textSize="11sp"
+                android:textColor="@color/text_primary" />
+
+            <TextView
+                android:id="@+id/tvPlayerDur"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0:00"
+                android:textSize="11sp"
+                android:textColor="@color/text_primary" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- ★ 항상 보이는 하단 컨트롤바 (PlayerActivity) -->
+
+    <LinearLayout
+        android:id="@+id/bottomControls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:background="#CC000000">
+
+        <ImageButton
+            android:id="@+id/btnPrevTrack"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_media_previous"
+            android:tint="@color/text_primary"
+            android:contentDescription="이전 곡" />
+
+        <ImageButton
+            android:id="@+id/btnBack5"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_media_rew"
+            android:tint="@color/text_primary"
+            android:contentDescription="5초 뒤로" />
+
+        <ImageButton
+            android:id="@+id/btnPlayPause"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_media_play"
+            android:tint="@color/text_primary"
+            android:contentDescription="재생/일시정지" />
+
+        <ImageButton
+            android:id="@+id/btnFwd5"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_media_ff"
+            android:tint="@color/text_primary"
+            android:contentDescription="5초 앞으로" />
+
+        <ImageButton
+            android:id="@+id/btnNextTrack"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_media_next"
+            android:tint="@color/text_primary"
+            android:contentDescription="다음 곡" />
+    </LinearLayout>
+
     <androidx.core.widget.NestedScrollView
         android:id="@+id/infoScroll"
         android:layout_width="match_parent"
@@ -585,107 +689,6 @@
     </androidx.core.widget.NestedScrollView>
 
     <!-- ★ 재생 위치 seekbar 패널 -->
-    <LinearLayout
-        android:id="@+id/seekbarPanel"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="#AA000000"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="4dp"
-        android:paddingBottom="4dp">
-
-        <SeekBar
-            android:id="@+id/playerSeekBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="1000"
-            android:progressTint="@color/accent"
-            android:thumbTint="@color/accent" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/tvPlayerPos"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="0:00"
-                android:textSize="11sp"
-                android:textColor="@color/text_primary" />
-
-            <TextView
-                android:id="@+id/tvPlayerDur"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="0:00"
-                android:textSize="11sp"
-                android:textColor="@color/text_primary" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- ★ 항상 보이는 하단 컨트롤바 (PlayerActivity) -->
-    <LinearLayout
-        android:id="@+id/bottomControls"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp"
-        android:background="#CC000000">
-
-        <ImageButton
-            android:id="@+id/btnPrevTrack"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_previous"
-            android:tint="@color/text_primary"
-            android:contentDescription="이전 곡" />
-
-        <ImageButton
-            android:id="@+id/btnBack5"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_rew"
-            android:tint="@color/text_primary"
-            android:contentDescription="5초 뒤로" />
-
-        <ImageButton
-            android:id="@+id/btnPlayPause"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_play"
-            android:tint="@color/text_primary"
-            android:contentDescription="재생/일시정지" />
-
-        <ImageButton
-            android:id="@+id/btnFwd5"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_ff"
-            android:tint="@color/text_primary"
-            android:contentDescription="5초 앞으로" />
-
-        <ImageButton
-            android:id="@+id/btnNextTrack"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_next"
-            android:tint="@color/text_primary"
-            android:contentDescription="다음 곡" />
-    </LinearLayout>
 
     <View
         android:id="@+id/dragHintBox"

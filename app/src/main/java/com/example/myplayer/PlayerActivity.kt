@@ -669,15 +669,11 @@ class PlayerActivity : AppCompatActivity() {
                     android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
                     android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
                 )
-                val dragHint = root.findViewById<View>(R.id.dragHintBox)
-                val idx = if (dragHint != null) root.indexOfChild(dragHint) else -1
-                if (idx >= 0) {
-                    root.addView(seekbar, idx)
-                    root.addView(bottom, idx + 1)
-                } else {
-                    root.addView(seekbar)
-                    root.addView(bottom)
-                }
+                // videoContainer 바로 뒤에 삽입 (일반 모드 위치)
+                val vc = root.findViewById<View>(R.id.videoContainer)
+                val idx = if (vc != null) root.indexOfChild(vc) + 1 else 0
+                root.addView(seekbar, idx)
+                root.addView(bottom, idx + 1)
             }
         } catch (_: Exception) {}
     }
@@ -2185,7 +2181,7 @@ class PlayerActivity : AppCompatActivity() {
             findViewById<View>(R.id.bottomControls)?.visibility = View.VISIBLE
             findViewById<View>(R.id.controlScroll)?.requestLayout()
             mainHandler.removeCallbacks(hideControlsRunnable)
-            mainHandler.postDelayed(hideControlsRunnable, 3_000)
+            mainHandler.postDelayed(hideControlsRunnable, 5_000)
         } catch (_: Exception) {}
     }
 
