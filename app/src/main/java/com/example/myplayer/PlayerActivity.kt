@@ -516,6 +516,14 @@ class PlayerActivity : AppCompatActivity() {
         val threshold = 40f
 
         playerView.setOnTouchListener { _, event ->
+            // ★ 부모(ScrollView 등)가 터치 가로채지 않게
+            try {
+                if (event.action == android.view.MotionEvent.ACTION_DOWN ||
+                    event.pointerCount > 1) {
+                    playerView.parent?.requestDisallowInterceptTouchEvent(true)
+                }
+            } catch (_: Exception) {}
+
             gestureDetector.onTouchEvent(event)
             scaleDetector.onTouchEvent(event)
 
@@ -597,6 +605,16 @@ class PlayerActivity : AppCompatActivity() {
     /** 확대 상태 적용 */
     private fun applyZoom() {
         try {
+            if (zoomScale > 1.01f) {
+                // 확대 시 부모 clip 해제 (영상이 컨테이너 밖으로 나가도 잘리지 않게)
+                videoContainer.clipChildren = false
+                videoContainer.clipToPadding = false
+            } else {
+                videoContainer.clipChildren = true
+                videoContainer.clipToPadding = true
+            }
+            playerView.pivotX = playerView.width / 2f
+            playerView.pivotY = playerView.height / 2f
             playerView.scaleX = zoomScale
             playerView.scaleY = zoomScale
             playerView.translationX = zoomTx
@@ -2006,6 +2024,10 @@ class PlayerActivity : AppCompatActivity() {
             val lp = videoContainer.layoutParams
             lp.height = ViewGroup.LayoutParams.MATCH_PARENT
             videoContainer.layoutParams = lp
+            // ★ playerView도 fullscreen으로 (터치 감지 + 확대 기반)
+            val plp = playerView.layoutParams
+            plp.height = ViewGroup.LayoutParams.MATCH_PARENT
+            playerView.layoutParams = plp
             isFullscreen = true
         } else {
             controller.show(WindowInsets.Type.systemBars())
@@ -2014,6 +2036,10 @@ class PlayerActivity : AppCompatActivity() {
             val lp = videoContainer.layoutParams
             lp.height = ViewGroup.LayoutParams.WRAP_CONTENT
             videoContainer.layoutParams = lp
+            // playerView 원복
+            val plp = playerView.layoutParams
+            plp.height = ViewGroup.LayoutParams.WRAP_CONTENT
+            playerView.layoutParams = plp
             isFullscreen = false
             resetZoom()
         }
