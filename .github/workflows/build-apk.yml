@@ -113,8 +113,16 @@ jobs:
 
       - name: Decode Keystore
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.p12
+          echo "Base64 length: $(printf '%s' "${{ secrets.KEYSTORE_BASE64 }}" | wc -c)"
+          printf '%s' "${{ secrets.KEYSTORE_BASE64 }}" | tr -d ' \n\r\t' | base64 -d > release.p12
+          SIZE=$(wc -c < release.p12)
+          echo "release.p12 size: $SIZE bytes (expect ~2748)"
+          if [ "$SIZE" -lt 1000 ]; then
+            echo "❌ keystore 손상됨 (${SIZE} bytes)"
+            exit 1
+          fi
           ls -la release.p12
+          openssl pkcs12 -info -in release.p12 -passin pass:"${{ secrets.KEYSTORE_PASSWORD }}" -noout 2>&1 | head -3 || true
 
       - name: Sign APK
         run: |
