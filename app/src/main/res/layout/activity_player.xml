@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/playerRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -371,7 +372,26 @@
                 android:textColor="#FFFFFF"
                 android:textSize="13sp" />
         </LinearLayout>
+        <!-- ★ 확대 미니맵 (탭-스크롤 위치 표시) -->
+    <FrameLayout
+        android:id="@+id/miniMap"
+        android:layout_width="80dp"
+        android:layout_height="45dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="12dp"
+        android:background="#CC000000"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true">
+
+        <View
+            android:id="@+id/miniMapIndicator"
+            android:layout_width="40dp"
+            android:layout_height="20dp"
+            android:background="@drawable/bg_minimap_indicator" />
     </FrameLayout>
+
+</FrameLayout>
 
     <androidx.core.widget.NestedScrollView
         android:id="@+id/infoScroll"

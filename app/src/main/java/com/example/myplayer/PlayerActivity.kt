@@ -630,8 +630,139 @@ class PlayerActivity : AppCompatActivity() {
             playerView.scaleY = zoomScale
             playerView.translationX = zoomTx
             playerView.translationY = zoomTy
+            updateMiniMap()
         } catch (_: Exception) {}
     }
+
+    /** Fullscreen에서 하단 컨트롤을 오버레이로 이동 */
+    private fun applyFullscreenLayout(fullscreen: Boolean) {
+        try {
+            val seekbar = findViewById<View>(R.id.seekbarPanel) ?: return
+            val bottom = findViewById<View>(R.id.bottomControls) ?: return
+            val root = findViewById<ViewGroup>(R.id.playerRoot) ?: return
+
+            (seekbar.parent as? ViewGroup)?.removeView(seekbar)
+            (bottom.parent as? ViewGroup)?.removeView(bottom)
+
+            if (fullscreen) {
+                val seekLp = android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    gravity = android.view.Gravity.BOTTOM
+                    bottomMargin = (64 * resources.displayMetrics.density).toInt()
+                }
+                (videoContainer as? android.view.ViewGroup)?.addView(seekbar, seekLp)
+
+                val botLp = android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    gravity = android.view.Gravity.BOTTOM
+                }
+                (videoContainer as? android.view.ViewGroup)?.addView(bottom, botLp)
+            } else {
+                seekbar.layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                bottom.layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                val dragHint = root.findViewById<View>(R.id.dragHintBox)
+                val idx = if (dragHint != null) root.indexOfChild(dragHint) else -1
+                if (idx >= 0) {
+                    root.addView(seekbar, idx)
+                    root.addView(bottom, idx + 1)
+                } else {
+                    root.addView(seekbar)
+                    root.addView(bottom)
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    /** 미니맵 갱신 */
+    private fun updateMiniMap() {
+        try {
+            val mini = findViewById<View>(R.id.miniMap) ?: return
+            val ind = findViewById<View>(R.id.miniMapIndicator) ?: return
+
+            if (zoomScale <= 1.01f || isLocked) {
+                mini.visibility = View.GONE
+                return
+            }
+            mini.visibility = View.VISIBLE
+
+            mini.post {
+                val miniW = mini.width.toFloat()
+                val miniH = mini.height.toFloat()
+                if (miniW <= 0f || miniH <= 0f) return@post
+
+                val indW = miniW / zoomScale
+                val indH = miniH / zoomScale
+                val maxTx = playerView.width * (zoomScale - 1) / 2f
+                val maxTy = playerView.height * (zoomScale - 1) / 2f
+                if (maxTx <= 0f || maxTy <= 0f) return@post
+
+                val nx = (zoomTx / maxTx).coerceIn(-1f, 1f)
+                val ny = (zoomTy / maxTy).coerceIn(-1f, 1f)
+
+                val indCx = miniW / 2f - (miniW / 2f - indW / 2f) * nx
+                val indCy = miniH / 2f - (miniH / 2f - indH / 2f) * ny
+
+                val lp = ind.layoutParams
+                lp.width = indW.toInt().coerceAtLeast(8)
+                lp.height = indH.toInt().coerceAtLeast(8)
+                ind.layoutParams = lp
+
+                ind.x = indCx - indW / 2f
+                ind.y = indCy - indH / 2f
+            }
+        } catch (_: Exception) {}
+    }
+
+    /** 미니맵 드래그 처리 */
+    private fun setupMiniMap() {
+        val mini = findViewById<View>(R.id.miniMap) ?: return
+        mini.setOnTouchListener { v, event ->
+            if (zoomScale <= 1.01f) return@setOnTouchListener false
+            when (event.action) {
+                android.view.MotionEvent.ACTION_DOWN,
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val miniW = mini.width.toFloat()
+                    val miniH = mini.height.toFloat()
+                    if (miniW <= 0f || miniH <= 0f) return@setOnTouchListener true
+
+                    val indW = miniW / zoomScale
+                    val indH = miniH / zoomScale
+
+                    val indCx = event.x.coerceIn(indW / 2f, miniW - indW / 2f)
+                    val indCy = event.y.coerceIn(indH / 2f, miniH - indH / 2f)
+
+                    val denomX = (miniW / 2f - indW / 2f)
+                    val denomY = (miniH / 2f - indH / 2f)
+                    if (denomX <= 0f || denomY <= 0f) return@setOnTouchListener true
+
+                    val nx = (miniW / 2f - indCx) / denomX
+                    val ny = (miniH / 2f - indCy) / denomY
+
+                    val maxTx = playerView.width * (zoomScale - 1) / 2f
+                    val maxTy = playerView.height * (zoomScale - 1) / 2f
+
+                    zoomTx = nx * maxTx
+                    zoomTy = ny * maxTy
+                    clampPan()
+                    // applyZoom이 updateMiniMap 호출 → 자기 갱신
+                    applyZoom()
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
 
     /** 확대 순환 (1x → 1.3x → 1.5x → 2x → 1x) */
     private fun zoomCycle() {
@@ -681,6 +812,10 @@ class PlayerActivity : AppCompatActivity() {
         zoomTy = 0f
         isPanning = false
         applyZoom()
+        updateZoomButtonText()
+        try {
+            findViewById<View>(R.id.miniMap)?.visibility = View.GONE
+        } catch (_: Exception) {}
     }
 
 
@@ -2070,6 +2205,7 @@ class PlayerActivity : AppCompatActivity() {
             plp.height = ViewGroup.LayoutParams.MATCH_PARENT
             playerView.layoutParams = plp
             isFullscreen = true
+            applyFullscreenLayout(true)
         } else {
             controller.show(WindowInsets.Type.systemBars())
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -2083,6 +2219,7 @@ class PlayerActivity : AppCompatActivity() {
             playerView.layoutParams = plp
             isFullscreen = false
             resetZoom()
+            applyFullscreenLayout(false)
         }
     }
 
@@ -2340,6 +2477,7 @@ class PlayerActivity : AppCompatActivity() {
 
         // ★ seekbar 연결
         setupSeekBar()
+        setupMiniMap()
     }
 
     private var isSeeking = false
