@@ -527,7 +527,6 @@ class PlayerActivity : AppCompatActivity() {
         val threshold = 40f
 
         playerView.setOnTouchListener { _, event ->
-            // ★ 부모(ScrollView 등)가 터치 가로채지 않게
             try {
                 if (event.action == android.view.MotionEvent.ACTION_DOWN ||
                     event.pointerCount > 1) {
@@ -2186,7 +2185,7 @@ class PlayerActivity : AppCompatActivity() {
             findViewById<View>(R.id.bottomControls)?.visibility = View.VISIBLE
             findViewById<View>(R.id.controlScroll)?.requestLayout()
             mainHandler.removeCallbacks(hideControlsRunnable)
-            mainHandler.postDelayed(hideControlsRunnable, 180_000)
+            mainHandler.postDelayed(hideControlsRunnable, 3_000)
         } catch (_: Exception) {}
     }
 
@@ -2206,6 +2205,15 @@ class PlayerActivity : AppCompatActivity() {
             playerView.layoutParams = plp
             isFullscreen = true
             applyFullscreenLayout(true)
+            // ★ controlScroll을 TOP으로 (하단 컨트롤과 겹침 방지)
+            try {
+                val cs = findViewById<View>(R.id.controlScroll)
+                val lp = cs?.layoutParams
+                if (lp is android.widget.FrameLayout.LayoutParams) {
+                    lp.gravity = android.view.Gravity.TOP
+                    cs.layoutParams = lp
+                }
+            } catch (_: Exception) {}
         } else {
             controller.show(WindowInsets.Type.systemBars())
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -2220,6 +2228,15 @@ class PlayerActivity : AppCompatActivity() {
             isFullscreen = false
             resetZoom()
             applyFullscreenLayout(false)
+            // controlScroll 원복
+            try {
+                val cs = findViewById<View>(R.id.controlScroll)
+                val lp = cs?.layoutParams
+                if (lp is android.widget.FrameLayout.LayoutParams) {
+                    lp.gravity = android.view.Gravity.BOTTOM
+                    cs.layoutParams = lp
+                }
+            } catch (_: Exception) {}
         }
     }
 
