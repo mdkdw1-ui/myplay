@@ -618,12 +618,11 @@ class PlayerActivity : AppCompatActivity() {
         try {
             updateZoomButtonText()
             if (zoomScale > 1.01f) {
-                // 확대 시 부모 clip 해제 (영상이 컨테이너 밖으로 나가도 잘리지 않게)
-                videoContainer.clipChildren = false
-                videoContainer.clipToPadding = false
+                (videoContainer as? android.view.ViewGroup)?.clipChildren = false
+                (videoContainer as? android.view.ViewGroup)?.clipToPadding = false
             } else {
-                videoContainer.clipChildren = true
-                videoContainer.clipToPadding = true
+                (videoContainer as? android.view.ViewGroup)?.clipChildren = true
+                (videoContainer as? android.view.ViewGroup)?.clipToPadding = true
             }
             playerView.pivotX = playerView.width / 2f
             playerView.pivotY = playerView.height / 2f
