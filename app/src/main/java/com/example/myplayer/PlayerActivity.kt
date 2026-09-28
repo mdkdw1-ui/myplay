@@ -141,6 +141,8 @@ class PlayerActivity : AppCompatActivity() {
 
     private val hideControlsRunnable = Runnable {
         findViewById<View>(R.id.controlScroll)?.visibility = View.GONE
+        findViewById<View>(R.id.seekbarPanel)?.visibility = View.GONE
+        findViewById<View>(R.id.bottomControls)?.visibility = View.GONE
     }
 
     private val pref by lazy { getSharedPreferences("subtitle_prefs", Context.MODE_PRIVATE) }
@@ -322,6 +324,15 @@ class PlayerActivity : AppCompatActivity() {
         findViewById<View>(R.id.tvChannel).setOnClickListener { openChannelFromPlayer() }
         btnLock.setOnClickListener { toggleLock() }
         btnMore.setOnClickListener { showMoreMenu() }
+
+        // ★ 확대 버튼 (1x → 2x → 3x → 4x → 1x)
+        findViewById<View>(R.id.btnZoom)?.setOnClickListener { zoomCycle() }
+        findViewById<View>(R.id.btnZoom)?.setOnLongClickListener {
+            resetZoom()
+            updateZoomButtonText()
+            showGestureFeedback("1x")
+            true
+        }
         btnLiveSub.setOnClickListener { toggleLiveSubtitle() }
         btnAudioMode.setOnClickListener { switchToAudioMode() }
 
@@ -494,7 +505,7 @@ class PlayerActivity : AppCompatActivity() {
             this,
             object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
                 override fun onScale(detector: android.view.ScaleGestureDetector): Boolean {
-                    val newScale = (zoomScale * detector.scaleFactor).coerceIn(1f, 4f)
+                    val newScale = (zoomScale * detector.scaleFactor).coerceIn(1f, 2f)
                     zoomScale = newScale
                     clampPan()
                     applyZoom()
@@ -605,6 +616,7 @@ class PlayerActivity : AppCompatActivity() {
     /** 확대 상태 적용 */
     private fun applyZoom() {
         try {
+            updateZoomButtonText()
             if (zoomScale > 1.01f) {
                 // 확대 시 부모 clip 해제 (영상이 컨테이너 밖으로 나가도 잘리지 않게)
                 videoContainer.clipChildren = false
@@ -621,6 +633,36 @@ class PlayerActivity : AppCompatActivity() {
             playerView.translationY = zoomTy
         } catch (_: Exception) {}
     }
+
+    /** 확대 순환 (1x → 1.3x → 1.5x → 2x → 1x) */
+    private fun zoomCycle() {
+        zoomScale = when {
+            zoomScale < 1.1f -> 1.3f
+            zoomScale < 1.4f -> 1.5f
+            zoomScale < 1.7f -> 2f
+            else -> 1f
+        }
+        zoomTx = 0f
+        zoomTy = 0f
+        applyZoom()
+        updateZoomButtonText()
+        val label = if (zoomScale == zoomScale.toInt().toFloat())
+            "${zoomScale.toInt()}x" else "${zoomScale}x"
+        showGestureFeedback("\uD83D\uDD0D $label")
+    }
+
+    /** 버튼 텍스트 갱신 (1x, 1.3x, 1.5x, 2x) */
+    private fun updateZoomButtonText() {
+        try {
+            val btn = findViewById<android.widget.TextView>(R.id.btnZoom)
+            val txt = if (zoomScale == zoomScale.toInt().toFloat())
+                "${zoomScale.toInt()}x"
+            else
+                "${zoomScale}x"
+            btn?.text = txt
+        } catch (_: Exception) {}
+    }
+
 
     /** 이동 범위 제한 (영상이 화면 밖으로 너무 나가지 않게) */
     private fun clampPan() {
@@ -2004,11 +2046,11 @@ class PlayerActivity : AppCompatActivity() {
     private fun showControls() {
         if (isLocked) return
         try {
-            val scroll = findViewById<View>(R.id.controlScroll)
-            val bar = findViewById<View>(R.id.controlBar)
-            scroll?.visibility = View.VISIBLE
-            bar?.visibility = View.VISIBLE
-            scroll?.requestLayout()
+            findViewById<View>(R.id.controlScroll)?.visibility = View.VISIBLE
+            findViewById<View>(R.id.controlBar)?.visibility = View.VISIBLE
+            findViewById<View>(R.id.seekbarPanel)?.visibility = View.VISIBLE
+            findViewById<View>(R.id.bottomControls)?.visibility = View.VISIBLE
+            findViewById<View>(R.id.controlScroll)?.requestLayout()
             mainHandler.removeCallbacks(hideControlsRunnable)
             mainHandler.postDelayed(hideControlsRunnable, 180_000)
         } catch (_: Exception) {}
@@ -2296,6 +2338,71 @@ class PlayerActivity : AppCompatActivity() {
 
         // playerView 탭 → 컨트롤 재표시
         playerView.setOnClickListener { showControls() }
+
+        // ★ seekbar 연결
+        setupSeekBar()
+    }
+
+    private var isSeeking = false
+
+    private fun setupSeekBar() {
+        val sb = findViewById<android.widget.SeekBar>(R.id.playerSeekBar) ?: return
+        val tvPos = findViewById<android.widget.TextView>(R.id.tvPlayerPos)
+        val tvDur = findViewById<android.widget.TextView>(R.id.tvPlayerDur)
+
+        sb.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    val dur = playerView.player?.duration ?: 0L
+                    if (dur > 0) {
+                        val newMs = (dur * progress / 1000L)
+                        tvPos?.text = fmtTime(newMs)
+                    }
+                }
+            }
+            override fun onStartTrackingTouch(s: android.widget.SeekBar?) {
+                isSeeking = true
+                mainHandler.removeCallbacks(hideControlsRunnable)
+            }
+            override fun onStopTrackingTouch(s: android.widget.SeekBar?) {
+                val dur = playerView.player?.duration ?: 0L
+                if (dur > 0) {
+                    val newMs = (dur * (s?.progress ?: 0) / 1000L)
+                    playerView.player?.seekTo(newMs)
+                }
+                isSeeking = false
+                showControls()
+            }
+        })
+
+        // 업데이트 루프
+        val updateRunnable = object : Runnable {
+            override fun run() {
+                try {
+                    val p = playerView.player
+                    if (p != null && !isSeeking) {
+                        val pos = p.currentPosition
+                        val dur = p.duration
+                        if (dur > 0) {
+                            sb.progress = (pos * 1000 / dur).toInt()
+                            tvPos?.text = fmtTime(pos)
+                            tvDur?.text = fmtTime(dur)
+                        }
+                    }
+                } catch (_: Exception) {}
+                mainHandler.postDelayed(this, 500)
+            }
+        }
+        mainHandler.post(updateRunnable)
+    }
+
+    private fun fmtTime(ms: Long): String {
+        val s = ms / 1000
+        val h = s / 3600
+        val m = (s % 3600) / 60
+        val sec = s % 60
+        return if (h > 0) "%d:%02d:%02d".format(h, m, sec)
+               else "%d:%02d".format(m, sec)
     }
 
 
