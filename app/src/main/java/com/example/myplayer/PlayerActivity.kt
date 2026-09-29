@@ -2172,13 +2172,19 @@ class PlayerActivity : AppCompatActivity() {
     }
 
 
+    private var showControlsCount = 0
+
     private fun showControls() {
-        try {
-            // videoContainer가 wrap_content면 여백 남으므로 확인 필요 없음
-        } catch (_: Exception) {}
-        try {
-            // videoContainer가 wrap_content면 여백 남으므로 확인 필요 없음
-        } catch (_: Exception) {}
+        showControlsCount++
+        android.util.Log.d("PlayerUI", "showControls #$showControlsCount isLocked=$isLocked")
+        if (showControlsCount <= 5) {
+            try {
+                android.widget.Toast.makeText(
+                    this, "showControls #$showControlsCount",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            } catch (_: Exception) {}
+        }
         if (isLocked) return
         try {
             findViewById<View>(R.id.controlScroll)?.visibility = View.VISIBLE
