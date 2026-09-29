@@ -23,6 +23,7 @@ object YouTubeSuggest {
                         "?client=firefox&ds=yt&hl=ko&q=$enc"
             )
             val conn = url.openConnection() as HttpURLConnection
+            CookieUtil.apply(conn)
             conn.connectTimeout = 5000
             conn.readTimeout = 5000
             conn.setRequestProperty("User-Agent", "Mozilla/5.0")

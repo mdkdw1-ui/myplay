@@ -45,6 +45,12 @@ object YouTubeStream {
     suspend fun extract(videoId: String): StreamResult = withContext(Dispatchers.IO) {
         val sb = StringBuilder()
         try {
+            val ctx = MyApp.instance.applicationContext
+            val hasCookie = YouTubeCookieManager.hasCookie(ctx)
+            val cookieLen = YouTubeCookieManager.load(ctx).length
+            sb.append("cookie: has=$hasCookie len=$cookieLen\n")
+        } catch (_: Exception) {}
+        try {
             try { NewPipe.init(DownloaderImpl()) } catch (e: Exception) { }
 
             val url = "https://www.youtube.com/watch?v=$videoId"
