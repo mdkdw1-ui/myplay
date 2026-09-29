@@ -2173,6 +2173,12 @@ class PlayerActivity : AppCompatActivity() {
 
 
     private fun showControls() {
+        try {
+            // videoContainer가 wrap_content면 여백 남으므로 확인 필요 없음
+        } catch (_: Exception) {}
+        try {
+            // videoContainer가 wrap_content면 여백 남으므로 확인 필요 없음
+        } catch (_: Exception) {}
         if (isLocked) return
         try {
             findViewById<View>(R.id.controlScroll)?.visibility = View.VISIBLE
@@ -2487,6 +2493,40 @@ class PlayerActivity : AppCompatActivity() {
 
         // playerView 탭 → 컨트롤 재표시
         playerView.setOnClickListener { showControls() }
+
+        // ★ videoContainer에도 터치/클릭 리스너 (영상 여백 탭 감지)
+        try {
+            val vc = findViewById<View>(R.id.videoContainer)
+            vc?.setOnClickListener { showControls() }
+            vc?.setOnTouchListener { _, event ->
+                if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+                    showControls()
+                }
+                false
+            }
+        } catch (_: Exception) {}
+        // ★ videoContainer에도 터치 리스너 (playerView가 아닌 여백 탭해도 반응)
+        try {
+            val vc = findViewById<View>(R.id.videoContainer)
+            vc?.setOnClickListener { showControls() }
+            vc?.setOnTouchListener { _, event ->
+                if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+                    showControls()
+                }
+                false
+            }
+        } catch (_: Exception) {}
+        // ★ videoContainer에도 터치 리스너 (playerView가 아닌 여백 탭해도 반응)
+        try {
+            val vc = findViewById<View>(R.id.videoContainer)
+            vc?.setOnClickListener { showControls() }
+            vc?.setOnTouchListener { _, event ->
+                if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+                    showControls()
+                }
+                false
+            }
+        } catch (_: Exception) {}
 
         // ★ seekbar 연결
         setupSeekBar()
