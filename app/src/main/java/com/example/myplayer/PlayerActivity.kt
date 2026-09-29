@@ -346,11 +346,6 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     // ★ 모든 터치를 Activity 레벨에서 감지 → 컨트롤 재표시
-    // ★ pan 상태
-    private var panStartX = 0f
-    private var panStartY = 0f
-    private var panStartTx = 0f
-    private var panStartTy = 0f
     private var isPanningDispatch = false
 
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
