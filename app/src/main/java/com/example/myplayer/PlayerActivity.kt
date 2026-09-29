@@ -538,7 +538,7 @@ class PlayerActivity : AppCompatActivity() {
         var gestureActive = false
         val threshold = 40f
 
-        playerView.setOnTouchListener { _, event ->
+        val gestureTouch: (android.view.View, android.view.MotionEvent) -> Boolean = { _, event ->
             try {
                 if (event.action == android.view.MotionEvent.ACTION_DOWN ||
                     event.pointerCount > 1) {
@@ -622,6 +622,12 @@ class PlayerActivity : AppCompatActivity() {
             }
             false
         }
+
+        // ★ playerView + videoContainer 둘 다 터치 리스너 (SurfaceView 우회)
+        playerView.setOnTouchListener(gestureTouch)
+        try {
+            findViewById<View>(R.id.videoContainer)?.setOnTouchListener(gestureTouch)
+        } catch (_: Exception) {}
     }
 
     /** 확대 상태 적용 */
