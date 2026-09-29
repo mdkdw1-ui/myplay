@@ -343,6 +343,18 @@ class PlayerActivity : AppCompatActivity() {
         btnDownload.setOnClickListener { startDownload() }
     }
 
+    // ★ 모든 터치를 Activity 레벨에서 감지 → 컨트롤 재표시
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        try {
+            if (ev.action == android.view.MotionEvent.ACTION_DOWN) {
+                // 잠금 상태 아니고, 컨트롤 영역 밖이면 showControls
+                showControls()
+            }
+        } catch (_: Exception) {}
+        return super.dispatchTouchEvent(ev)
+    }
+
+
     // ========== 🔗 타임스탬프 인식 ==========
     private val tsPattern = Pattern.compile("(?<![\\d:])(?:\\d{1,2}:)?\\d{1,2}:\\d{2}(?![\\d:])")
 
