@@ -306,7 +306,7 @@ class PlayerActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnFullscreen).setOnClickListener { toggleFullscreen() }
         findViewById<View>(R.id.btnFullscreen).setOnLongClickListener {
             resetZoom()
-            showGestureFeedback("1x")
+            // (HUD 제거)
             true
         }
         findViewById<View>(R.id.btnPip).apply {
@@ -332,7 +332,7 @@ class PlayerActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnZoom)?.setOnLongClickListener {
             resetZoom()
             updateZoomButtonText()
-            showGestureFeedback("1x")
+            // (HUD 제거)
             true
         }
         btnLiveSub.setOnClickListener { toggleLiveSubtitle() }
@@ -531,7 +531,7 @@ class PlayerActivity : AppCompatActivity() {
                 // ★ 확대 상태면 더블탭 → 1x로 리셋
                 if (zoomScale > 1.01f) {
                     resetZoom()
-                    showGestureFeedback("1x")
+                    // (HUD 제거)
                     return true
                 }
                 val width = playerView.width
@@ -565,7 +565,7 @@ class PlayerActivity : AppCompatActivity() {
 
                 override fun onScaleEnd(detector: android.view.ScaleGestureDetector) {
                     if (zoomScale < 1.05f) resetZoom()
-                    else showGestureFeedback("🔍 ${"%.1f".format(zoomScale)}x")
+                    // (HUD 표시 제거)
                 }
             }
         )
@@ -790,9 +790,6 @@ class PlayerActivity : AppCompatActivity() {
         zoomTy = 0f
         applyZoom()
         updateZoomButtonText()
-        val label = if (zoomScale == zoomScale.toInt().toFloat())
-            "${zoomScale.toInt()}x" else "${zoomScale}x"
-        showGestureFeedback("\uD83D\uDD0D $label")
     }
 
     /** 버튼 텍스트 갱신 (1x, 1.3x, 1.5x, 2x) */
