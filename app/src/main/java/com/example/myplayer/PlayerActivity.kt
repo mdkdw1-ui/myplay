@@ -863,6 +863,12 @@ class PlayerActivity : AppCompatActivity() {
 
 
     private fun showGestureFeedback(text: String) {
+        try {
+            val bar = findViewById<View>(R.id.gestureBar)
+            bar?.visibility = View.VISIBLE
+            mainHandler.removeCallbacks(gestureHideRunnable)
+            mainHandler.postDelayed(gestureHideRunnable, 800)
+        } catch (_: Exception) {}
         // 새 HUD
         val bar = findViewById<View>(R.id.gestureBar)
         val icon = findViewById<TextView>(R.id.tvGestureIcon)
