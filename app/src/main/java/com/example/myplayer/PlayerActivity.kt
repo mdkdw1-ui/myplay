@@ -516,8 +516,20 @@ class PlayerActivity : AppCompatActivity() {
         val scaleDetector = android.view.ScaleGestureDetector(
             this,
             object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScaleBegin(detector: android.view.ScaleGestureDetector): Boolean {
+                    android.util.Log.d("Pinch", "onScaleBegin")
+                    try {
+                        android.widget.Toast.makeText(
+                            this@PlayerActivity, "Pinch begin",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    } catch (_: Exception) {}
+                    return true
+                }
+
                 override fun onScale(detector: android.view.ScaleGestureDetector): Boolean {
                     val newScale = (zoomScale * detector.scaleFactor).coerceIn(1f, 2f)
+                    android.util.Log.d("Pinch", "onScale: factor=${detector.scaleFactor} new=$newScale")
                     zoomScale = newScale
                     clampPan()
                     applyZoom()
@@ -530,6 +542,7 @@ class PlayerActivity : AppCompatActivity() {
                 }
             }
         )
+        scaleDetector.isQuickScaleEnabled = false
 
         var downY = 0f
         var startVol = 0
@@ -546,8 +559,16 @@ class PlayerActivity : AppCompatActivity() {
                 }
             } catch (_: Exception) {}
 
+            // ★ 로그: 멀티터치 이벤트 확인
+            if (event.pointerCount > 1 ||
+                event.action == android.view.MotionEvent.ACTION_POINTER_DOWN ||
+                event.action == android.view.MotionEvent.ACTION_POINTER_UP) {
+                android.util.Log.d("Pinch", "action=${event.action} pointers=${event.pointerCount}")
+            }
+
+            // ★ ScaleGestureDetector를 먼저 처리 (핀치 감지)
+            val scaleHandled = scaleDetector.onTouchEvent(event)
             gestureDetector.onTouchEvent(event)
-            scaleDetector.onTouchEvent(event)
 
             // ★ 모든 터치 → 컨트롤 즉시 표시
             if (event.action == android.view.MotionEvent.ACTION_DOWN ||
@@ -623,10 +644,19 @@ class PlayerActivity : AppCompatActivity() {
             false
         }
 
-        // ★ playerView + videoContainer 둘 다 터치 리스너 (SurfaceView 우회)
+        // ★ playerView 우선, videoContainer는 playerView로 이벤트 전달
         playerView.setOnTouchListener(gestureTouch)
         try {
-            findViewById<View>(R.id.videoContainer)?.setOnTouchListener(gestureTouch)
+            val vc = findViewById<View>(R.id.videoContainer)
+            vc?.isClickable = true
+            vc?.isFocusable = true
+            vc?.setOnTouchListener { _, event ->
+                // videoContainer에 오는 이벤트는 playerView가 못 받은 것 → playerView로 전달
+                try {
+                    playerView.dispatchTouchEvent(event)
+                } catch (_: Exception) {}
+                false
+            }
         } catch (_: Exception) {}
     }
 
