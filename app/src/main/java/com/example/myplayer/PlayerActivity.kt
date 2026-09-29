@@ -322,7 +322,7 @@ class PlayerActivity : AppCompatActivity() {
             startActivity(Intent(this, QueueActivity::class.java))
         }
         btnBookmark.setOnClickListener { toggleBookmark() }
-        btnShare.setOnClickListener { showShareDialog() }
+        // btnShare 리스너 제거
         findViewById<View>(R.id.tvChannel).setOnClickListener { openChannelFromPlayer() }
         btnLock.setOnClickListener { toggleLock() }
         btnMore.setOnClickListener { showMoreMenu() }
@@ -2335,12 +2335,8 @@ class PlayerActivity : AppCompatActivity() {
     // ========== ⋯ 더보기 메뉴 ==========
     private fun showMoreMenu() {
         val items = arrayOf(
-            "✏️ 현재 시점에 메모",
-            "📒 메모 목록",
-            "🎞 화질 선택",
             "🔁 반복 재생 (같은 영상)",
             "💡 화면 항상 켜짐",
-            "📤 공유",
             "📥 다운로드",
             "📝 자막 검색",
             "📋 재생 대기열",
@@ -2353,19 +2349,15 @@ class PlayerActivity : AppCompatActivity() {
             .setTitle("더보기")
             .setItems(items) { _, i ->
                 when (i) {
-                    0 -> addNote()
-                    1 -> showNoteList()
-                    2 -> showQualityDialog()
-                    3 -> toggleRepeat()
-                    4 -> toggleKeepScreenOn()
-                    5 -> showShareDialog()
-                    6 -> startDownload()
-                    7 -> openTranscript()
-                    8 -> startActivity(Intent(this, QueueActivity::class.java))
-                    9 -> showPipSizeDialog()
-                    10 -> toggleAutoPip()
-                    11 -> showSubtitleStyleDialog()
-                    12 -> toggleLiveSubtitle()
+                    0 -> toggleRepeat()
+                    1 -> toggleKeepScreenOn()
+                    2 -> startDownload()
+                    3 -> openTranscript()
+                    4 -> startActivity(Intent(this, QueueActivity::class.java))
+                    5 -> showPipSizeDialog()
+                    6 -> toggleAutoPip()
+                    7 -> showSubtitleStyleDialog()
+                    8 -> toggleLiveSubtitle()
                 }
             }
             .show()
