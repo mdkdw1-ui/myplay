@@ -31,6 +31,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var channelAdapter: ChannelAdapter
     private lateinit var bookmarkAdapter: HorizontalVideoAdapter
     private lateinit var downloadsAdapter: HorizontalVideoAdapter
+    private val downloadsMap = mutableMapOf<String, DownloadEntity>()
     private lateinit var trendingAdapter: HorizontalVideoAdapter
     private lateinit var subAdapter: ChannelAdapter
     private lateinit var etHomeSearch: EditText
@@ -168,7 +169,7 @@ class MainActivity : AppCompatActivity() {
         relatedAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         channelAdapter = ChannelAdapter(onClick = { c -> openChannel(c) })
         bookmarkAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
-        downloadsAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
+        downloadsAdapter = HorizontalVideoAdapter { v -> openDownloadItem(v) }
         trendingAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
         subAdapter = ChannelAdapter(
             onClick = { c -> openChannel(c) },
@@ -276,6 +277,10 @@ class MainActivity : AppCompatActivity() {
             val section = findViewById<View>(R.id.sectionDownloads)
             try {
                 HistoryDatabase.get(applicationContext).downloadDao().getAll().collect { list ->
+                    // ★ 다운로드 map 채우기 (filePath 조회용)
+                    downloadsMap.clear()
+                    for (item in list) downloadsMap[item.videoId] = item
+
                     if (list.isEmpty()) {
                         section.visibility = View.GONE
                     } else {
@@ -288,6 +293,34 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 section.visibility = View.GONE
             }
+        }
+    }
+
+    /** ★ 홈 다운로드 클릭: 로컬 파일 있으면 로컬 재생, 없으면 스트리밍 */
+    private fun openDownloadItem(v: HomeVideo) {
+        val item = downloadsMap[v.videoId]
+        val f = item?.let { java.io.File(it.filePath) }
+        if (item != null && f != null && f.exists()) {
+            // 로컬 재생
+            if (item.isAudioOnly) {
+                startActivity(android.content.Intent(this, AudioPlayerActivity::class.java).apply {
+                    putExtra("VIDEO_ID", "local:download:${item.videoId}")
+                    putExtra("FILE_URI", android.net.Uri.fromFile(f).toString())
+                    putExtra("VIDEO_TITLE", item.title)
+                    putExtra("VIDEO_CHANNEL", item.channel)
+                    putExtra("FROM_PLAYLIST", true)
+                })
+            } else {
+                startActivity(android.content.Intent(this, PlayerActivity::class.java).apply {
+                    putExtra("VIDEO_URI", android.net.Uri.fromFile(f).toString())
+                    putExtra("VIDEO_TITLE", item.title)
+                    putExtra("VIDEO_CHANNEL", item.channel)
+                    putExtra("VIDEO_THUMB", item.thumbnail)
+                })
+            }
+        } else {
+            // 파일 없음 → 스트리밍 (기존)
+            openPlayer(v)
         }
     }
 
