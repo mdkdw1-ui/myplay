@@ -559,7 +559,7 @@ class PlayerActivity : AppCompatActivity() {
             if (event.pointerCount > 1) {
                 isPanning = false
                 gestureActive = false
-                return@setOnTouchListener true
+                return@gestureTouch true
             }
 
             when (event.action) {
@@ -590,7 +590,7 @@ class PlayerActivity : AppCompatActivity() {
                         zoomTy = panStartTy + (event.y - panStartY)
                         clampPan()
                         applyZoom()
-                        return@setOnTouchListener true
+                        return@gestureTouch true
                     }
 
                     val dy = downY - event.y
