@@ -170,6 +170,11 @@ class PlayerActivity : AppCompatActivity() {
             if (playbackState == Player.STATE_ENDED) {
                 onVideoEnded()
             }
+            // ★ STATE_READY (재생 준비 완료) → progress 숨김
+            if (playbackState == Player.STATE_READY ||
+                playbackState == Player.STATE_IDLE) {
+                try { progress.visibility = View.GONE } catch (_: Exception) {}
+            }
         }
     }
 
@@ -1178,6 +1183,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun playDirectUrl(url: String) {
+        try { progress.visibility = View.GONE } catch (_: Exception) {}
         currentStreamUrl = url
         mediaController?.setMediaItem(MediaItem.fromUri(url))
         mediaController?.prepare()

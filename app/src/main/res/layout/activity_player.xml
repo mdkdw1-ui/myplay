@@ -21,7 +21,7 @@
             app:resize_mode="fit"
             app:use_controller="false"
             app:surface_type="texture_view"
-            app:show_buffering="when_playing" />
+            app:show_buffering="never" />
 
         <!-- ★ 컨트롤바: HorizontalScrollView로 감싸서 넘침 방지 -->
         <HorizontalScrollView
