@@ -538,7 +538,7 @@ class PlayerActivity : AppCompatActivity() {
         var gestureActive = false
         val threshold = 40f
 
-        val gestureTouch: (android.view.View, android.view.MotionEvent) -> Boolean = { _, event ->
+        val gestureTouch: (android.view.View, android.view.MotionEvent) -> Boolean = gesture@ { _, event ->
             try {
                 if (event.action == android.view.MotionEvent.ACTION_DOWN ||
                     event.pointerCount > 1) {
@@ -559,7 +559,7 @@ class PlayerActivity : AppCompatActivity() {
             if (event.pointerCount > 1) {
                 isPanning = false
                 gestureActive = false
-                return@gestureTouch true
+                return@gesture true
             }
 
             when (event.action) {
@@ -590,7 +590,7 @@ class PlayerActivity : AppCompatActivity() {
                         zoomTy = panStartTy + (event.y - panStartY)
                         clampPan()
                         applyZoom()
-                        return@gestureTouch true
+                        return@gesture true
                     }
 
                     val dy = downY - event.y
