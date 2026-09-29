@@ -28,6 +28,7 @@ object YouTubeTranscript {
         try {
             val fixedUrl = ensureVtt(vttUrl)
             val conn = URL(fixedUrl).openConnection() as HttpURLConnection
+            CookieUtil.apply(conn)
             conn.connectTimeout = 10000
             conn.readTimeout = 10000
             conn.setRequestProperty("User-Agent", "Mozilla/5.0")

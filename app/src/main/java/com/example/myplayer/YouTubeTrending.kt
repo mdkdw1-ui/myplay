@@ -81,6 +81,7 @@ object YouTubeTrending {
     private fun post(urlStr: String, bodyStr: String): String? {
         val url = URL("$urlStr?key=$API_KEY&prettyPrint=false")
         val conn = url.openConnection() as HttpURLConnection
+            CookieUtil.apply(conn)
         conn.requestMethod = "POST"
         conn.setRequestProperty("Content-Type", "application/json")
         conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")

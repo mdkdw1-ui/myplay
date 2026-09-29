@@ -51,6 +51,7 @@ object ArtistExtractor {
                 put("videoId", videoId)
             }
             val conn = URL("$PLAYER?key=$API_KEY&prettyPrint=false").openConnection() as HttpURLConnection
+            CookieUtil.apply(conn)
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")

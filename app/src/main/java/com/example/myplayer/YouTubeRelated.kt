@@ -36,6 +36,7 @@ object YouTubeRelated {
 
             val url = URL("$ENDPOINT?key=$API_KEY&prettyPrint=false")
             val conn = url.openConnection() as HttpURLConnection
+            CookieUtil.apply(conn)
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty(

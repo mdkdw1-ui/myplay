@@ -55,6 +55,7 @@ object YouTubeArtist {
                     put("params", "EgIQAQ%3D%3D")
                 }
                 val conn = URL("$ENDPOINT?key=$API_KEY&prettyPrint=false").openConnection() as HttpURLConnection
+            CookieUtil.apply(conn)
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
