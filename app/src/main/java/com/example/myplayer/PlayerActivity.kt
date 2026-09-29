@@ -346,27 +346,48 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     // ★ 모든 터치를 Activity 레벨에서 감지 → 컨트롤 재표시
-    private var dispatchDebugCount = 0
+    // ★ pan 상태
+    private var panStartX = 0f
+    private var panStartY = 0f
+    private var panStartTx = 0f
+    private var panStartTy = 0f
+    private var isPanningDispatch = false
 
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
         try {
-            // ★ 모든 터치 이벤트를 Toast로 확인 (10번까지)
-            dispatchDebugCount++
-            if (dispatchDebugCount <= 10) {
-                try {
-                    android.widget.Toast.makeText(
-                        this,
-                        "DT#${dispatchDebugCount} act=${ev.action} p=${ev.pointerCount}",
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                } catch (_: Exception) {}
-            }
-
             scaleDetectorRef?.onTouchEvent(ev)
             gestureDetectorRef?.onTouchEvent(ev)
 
-            if (ev.action == android.view.MotionEvent.ACTION_DOWN) {
-                showControls()
+            // 1손가락 이벤트만 pan 처리
+            if (ev.pointerCount == 1) {
+                when (ev.action) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        showControls()
+                        if (zoomScale > 1.01f) {
+                            isPanningDispatch = true
+                            panStartX = ev.x
+                            panStartY = ev.y
+                            panStartTx = zoomTx
+                            panStartTy = zoomTy
+                        } else {
+                            isPanningDispatch = false
+                        }
+                    }
+                    android.view.MotionEvent.ACTION_MOVE -> {
+                        if (isPanningDispatch && zoomScale > 1.01f) {
+                            zoomTx = panStartTx + (ev.x - panStartX)
+                            zoomTy = panStartTy + (ev.y - panStartY)
+                            clampPan()
+                            applyZoom()
+                        }
+                    }
+                    android.view.MotionEvent.ACTION_UP,
+                    android.view.MotionEvent.ACTION_CANCEL -> {
+                        isPanningDispatch = false
+                    }
+                }
+            } else {
+                isPanningDispatch = false
             }
         } catch (_: Exception) {}
         return super.dispatchTouchEvent(ev)
@@ -541,13 +562,6 @@ class PlayerActivity : AppCompatActivity() {
 
                 override fun onScale(detector: android.view.ScaleGestureDetector): Boolean {
                     val newScale = (zoomScale * detector.scaleFactor).coerceIn(1f, 2f)
-                    android.util.Log.d("Pinch", "onScale: factor=${detector.scaleFactor} new=$newScale")
-                    runOnUiThread {
-                        try {
-                            val tv = findViewById<android.widget.TextView>(R.id.tvTitle)
-                            tv?.text = "SCALE ${"%.2f".format(newScale)}"
-                        } catch (_: Exception) {}
-                    }
                     zoomScale = newScale
                     clampPan()
                     applyZoom()
@@ -601,34 +615,7 @@ class PlayerActivity : AppCompatActivity() {
                 return@gesture true
             }
 
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    // ★ 확대 상태 → 드래그는 위치 이동
-                    if (zoomScale > 1.01f) {
-                        isPanning = true
-                        panStartX = event.x
-                        panStartY = event.y
-                        panStartTx = zoomTx
-                        panStartTy = zoomTy
-                    } else {
-                        isPanning = false
-                    }
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    // ★ 확대 상태 pan
-                    if (isPanning && zoomScale > 1.01f) {
-                        zoomTx = panStartTx + (event.x - panStartX)
-                        zoomTy = panStartTy + (event.y - panStartY)
-                        clampPan()
-                        applyZoom()
-                        return@gesture true
-                    }
-                    // (볼륨/밝기 제스처 제거됨)
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    isPanning = false
-                }
-            }
+            // (pan/zoom/doubleTap 모두 dispatchTouchEvent에서 처리)
             false
         }
 
@@ -864,8 +851,13 @@ class PlayerActivity : AppCompatActivity() {
         val pct = findViewById<TextView>(R.id.tvGesturePct)
         val fill = findViewById<View>(R.id.gestureBarFill)
 
-        val isVolume = text.contains("🔊") || text.contains("🔇")
-        icon.text = if (text.contains("🔇")) "🔇" else if (isVolume) "🔊" else "☀️"
+        // ★ 밝기 아이콘 제거: 볼륨 아이콘만, 그 외는 확대/일반 아이콘
+        icon.text = when {
+            text.contains("🔇") -> "🔇"
+            text.contains("🔊") -> "🔊"
+            text.contains("🔍") -> "🔍"
+            else -> ""
+        }
 
         // 퍼센트 추출
         val num = Regex("(\\d+)%").find(text)?.groupValues?.get(1)?.toIntOrNull() ?: 50
@@ -2218,16 +2210,6 @@ class PlayerActivity : AppCompatActivity() {
     private var showControlsCount = 0
 
     private fun showControls() {
-        showControlsCount++
-        android.util.Log.d("PlayerUI", "showControls #$showControlsCount isLocked=$isLocked")
-        if (showControlsCount <= 5) {
-            try {
-                android.widget.Toast.makeText(
-                    this, "showControls #$showControlsCount",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
-            } catch (_: Exception) {}
-        }
         if (isLocked) return
         try {
             findViewById<View>(R.id.controlScroll)?.visibility = View.VISIBLE
