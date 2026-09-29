@@ -603,14 +603,6 @@ class PlayerActivity : AppCompatActivity() {
 
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    downY = event.y
-                    startVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                    startBright = window.attributes.screenBrightness.let {
-                        if (it < 0) 0.5f else it
-                    }
-                    isVolume = event.x < playerView.width / 2f
-                    gestureActive = false
-
                     // ★ 확대 상태 → 드래그는 위치 이동
                     if (zoomScale > 1.01f) {
                         isPanning = true
@@ -631,32 +623,10 @@ class PlayerActivity : AppCompatActivity() {
                         applyZoom()
                         return@gesture true
                     }
-
-                    val dy = downY - event.y
-                    if (!gestureActive && Math.abs(dy) > threshold) {
-                        gestureActive = true
-                    }
-                    if (gestureActive) {
-                        val ratio = dy / playerView.height
-                        if (isVolume) {
-                            val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                            val newVol = (startVol + ratio * max).toInt().coerceIn(0, max)
-                            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVol, 0)
-                            val pct = (newVol * 100f / max).toInt()
-                            showGestureFeedback(if (newVol == 0) "🔇 음소거" else "🔊 $pct%")
-                        } else {
-                            val newBright = (startBright + ratio).coerceIn(0.05f, 1f)
-                            window.attributes = window.attributes.apply { screenBrightness = newBright }
-                            showGestureFeedback("☀️ ${(newBright * 100).toInt()}%")
-                        }
-                    }
+                    // (볼륨/밝기 제스처 제거됨)
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     isPanning = false
-                    if (gestureActive) {
-                        gestureActive = false
-                        mainHandler.postDelayed(gestureHideRunnable, 400)
-                    }
                 }
             }
             false
