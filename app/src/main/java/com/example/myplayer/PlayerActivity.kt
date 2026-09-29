@@ -271,13 +271,15 @@ class PlayerActivity : AppCompatActivity() {
 
         val videoUri = intent.getStringExtra("VIDEO_URI")
         val videoId = intent.getStringExtra("VIDEO_ID")
-        // ★ 방어: 빈 ID로 진입 시 즉시 종료
-        if (videoId.isNullOrBlank() || videoId.startsWith("local:")) {
-            android.widget.Toast.makeText(this,
-                "이 항목은 영상 모드가 없습니다",
-                android.widget.Toast.LENGTH_SHORT).show()
-            finish()
-            return
+        // ★ 방어: VIDEO_URI도 없고 VIDEO_ID도 없거나 local:일 때만 종료
+        if (videoUri.isNullOrBlank()) {
+            if (videoId.isNullOrBlank() || videoId.startsWith("local:")) {
+                android.widget.Toast.makeText(this,
+                    "이 항목은 영상 모드가 없습니다",
+                    android.widget.Toast.LENGTH_SHORT).show()
+                finish()
+                return
+            }
         }
         val vTitle = intent.getStringExtra("VIDEO_TITLE") ?: ""
         val vChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
