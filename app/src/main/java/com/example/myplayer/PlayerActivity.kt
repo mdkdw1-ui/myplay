@@ -105,6 +105,8 @@ class PlayerActivity : AppCompatActivity() {
 
     // ★ 확대/이동 (Pinch Zoom + Pan)
     private var zoomScale = 1f
+    private var scaleDetectorRef: android.view.ScaleGestureDetector? = null
+    private var gestureDetectorRef: GestureDetector? = null
     private var zoomTx = 0f
     private var zoomTy = 0f
     private var panStartX = 0f
@@ -344,10 +346,26 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     // ★ 모든 터치를 Activity 레벨에서 감지 → 컨트롤 재표시
+    private var dispatchDebugCount = 0
+
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
         try {
+            // ★ 모든 터치 이벤트를 Toast로 확인 (10번까지)
+            dispatchDebugCount++
+            if (dispatchDebugCount <= 10) {
+                try {
+                    android.widget.Toast.makeText(
+                        this,
+                        "DT#${dispatchDebugCount} act=${ev.action} p=${ev.pointerCount}",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                } catch (_: Exception) {}
+            }
+
+            scaleDetectorRef?.onTouchEvent(ev)
+            gestureDetectorRef?.onTouchEvent(ev)
+
             if (ev.action == android.view.MotionEvent.ACTION_DOWN) {
-                // 잠금 상태 아니고, 컨트롤 영역 밖이면 showControls
                 showControls()
             }
         } catch (_: Exception) {}
@@ -518,18 +536,18 @@ class PlayerActivity : AppCompatActivity() {
             object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
                 override fun onScaleBegin(detector: android.view.ScaleGestureDetector): Boolean {
                     android.util.Log.d("Pinch", "onScaleBegin")
-                    try {
-                        android.widget.Toast.makeText(
-                            this@PlayerActivity, "Pinch begin",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
-                    } catch (_: Exception) {}
                     return true
                 }
 
                 override fun onScale(detector: android.view.ScaleGestureDetector): Boolean {
                     val newScale = (zoomScale * detector.scaleFactor).coerceIn(1f, 2f)
                     android.util.Log.d("Pinch", "onScale: factor=${detector.scaleFactor} new=$newScale")
+                    runOnUiThread {
+                        try {
+                            val tv = findViewById<android.widget.TextView>(R.id.tvTitle)
+                            tv?.text = "SCALE ${"%.2f".format(newScale)}"
+                        } catch (_: Exception) {}
+                    }
                     zoomScale = newScale
                     clampPan()
                     applyZoom()
@@ -543,6 +561,8 @@ class PlayerActivity : AppCompatActivity() {
             }
         )
         scaleDetector.isQuickScaleEnabled = false
+        scaleDetectorRef = scaleDetector
+        gestureDetectorRef = gestureDetector
 
         var downY = 0f
         var startVol = 0
@@ -566,9 +586,7 @@ class PlayerActivity : AppCompatActivity() {
                 android.util.Log.d("Pinch", "action=${event.action} pointers=${event.pointerCount}")
             }
 
-            // ★ ScaleGestureDetector를 먼저 처리 (핀치 감지)
-            val scaleHandled = scaleDetector.onTouchEvent(event)
-            gestureDetector.onTouchEvent(event)
+            // (dispatchTouchEvent에서 이미 처리)
 
             // ★ 모든 터치 → 컨트롤 즉시 표시
             if (event.action == android.view.MotionEvent.ACTION_DOWN ||
@@ -663,6 +681,7 @@ class PlayerActivity : AppCompatActivity() {
     /** 확대 상태 적용 */
     private fun applyZoom() {
         try {
+            android.util.Log.d("Zoom", "applyZoom scale=$zoomScale w=${playerView.width} h=${playerView.height}")
             updateZoomButtonText()
             if (zoomScale > 1.01f) {
                 (videoContainer as? android.view.ViewGroup)?.clipChildren = false
@@ -2248,6 +2267,17 @@ class PlayerActivity : AppCompatActivity() {
             findViewById<View>(R.id.controlScroll)?.requestLayout()
             mainHandler.removeCallbacks(hideControlsRunnable)
             mainHandler.postDelayed(hideControlsRunnable, 5_000)
+        } catch (_: Exception) {}
+    }
+
+    private fun ensureVCHeight() {
+        try {
+            val vc = findViewById<View>(R.id.videoContainer)
+            val lp = vc?.layoutParams
+            if (lp != null && lp.height != ViewGroup.LayoutParams.MATCH_PARENT) {
+                lp.height = ViewGroup.LayoutParams.MATCH_PARENT
+                vc.layoutParams = lp
+            }
         } catch (_: Exception) {}
     }
 
