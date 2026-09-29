@@ -156,6 +156,16 @@ class PlayerActivity : AppCompatActivity() {
 
     // ★ 재생 상태 리스너
     private val playerListener = object : Player.Listener {
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            try {
+                val btn = findViewById<android.widget.ImageButton>(R.id.btnPlayPause)
+                btn?.setImageResource(
+                    if (isPlaying) android.R.drawable.ic_media_pause
+                    else android.R.drawable.ic_media_play
+                )
+            } catch (_: Exception) {}
+        }
+
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_ENDED) {
                 onVideoEnded()
@@ -2520,39 +2530,8 @@ class PlayerActivity : AppCompatActivity() {
         // playerView 탭 → 컨트롤 재표시
         playerView.setOnClickListener { showControls() }
 
-        // ★ videoContainer에도 터치/클릭 리스너 (영상 여백 탭 감지)
-        try {
-            val vc = findViewById<View>(R.id.videoContainer)
-            vc?.setOnClickListener { showControls() }
-            vc?.setOnTouchListener { _, event ->
-                if (event.action == android.view.MotionEvent.ACTION_DOWN) {
-                    showControls()
-                }
-                false
-            }
-        } catch (_: Exception) {}
-        // ★ videoContainer에도 터치 리스너 (playerView가 아닌 여백 탭해도 반응)
-        try {
-            val vc = findViewById<View>(R.id.videoContainer)
-            vc?.setOnClickListener { showControls() }
-            vc?.setOnTouchListener { _, event ->
-                if (event.action == android.view.MotionEvent.ACTION_DOWN) {
-                    showControls()
-                }
-                false
-            }
-        } catch (_: Exception) {}
-        // ★ videoContainer에도 터치 리스너 (playerView가 아닌 여백 탭해도 반응)
-        try {
-            val vc = findViewById<View>(R.id.videoContainer)
-            vc?.setOnClickListener { showControls() }
-            vc?.setOnTouchListener { _, event ->
-                if (event.action == android.view.MotionEvent.ACTION_DOWN) {
-                    showControls()
-                }
-                false
-            }
-        } catch (_: Exception) {}
+        // ★ videoContainer 터치 리스너 (영상 여백 탭 감지)
+        
 
         // ★ seekbar 연결
         setupSeekBar()
