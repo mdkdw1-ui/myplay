@@ -1088,10 +1088,19 @@ class AudioPlayerActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         PlaybackService.nextTrackHandler = null
-        releaseWakeLock()
         stopAnimation()
         updateJob?.cancel()
         bgScope.cancel()
-        MediaController.releaseFuture(controllerFuture)
+
+        // ★ 재생 중이면 MediaController release 안 함 (백그라운드 재생 유지)
+        try {
+            val isPlaying = mediaController?.isPlaying == true
+            if (!isPlaying) {
+                releaseWakeLock()
+                MediaController.releaseFuture(controllerFuture)
+            }
+        } catch (e: Exception) {
+            try { MediaController.releaseFuture(controllerFuture) } catch (_: Exception) {}
+        }
     }
 }
