@@ -192,11 +192,27 @@ class AudioPlayerActivity : AppCompatActivity() {
         try {
             val f = java.io.File(filesDir, "audio_diag.log")
             val content = if (f.exists()) f.readText() else "(로그 없음)"
+            val lines = content.lines().takeLast(100).joinToString("\n")
+
             androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("진단 로그 (마지막 100줄)")
-                .setMessage(content.lines().takeLast(100).joinToString("\n"))
+                .setMessage(lines)
                 .setPositiveButton("닫기", null)
-                .setNeutralButton("지우기") { _, _ -> f.delete() }
+                .setNegativeButton("📋 복사") { _, _ ->
+                    try {
+                        val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                            as android.content.ClipboardManager
+                        cm.setPrimaryClip(
+                            android.content.ClipData.newPlainText("audio_diag", content)
+                        )
+                        android.widget.Toast.makeText(this,
+                            "복사됨 (전체 로그)", android.widget.Toast.LENGTH_SHORT).show()
+                    } catch (e2: Exception) {
+                        android.widget.Toast.makeText(this,
+                            "복사 실패: ${e2.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNeutralButton("🗑 지우기") { _, _ -> f.delete() }
                 .show()
         } catch (e: Exception) {
             android.widget.Toast.makeText(this, "로그 읽기 실패: ${e.message}",
@@ -665,13 +681,14 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
 
-        QueueManager.clear(this)
-
         bgScope.launch {
             val disliked = pref?.getStringSet("disliked_ids", emptySet()) ?: emptySet()
 
-            val related = try {
-                if (sameArtistMode) {
+            var related = emptyList<VideoItem>()
+
+            // ★ 1차: 유튜브 radio
+            try {
+                related = if (sameArtistMode) {
                     val artist = currentArtist.ifBlank { currentChannel }
                     YouTubeArtist.fetchSongs(artist, currentVideoId).filter { it.videoId !in disliked }
                 } else {
@@ -679,14 +696,50 @@ class AudioPlayerActivity : AppCompatActivity() {
                         .filter { it.videoId !in disliked }
                         .filter { isMusicLike(it.title) }
                 }
+                diag("playNext radio: ${related.size}개")
             } catch (e: Exception) {
-                emptyList()
+                diag("playNext radio err: ${e.message}")
+            }
+
+            // ★ 2차: 같은 아티스트 검색
+            if (related.isEmpty()) {
+                try {
+                    val artist = currentArtist.ifBlank { currentChannel }
+                    if (artist.isNotBlank()) {
+                        related = YouTubeArtist.fetchSongs(artist, currentVideoId)
+                            .filter { it.videoId !in disliked }
+                        diag("playNext artist: ${related.size}개")
+                    }
+                } catch (e: Exception) {
+                    diag("playNext artist err: ${e.message}")
+                }
+            }
+
+            // ★ 3차: 제목 키워드 검색
+            if (related.isEmpty()) {
+                try {
+                    val kw = currentTitle.split(" ")
+                        .filter { it.isNotBlank() && it.length >= 2 }
+                        .take(4).joinToString(" ")
+                    if (kw.isNotBlank()) {
+                        val r = YouTubeSearch.search(kw).filter {
+                            it.videoId != currentVideoId && it.videoId !in disliked
+                        }
+                        related = r
+                        diag("playNext search '$kw': ${related.size}개")
+                    }
+                } catch (e: Exception) {
+                    diag("playNext search err: ${e.message}")
+                }
             }
 
             if (related.isEmpty()) {
                 loadingNext = false
+                diag("playNext: 모든 방법 실패")
                 runOnUiThread {
-                    Toast.makeText(this@AudioPlayerActivity, "다음 곡 없음", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@AudioPlayerActivity,
+                        "다음 곡 없음 (봇 차단 or 검색 실패)",
+                        Toast.LENGTH_LONG).show()
                 }
                 return@launch
             }
