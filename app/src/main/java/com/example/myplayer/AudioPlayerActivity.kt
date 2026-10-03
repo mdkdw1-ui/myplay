@@ -167,6 +167,10 @@ class AudioPlayerActivity : AppCompatActivity() {
         android.util.Log.d("AudioPlayer", msg)
         try {
             val f = java.io.File(filesDir, "audio_diag.log")
+            // ★ 로그 500KB 넘으면 초기화
+            if (f.exists() && f.length() > 500_000) {
+                f.writeText("")
+            }
             val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US)
                 .format(java.util.Date())
             f.appendText("[$ts] $msg\n")
@@ -388,6 +392,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
         bgScope.launch {
+            diag("loadAudio($videoId) 시작")
             // ★ URL 재사용 (첫 곡만)
             if (isInitial && reuseStreamUrl.isNotBlank() && videoId == currentVideoId) {
                 currentSubtitleUrl = reuseSubtitleUrl
@@ -424,6 +429,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
 
             val result = YouTubeStream.extract(videoId)
+            diag("extract($videoId): hasAny=${result.hasAny} debug=${result.debug.take(80)}")
 
             // ★ 라이브 스킵
             if (result.isLive) {
@@ -623,6 +629,8 @@ class AudioPlayerActivity : AppCompatActivity() {
         // ★ Feature 8: 인덱스 기반 큐 (로컬 파일도 지원)
         val queue = QueueManager.get(this)
         val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+        diag("queue 검사: size=${queue.size} curIdx=$curIdx currentVideoId=$currentVideoId")
+        diag("queue: ${queue.joinToString { it.videoId }}")
         if (curIdx >= 0 && curIdx < queue.size - 1) {
             val next = queue[curIdx + 1]
             currentVideoId = next.videoId
