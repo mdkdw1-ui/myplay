@@ -55,18 +55,24 @@ object YouTubeStream {
 
             val url = "https://www.youtube.com/watch?v=$videoId"
 
-            // ★ 재시도 (봇 차단 일시적일 수 있음)
+            // ★ 재시도 강화 (5회, 지수 백오프)
             var info: StreamInfo? = null
             var lastErr: Exception? = null
-            for (attempt in 0 until 3) {
+            for (attempt in 0 until 5) {
                 try {
                     info = StreamInfo.getInfo(ServiceList.YouTube, url)
                     if (info != null) break
                 } catch (e: Exception) {
                     lastErr = e
                     sb.append("getInfo try ${attempt + 1} FAIL: ${e.message}\n")
-                    if (attempt < 2) {
-                        try { Thread.sleep(800L * (attempt + 1)) } catch (_: Exception) {}
+                    if (attempt < 4) {
+                        val delayMs = when (attempt) {
+                            0 -> 1000L
+                            1 -> 2000L
+                            2 -> 3000L
+                            else -> 5000L
+                        }
+                        try { Thread.sleep(delayMs) } catch (_: Exception) {}
                     }
                 }
             }
