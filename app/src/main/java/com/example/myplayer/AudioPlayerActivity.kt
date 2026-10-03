@@ -311,6 +311,41 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** ★ 큐에서 다음 곡으로 skip (실패 시) */
+    private fun trySkipToNextInQueue(failedVideoId: String) {
+        try {
+            val queue = QueueManager.get(this)
+            val curIdx = queue.indexOfFirst { it.videoId == failedVideoId }
+            diag("trySkip: queue=${queue.size} curIdx=$curIdx failed=$failedVideoId")
+            if (curIdx < 0) {
+                val first = queue.firstOrNull { it.videoId != failedVideoId }
+                if (first != null) {
+                    currentVideoId = first.videoId
+                    currentTitle = first.title
+                    currentChannel = first.channel
+                    currentThumb = first.thumbnail
+                    runOnUiThread { updateUI() }
+                    loadAudio(first.videoId, isInitial = false)
+                }
+                return
+            }
+            if (curIdx < queue.size - 1) {
+                val next = queue[curIdx + 1]
+                currentVideoId = next.videoId
+                currentTitle = next.title
+                currentChannel = next.channel
+                currentThumb = next.thumbnail
+                QueueManager.setCurrent(this, next.videoId)
+                runOnUiThread { updateUI() }
+                loadAudio(next.videoId, isInitial = false)
+            } else {
+                diag("trySkip: 큐 마지막 곡")
+            }
+        } catch (e: Exception) {
+            diag("trySkip err: ${e.message}")
+        }
+    }
+
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
         // ★ 다운로드 파일 (오디오만) 재생
         if (videoId.startsWith("local:download:")) {
@@ -450,9 +485,12 @@ class AudioPlayerActivity : AppCompatActivity() {
 
             if (url.isNullOrBlank()) {
                 runOnUiThread {
-                    Toast.makeText(this@AudioPlayerActivity, "오디오 없음", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@AudioPlayerActivity,
+                        "이 곡 실패 → 다음 곡 시도", Toast.LENGTH_SHORT).show()
                 }
                 loadingNext = false
+                // ★ 큐의 다음 곡 자동 시도
+                trySkipToNextInQueue(videoId)
                 return@launch
             }
 
