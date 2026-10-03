@@ -268,6 +268,16 @@ class PlaybackService : MediaSessionService() {
         controllerInfo: MediaSession.ControllerInfo
     ): MediaSession? = mediaSession
 
+    /** 앱 스와이프 시 재생 중이면 서비스 유지 */
+    override fun onTaskRemoved(rootIntent: android.content.Intent?) {
+        val player = exoPlayer
+        if (player == null || !player.playWhenReady) {
+            stopSelf()
+        }
+        // 재생 중이면 stopSelf 안 함 → 백그라운드 유지
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         mediaSession?.run {
             player.removeListener(endListener)
