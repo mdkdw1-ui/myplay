@@ -18,8 +18,8 @@ class DownloaderImpl : Downloader() {
 
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.requestMethod = httpMethod
-        connection.connectTimeout = 15000
-        connection.readTimeout = 15000
+        connection.connectTimeout = 30000   // ★ 30초 (DNS 여유)
+        connection.readTimeout = 30000
         connection.instanceFollowRedirects = true
 
         headers?.forEach { entry ->
