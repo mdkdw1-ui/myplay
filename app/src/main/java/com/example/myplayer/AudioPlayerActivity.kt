@@ -350,9 +350,18 @@ class AudioPlayerActivity : AppCompatActivity() {
         // ★ 다운로드 파일 (오디오만) 재생
         if (videoId.startsWith("local:download:")) {
             val fileUri = intent.getStringExtra("FILE_URI")
+            diag("loadAudio local:download fileUri=$fileUri")
             if (!fileUri.isNullOrBlank()) {
                 bgScope.launch {
                     try {
+                        // ★ 로컬 파일 크기 확인
+                        try {
+                            val p = android.net.Uri.parse(fileUri).path
+                            if (p != null) {
+                                val f = java.io.File(p)
+                                diag("local file exists=${f.exists()} size=${f.length() / 1024 / 1024}MB")
+                            }
+                        } catch (_: Exception) {}
                         val mi = MediaItem.fromUri(fileUri)
                         runOnUiThread {
                             mediaController?.setMediaItem(mi)
