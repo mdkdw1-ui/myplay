@@ -59,6 +59,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var reuseStreamUrl: String = ""
     private var bufferingStartMs: Long = 0L
     private var bufferingWatchJob: kotlinx.coroutines.Job? = null
+    private var idleRepeatCount: Int = 0
     private var reuseSubtitleUrl: String = ""
 
     private val audioHistory = mutableListOf<AudioHistoryItem>()
@@ -602,6 +603,24 @@ class AudioPlayerActivity : AppCompatActivity() {
                         bufferingStartMs = 0L
                         bufferingWatchJob?.cancel()
                         bufferingWatchJob = null
+                        idleRepeatCount = 0
+                    }
+                    Player.STATE_IDLE -> {
+                        // ★ IDLE 3번 이상 반복 = 재생 실패
+                        idleRepeatCount++
+                        diag("IDLE count=$idleRepeatCount")
+                        if (idleRepeatCount >= 3) {
+                            idleRepeatCount = 0
+                            diag("IDLE 3회 반복 → 다음 곡")
+                            runOnUiThread {
+                                android.widget.Toast.makeText(
+                                    this@AudioPlayerActivity,
+                                    "재생 실패 → 다음 곡",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                            trySkipToNextInQueue(currentVideoId)
+                        }
                     }
                 }
 
