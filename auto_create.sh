@@ -1,22 +1,26 @@
 #!/bin/bash
 
-# 환경변수 및 ID 자동 로드
+export SUPPRESS_LABEL_WARNING=True
+
 COMPARTMENT_ID=$(grep tenancy ~/.oci/config | head -n1 | cut -d= -f2 | tr -d ' ')
 AD_NAME=$(oci iam availability-domain list --region ap-tokyo-1 --compartment-id "$COMPARTMENT_ID" --query "data[0].name" --raw-output)
 SUBNET_ID=$(oci network subnet list --region ap-tokyo-1 --compartment-id "$COMPARTMENT_ID" --query "data[0].id" --raw-output)
 
-# Canonical Ubuntu 24.04 Minimal aarch64 이미지 ID 추출
-IMAGE_ID=$(oci compute image list --region ap-tokyo-1 --compartment-id "$COMPARTMENT_ID" --shape "VM.Standard.A1.Flex" --query "data[?contains(\"display-name\", 'Canonical Ubuntu') && contains(\"display-name\", '24.04') && contains(\"display-name\", 'Minimal')].id | [0]" --raw-output)
+# Ubuntu 24.04 Minimal aarch64 이미지 ID 추출 (필터 조건 개선)
+IMAGE_ID=$(oci compute image list --region ap-tokyo-1 --compartment-id "$COMPARTMENT_ID" --shape "VM.Standard.A1.Flex" --query "data[?contains(\"display-name\", '24.04') && contains(\"display-name\", 'Minimal')].id | [0]" --raw-output)
 
 SSH_KEY_PATH="$HOME/.ssh/id_rsa.pub"
 
-export SUPPRESS_LABEL_WARNING=True
+if [ -z "$IMAGE_ID" ] || [ "$IMAGE_ID" == "null" ]; then
+    echo "❌ 에러: IMAGE_ID를 찾지 못했습니다. 검색 조건을 확인해 주세요."
+    exit 1
+fi
 
 echo "=========================================="
 echo "OCI Ampere ARM Instance Auto Provisioner"
 echo "Region: ap-tokyo-1"
-echo "OS: Ubuntu 24.04 Minimal (aarch64)"
-echo "Shape: VM.Standard.A1.Flex (4 OCPU / 24GB RAM)"
+echo "Shape: VM.Standard.A1.Flex (2 OCPU / 12GB RAM)"
+echo "Image ID: $IMAGE_ID"
 echo "=========================================="
 
 TRY_COUNT=1
