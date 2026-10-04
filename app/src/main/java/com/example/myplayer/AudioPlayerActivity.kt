@@ -60,6 +60,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var bufferingStartMs: Long = 0L
     private var bufferingWatchJob: kotlinx.coroutines.Job? = null
     private var idleRepeatCount: Int = 0
+    private var idleRepeatCount: Int = 0
     private var reuseSubtitleUrl: String = ""
 
     private val audioHistory = mutableListOf<AudioHistoryItem>()
