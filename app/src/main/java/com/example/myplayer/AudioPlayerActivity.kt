@@ -57,6 +57,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var loadingNext = false
     private var audioLiveActive = false
     private var reuseStreamUrl: String = ""
+    private var bufferingStartMs: Long = 0L
+    private var bufferingWatchJob: kotlinx.coroutines.Job? = null
     private var reuseSubtitleUrl: String = ""
 
     private val audioHistory = mutableListOf<AudioHistoryItem>()
@@ -580,6 +582,21 @@ class AudioPlayerActivity : AppCompatActivity() {
                 diag("state=$stateName idx=${mc?.currentMediaItemIndex}/${mc?.mediaItemCount} " +
                      "next=${mc?.hasNextMediaItem()} cur=$currentVideoId")
 
+                // ★ BUFFERING 15초 이상 → 다음 곡 skip
+                when (playbackState) {
+                    Player.STATE_BUFFERING -> {
+                        if (bufferingStartMs == 0L) {
+                            bufferingStartMs = System.currentTimeMillis()
+                            startBufferingWatch()
+                        }
+                    }
+                    Player.STATE_READY -> {
+                        bufferingStartMs = 0L
+                        bufferingWatchJob?.cancel()
+                        bufferingWatchJob = null
+                    }
+                }
+
                 if (playbackState == Player.STATE_ENDED) {
                     android.util.Log.d("AudioPlayer", "STATE_ENDED → playNextRelatedBg")
                     if (!loadingNext) {
@@ -589,6 +606,27 @@ class AudioPlayerActivity : AppCompatActivity() {
                             playNextRelatedBg()
                         }
                     }
+                }
+            }
+
+            private fun startBufferingWatch() {
+                bufferingWatchJob?.cancel()
+                bufferingWatchJob = bgScope.launch {
+                    try {
+                        kotlinx.coroutines.delay(15_000)
+                        if (bufferingStartMs > 0 &&
+                            System.currentTimeMillis() - bufferingStartMs >= 15_000) {
+                            diag("BUFFERING 15초 초과 → 다음 곡")
+                            runOnUiThread {
+                                android.widget.Toast.makeText(
+                                    this@AudioPlayerActivity,
+                                    "로딩 초과 → 다음 곡",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                            trySkipToNextInQueue(currentVideoId)
+                        }
+                    } catch (_: Exception) {}
                 }
             }
 
