@@ -319,6 +319,14 @@ class AudioPlayerActivity : AppCompatActivity() {
             val queue = QueueManager.get(this)
             val curIdx = queue.indexOfFirst { it.videoId == failedVideoId }
             diag("trySkip: queue=${queue.size} curIdx=$curIdx failed=$failedVideoId")
+            
+            // ★ 큐가 비었으면 유튜브 radio 시도
+            if (queue.isEmpty()) {
+                diag("trySkip: 큐 비었음 → playNextRelatedBg")
+                playNextRelatedBg()
+                return
+            }
+            
             if (curIdx < 0) {
                 val first = queue.firstOrNull { it.videoId != failedVideoId }
                 if (first != null) {
