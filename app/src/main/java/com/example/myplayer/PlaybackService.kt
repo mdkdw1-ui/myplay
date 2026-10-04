@@ -84,13 +84,13 @@ class PlaybackService : MediaSessionService() {
         // ★ 큰 파일 대응: 버퍼 대폭 증가 (5분 max)
         val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                100_000,    // minBufferMs (100초)
-                300_000,    // maxBufferMs (5분!)
+                50_000,     // minBufferMs (50초)
+                180_000,    // maxBufferMs (3분)
                 2_500,      // bufferForPlaybackMs
                 5_000       // bufferForPlaybackAfterRebufferMs
             )
             .setPrioritizeTimeOverSizeThresholds(true)
-            .setTargetBufferBytes(-1)   // 메모리 무제한
+            .setTargetBufferBytes(50 * 1024 * 1024)   // 50MB 제한
             .build()
 
         val player = ExoPlayer.Builder(this)
