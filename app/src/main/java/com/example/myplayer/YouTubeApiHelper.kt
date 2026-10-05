@@ -323,6 +323,117 @@ object YouTubeApiHelper {
     }
 
     // ═══════════════════════════════════════════════
+    // ★ 스트림 추출 (NewPipe 우회)
+    // ═══════════════════════════════════════════════
+    data class StreamUrls(
+        val audioUrl: String?,
+        val muxedUrl: String?,
+        val videoUrl: String?,
+        val title: String,
+        val channel: String,
+        val source: String
+    )
+
+    suspend fun extractStream(videoId: String): StreamUrls = withContext(Dispatchers.IO) {
+        // Invidious
+        for (inst in INVIDIOUS) {
+            val obj = getJsonObject("$inst/api/v1/videos/$videoId") ?: continue
+            try {
+                if (obj.optBoolean("liveNow", false)) continue
+                val title = obj.optString("title", "")
+                val author = obj.optString("author", "")
+
+                var audioUrl: String? = null
+                var audioBitrate = 0
+                var videoUrl: String? = null
+                var videoHeight = 0
+                var muxed: String? = null
+
+                val formats = obj.optJSONArray("adaptiveFormats")
+                if (formats != null) {
+                    for (i in 0 until formats.length()) {
+                        val f = formats.getJSONObject(i)
+                        val type = f.optString("type", "")
+                        val u = f.optString("url", "")
+                        if (u.isBlank()) continue
+                        if (type.startsWith("audio/")) {
+                            val br = f.optInt("bitrate", 0)
+                            if (br > audioBitrate) {
+                                audioBitrate = br
+                                audioUrl = u
+                            }
+                        } else if (type.startsWith("video/")) {
+                            val h = f.optInt("height", 0)
+                            if (h > videoHeight) {
+                                videoHeight = h
+                                videoUrl = u
+                            }
+                        }
+                    }
+                }
+
+                val fs = obj.optJSONArray("formatStreams")
+                if (fs != null && fs.length() > 0) {
+                    muxed = fs.getJSONObject(0).optString("url", null)
+                }
+
+                if (audioUrl != null || videoUrl != null || muxed != null) {
+                    Log.d(TAG, "extractStream inv: a=${audioUrl != null} v=${videoUrl != null} m=${muxed != null}")
+                    return@withContext StreamUrls(audioUrl, muxed, videoUrl, title, author, "inv")
+                }
+            } catch (e: Exception) { }
+        }
+
+        // Piped
+        for (inst in PIPED) {
+            val obj = getJsonObject("$inst/streams/$videoId") ?: continue
+            try {
+                val title = obj.optString("title", "")
+                val author = obj.optString("uploader", "")
+
+                var audioUrl: String? = null
+                var audioBitrate = 0
+                var videoUrl: String? = null
+                var videoHeight = 0
+
+                val aStreams = obj.optJSONArray("audioStreams")
+                if (aStreams != null) {
+                    for (i in 0 until aStreams.length()) {
+                        val f = aStreams.getJSONObject(i)
+                        val br = f.optInt("bitrate", 0)
+                        val u = f.optString("url", "")
+                        if (u.isNotBlank() && br > audioBitrate) {
+                            audioBitrate = br
+                            audioUrl = u
+                        }
+                    }
+                }
+
+                val vStreams = obj.optJSONArray("videoStreams")
+                if (vStreams != null) {
+                    for (i in 0 until vStreams.length()) {
+                        val f = vStreams.getJSONObject(i)
+                        val h = f.optInt("height", 0)
+                        val u = f.optString("url", "")
+                        if (u.isNotBlank() && h > videoHeight) {
+                            videoHeight = h
+                            videoUrl = u
+                        }
+                    }
+                }
+
+                if (audioUrl != null || videoUrl != null) {
+                    Log.d(TAG, "extractStream piped: a=${audioUrl != null} v=${videoUrl != null}")
+                    return@withContext StreamUrls(audioUrl, null, videoUrl, title, author, "piped")
+                }
+            } catch (e: Exception) { }
+        }
+
+        Log.e(TAG, "extractStream FAIL: $videoId")
+        StreamUrls(null, null, null, "", "", "")
+    }
+
+        // ═══════════════════════════════════════════════
     // 유틸
     // ═══════════════════════════════════════════════
     fun fmtSec(s: Int): String {
