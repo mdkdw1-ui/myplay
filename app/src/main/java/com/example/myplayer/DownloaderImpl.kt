@@ -39,6 +39,21 @@ class DownloaderImpl : Downloader() {
         val headers = request.headers()
         val dataToSend = request.dataToSend()
 
+        // ★ visitor_id 요청 가로채기
+        if (url.contains("youtubei/v1/visitor_id")) {
+            try {
+                val ctx = MyApp.instance.applicationContext
+                val cached = YouTubeVisitorData.load(ctx)
+                if (cached.isNotBlank()) {
+                    val fakeJson = """{"responseContext":{"visitorData":"$cached"}}"""
+                    android.util.Log.d("Downloader", "visitor_id 가로채기 len=${cached.length}")
+                    return Response(200, "OK", emptyMap(), fakeJson, url)
+                } else {
+                    android.util.Log.d("Downloader", "visitor_id 요청 but 캐시 비었음")
+                }
+            } catch (_: Exception) {}
+        }
+
         val builder = okhttp3.Request.Builder().url(url)
 
         val ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
