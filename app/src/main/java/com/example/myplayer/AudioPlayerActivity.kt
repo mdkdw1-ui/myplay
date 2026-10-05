@@ -395,7 +395,6 @@ class AudioPlayerActivity : AppCompatActivity() {
                     mediaController?.setMediaItem(mi)
                     mediaController?.prepare()
                     mediaController?.playWhenReady = true
-                    mediaController?.setPlaybackSpeed(currentSpeed)
                     diag("local:download 재생 시작")
                 } catch (e: Exception) {
                     diag("local:download err: ${e.message}")
