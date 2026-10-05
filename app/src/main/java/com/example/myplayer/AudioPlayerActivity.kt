@@ -603,17 +603,6 @@ class AudioPlayerActivity : AppCompatActivity() {
                 updateUI()
             }
 
-            addToHistory(videoId, currentTitle, currentChannel, currentThumb)
-            failedIds.remove(videoId)
-
-            delay(500)
-            attachEqualizer()
-            loadingNext = false
-                // 자동으로 다음 곡
-                bgScope.launch { delay(500); playNextRelatedBg() }
-                return@launch
-            }
-
             // ★ 진단 로그 강화
             diag("audio 후보:")
             diag("  audioBest=${result.audioUrlBest?.take(60)}")
