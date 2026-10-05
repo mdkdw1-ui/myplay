@@ -1,6 +1,9 @@
 package com.example.myplayer
 
 import android.app.Application
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 
 class MyApp : Application() {
     override fun onCreate() {
