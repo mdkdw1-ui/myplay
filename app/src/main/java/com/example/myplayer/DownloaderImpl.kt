@@ -75,13 +75,9 @@ class DownloaderImpl : Downloader() {
         builder.header("Accept", "*/*")
         builder.header("Origin", "https://www.youtube.com")
         builder.header("Referer", "https://www.youtube.com/")
-        builder.header("X-YouTube-Client-Name", "1")
-        builder.header("X-YouTube-Client-Version", "2.20240101.00.00")
+        // ★ X-YouTube-Client-Name/Version 제거 (NewPipe 자체 client 사용)
         builder.header("X-Origin", "https://www.youtube.com")
         builder.header("X-Goog-AuthUser", "0")
-        builder.header("Sec-Fetch-Site", "same-origin")
-        builder.header("Sec-Fetch-Mode", "cors")
-        builder.header("Sec-Fetch-Dest", "empty")
 
         try {
             val ctx = MyApp.instance.applicationContext
