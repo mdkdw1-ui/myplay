@@ -102,10 +102,27 @@ object YouTubeStream {
             val channelName = try { info.uploaderName ?: "" } catch (_: Exception) { "" }
             val description = try { info.description?.content ?: "" } catch (_: Exception) { "" }
 
+            // ★ 진단: 스트림 개수
+            sb.append("np: videos=${info.videoStreams.size} audios=${info.audioStreams.size}\n")
+            for (v in info.videoStreams) {
+                sb.append("  v itag=${v.itagItem?.id} res=${v.resolution} ")
+                sb.append("only=${v.isVideoOnly} isUrl=${v.isUrl}\n")
+            }
+            for (a in info.audioStreams) {
+                sb.append("  a itag=${a.itagItem?.id} br=${a.averageBitrate} ")
+                sb.append("isUrl=${a.isUrl}\n")
+            }
+
             val bestAudio = try {
                 info.audioStreams.filter { it.isUrl }.maxByOrNull { it.averageBitrate }?.content
             } catch (_: Exception) { null }
             val muxed = info.videoStreams.firstOrNull { !it.isVideoOnly && it.isUrl }
+            // ★ video-only 폴백 (muxed 없을 때)
+            val videoOnly = try {
+                info.videoStreams.filter { it.isUrl }.maxByOrNull {
+                    (it.resolution?.replace("p", "")?.toIntOrNull() ?: 0)
+                }
+            } catch (_: Exception) { null }
 
             val qualities = mutableListOf<VideoQuality>()
             try {
@@ -130,9 +147,28 @@ object YouTubeStream {
             } catch (_: Exception) {}
 
             if (muxed != null) {
+                sb.append("→ muxed 반환\n")
                 return@withContext StreamResult(
-                    null, null, muxed.content, title, channelName, description,
-                    sb.toString(), subs, qualities, bestAudio
+                    videoUrl = null,
+                    audioUrl = null,
+                    muxedUrl = muxed.content,
+                    title = title, channelName = channelName,
+                    description = description, debug = sb.toString(),
+                    subtitles = subs, qualities = qualities,
+                    audioUrlBest = bestAudio
+                )
+            }
+            // ★ muxed 없으면 video-only + audio 조합
+            if (videoOnly != null) {
+                sb.append("→ video-only 반환 (오디오 병합 필요)\n")
+                return@withContext StreamResult(
+                    videoUrl = videoOnly.content,
+                    audioUrl = bestAudio,
+                    muxedUrl = null,
+                    title = title, channelName = channelName,
+                    description = description, debug = sb.toString(),
+                    subtitles = subs, qualities = qualities,
+                    audioUrlBest = bestAudio
                 )
             }
             val audio = try {
