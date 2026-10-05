@@ -14,19 +14,19 @@ object YouTubeApiHelper {
     private const val TAG = "YtApi"
 
     val INVIDIOUS = listOf(
-        "https://inv.nadeko.net",
-        "https://invidious.nerdvpn.de",
+        "https://invidious.f5.si",           // 한국
+        "https://inv.nadeko.net",            // 일본
+        "https://invidious.nerdvpn.de",      // 독일
         "https://iv.melmac.space",
-        "https://invidious.f5.si",
         "https://invidious.privacyredirect.com",
         "https://yt.artemislena.eu"
     )
 
     val PIPED = listOf(
-        "https://pipedapi.kavin.rocks",
-        "https://pipedapi.adminforge.de",
+        "https://pipedapi.reallyaweso.me",
         "https://api.piped.private.coffee",
-        "https://pipedapi.reallyaweso.me"
+        "https://pipedapi.kavin.rocks",
+        "https://pipedapi.adminforge.de"
     )
 
     // ═══════════════════════════════════════════════
@@ -67,33 +67,7 @@ object YouTubeApiHelper {
     suspend fun searchVideos(query: String): List<VideoItem> = withContext(Dispatchers.IO) {
         val q = URLEncoder.encode(query, "UTF-8")
 
-        // Invidious (배열 응답)
-        for (inst in INVIDIOUS) {
-            val arr = getJsonArray("$inst/api/v1/search?q=$q&type=video") ?: continue
-            try {
-                val out = mutableListOf<VideoItem>()
-                for (i in 0 until arr.length()) {
-                    val v = arr.optJSONObject(i) ?: continue
-                    val id = v.optString("videoId", "")
-                    if (id.isBlank()) continue
-                    out.add(VideoItem(
-                        videoId = id,
-                        title = v.optString("title", ""),
-                        channel = v.optString("author", ""),
-                        thumbnail = v.optString("videoThumbnails", ""),
-                        duration = fmtSec(v.optInt("lengthSeconds", 0)),
-                        viewCount = fmtViews(v.optLong("viewCount", 0)),
-                        uploadDate = ""
-                    ))
-                }
-                if (out.isNotEmpty()) {
-                    Log.d(TAG, "inv search: ${out.size}개")
-                    return@withContext out
-                }
-            } catch (e: Exception) { }
-        }
-
-        // Piped (객체 응답 - items 배열)
+        // ★ Piped 먼저 (더 빠름)
         for (inst in PIPED) {
             val obj = getJsonObject("$inst/search?q=$q&filter=videos") ?: continue
             try {
@@ -121,12 +95,36 @@ object YouTubeApiHelper {
             } catch (e: Exception) { }
         }
 
+        // Invidious 폴백
+        for (inst in INVIDIOUS) {
+            val arr = getJsonArray("$inst/api/v1/search?q=$q&type=video") ?: continue
+            try {
+                val out = mutableListOf<VideoItem>()
+                for (i in 0 until arr.length()) {
+                    val v = arr.optJSONObject(i) ?: continue
+                    val id = v.optString("videoId", "")
+                    if (id.isBlank()) continue
+                    out.add(VideoItem(
+                        videoId = id,
+                        title = v.optString("title", ""),
+                        channel = v.optString("author", ""),
+                        thumbnail = v.optString("videoThumbnails", ""),
+                        duration = fmtSec(v.optInt("lengthSeconds", 0)),
+                        viewCount = fmtViews(v.optLong("viewCount", 0)),
+                        uploadDate = ""
+                    ))
+                }
+                if (out.isNotEmpty()) {
+                    Log.d(TAG, "inv search: ${out.size}개")
+                    return@withContext out
+                }
+            } catch (e: Exception) { }
+        }
+
         emptyList()
     }
 
-    // ═══════════════════════════════════════════════
-    // 채널 검색
-    // ═══════════════════════════════════════════════
+    
     suspend fun searchChannels(query: String): List<ChannelItem> = withContext(Dispatchers.IO) {
         val q = URLEncoder.encode(query, "UTF-8")
 

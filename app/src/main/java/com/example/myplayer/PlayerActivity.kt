@@ -341,6 +341,10 @@ class PlayerActivity : AppCompatActivity() {
         btnBookmark.setOnClickListener { toggleBookmark() }
         // btnShare 리스너 제거
         findViewById<View>(R.id.tvChannel).setOnClickListener { openChannelFromPlayer() }
+        findViewById<View>(R.id.tvChannel).setOnLongClickListener {
+            showSubscribeDialog()
+            true
+        }
         btnLock.setOnClickListener { toggleLock() }
         btnMore.setOnClickListener { showMoreMenu() }
 
