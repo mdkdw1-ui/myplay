@@ -192,7 +192,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         } catch (_: Exception) {}
         try {
             diagLines.addLast(msg)
-            while (diagLines.size > 3) diagLines.removeFirst()
+            while (diagLines.size > 10) diagLines.removeFirst()
             val text = diagLines.joinToString("\n")
             runOnUiThread {
                 try {
@@ -511,7 +511,12 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
 
             val result = YouTubeStream.extract(videoId)
-            diag("extract($videoId): hasAny=${result.hasAny} audioBest=${result.audioUrlBest?.take(60)} muxed=${result.muxedUrl?.take(60)} video=${result.videoUrl?.take(60)} debug=${result.debug.take(100)}")
+            diag("extract($videoId)")
+            diag("  audioBest=${result.audioUrlBest?.take(80)}")
+            diag("  muxed=${result.muxedUrl?.take(80)}")
+            diag("  video=${result.videoUrl?.take(80)}")
+            diag("  audio=${result.audioUrl?.take(80)}")
+            diag("  debug=${result.debug.take(200)}")
 
             // ★ 라이브 스킵
             if (result.isLive) {
