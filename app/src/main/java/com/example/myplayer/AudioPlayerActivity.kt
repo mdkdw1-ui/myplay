@@ -60,6 +60,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var bufferingStartMs: Long = 0L
     private var bufferingWatchJob: kotlinx.coroutines.Job? = null
     private var idleRepeatCount: Int = 0
+    private var lastIdleMs: Long = 0L
     private val failedIds = mutableSetOf<String>()
     private var reuseSubtitleUrl: String = ""
 
@@ -627,12 +628,25 @@ class AudioPlayerActivity : AppCompatActivity() {
                         idleRepeatCount = 0
                     }
                     Player.STATE_IDLE -> {
-                        // ★ IDLE 3번 이상 반복 = 재생 실패
-                        idleRepeatCount++
-                        diag("IDLE count=$idleRepeatCount")
-                        if (idleRepeatCount >= 3) {
+                        val now = System.currentTimeMillis()
+                        // 3초 내 재발 → 반복 카운트
+                        if (now - lastIdleMs < 3000) {
+                            idleRepeatCount++
+                        } else {
+                            idleRepeatCount = 1
+                        }
+                        lastIdleMs = now
+                        diag("IDLE count=$idleRepeatCount (${now - lastIdleMs}ms)")
+
+                        // ★ IDLE이면 자동 재생 재시도
+                        try {
+                            mediaController?.prepare()
+                            mediaController?.play()
+                        } catch (_: Exception) {}
+
+                        if (idleRepeatCount >= 2) {
                             idleRepeatCount = 0
-                            diag("IDLE 3회 반복 → 다음 곡")
+                            diag("IDLE 2회 반복 → 다음 곡")
                             runOnUiThread {
                                 android.widget.Toast.makeText(
                                     this@AudioPlayerActivity,
