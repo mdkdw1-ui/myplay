@@ -108,8 +108,10 @@ class ChannelActivity : AppCompatActivity() {
             }
 
             nextContinuation = page.continuation
+            // ★ 로그: 첫 페이지 결과 + continuation 유무
+            android.util.Log.d("Channel", "fetch: videos=${page.videos.size} cont=${page.continuation?.take(40)} debug=${YouTubeChannel.lastDebug}")
             tvStatus.text = if (page.videos.isEmpty()) "영상 없음"
-                             else "${page.videos.size}개"
+                             else "${page.videos.size}개 (더: ${page.continuation != null})"
             adapter.submit(page.videos)
             loadedVideos.clear()
             loadedVideos.addAll(page.videos)
