@@ -16,7 +16,35 @@ class DownloaderImpl : Downloader() {
         val headers = request.headers()
         val dataToSend = request.dataToSend()
 
-        val connection = URL(url).openConnection() as HttpURLConnection
+        // ★ IPv4 강제 (IPv6 fallback "Unable to resolve host" 방지)
+        val connection = try {
+            val parsedUrl = java.net.URL(url)
+            val host = parsedUrl.host
+            val port = if (parsedUrl.port > 0) parsedUrl.port
+                       else if (parsedUrl.protocol == "https") 443 else 80
+
+            // ★ IPv4 주소만 조회
+            val ipv4 = java.net.InetAddress.getAllByName(host)
+                .filterIsInstance<java.net.Inet4Address>()
+                .firstOrNull()
+
+            if (ipv4 != null) {
+                val newUrl = java.net.URL(
+                    parsedUrl.protocol,
+                    ipv4.hostAddress,
+                    port,
+                    parsedUrl.file
+                )
+                val conn = newUrl.openConnection() as HttpURLConnection
+                // ★ Host 헤더에 원본 도메인 (SNI/TLS용)
+                conn.setRequestProperty("Host", host)
+                conn
+            } else {
+                java.net.URL(url).openConnection() as HttpURLConnection
+            }
+        } catch (e: Exception) {
+            java.net.URL(url).openConnection() as HttpURLConnection
+        }
         connection.requestMethod = httpMethod
         connection.connectTimeout = 30000   // ★ 30초 (DNS 여유)
         connection.readTimeout = 30000

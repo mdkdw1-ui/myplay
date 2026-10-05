@@ -83,8 +83,27 @@ object YouTubeTrending {
     }
 
     private fun post(urlStr: String, bodyStr: String): String? {
-        val url = URL("$urlStr?key=$API_KEY&prettyPrint=false")
-        val conn = url.openConnection() as HttpURLConnection
+        val fullUrl = "$urlStr?key=$API_KEY&prettyPrint=false"
+        // ★ IPv4 강제
+        val conn = try {
+            val parsedUrl = java.net.URL(fullUrl)
+            val host = parsedUrl.host
+            val port = if (parsedUrl.port > 0) parsedUrl.port
+                       else if (parsedUrl.protocol == "https") 443 else 80
+            val ipv4 = java.net.InetAddress.getAllByName(host)
+                .filterIsInstance<java.net.Inet4Address>()
+                .firstOrNull()
+            if (ipv4 != null) {
+                val newUrl = java.net.URL(parsedUrl.protocol, ipv4.hostAddress, port, parsedUrl.file)
+                val c = newUrl.openConnection() as HttpURLConnection
+                c.setRequestProperty("Host", host)
+                c
+            } else {
+                java.net.URL(fullUrl).openConnection() as HttpURLConnection
+            }
+        } catch (e: Exception) {
+            java.net.URL(fullUrl).openConnection() as HttpURLConnection
+        }
             CookieUtil.apply(conn)
         conn.requestMethod = "POST"
         conn.setRequestProperty("Content-Type", "application/json")
