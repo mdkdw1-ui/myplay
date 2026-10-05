@@ -61,6 +61,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var bufferingWatchJob: kotlinx.coroutines.Job? = null
     private var idleRepeatCount: Int = 0
     private var lastIdleMs: Long = 0L
+    private var lastSkipMs: Long = 0L
     private val failedIds = mutableSetOf<String>()
     private var reuseSubtitleUrl: String = ""
 
@@ -683,32 +684,41 @@ class AudioPlayerActivity : AppCompatActivity() {
                     }
                     Player.STATE_IDLE -> {
                         val now = System.currentTimeMillis()
-                        // 3초 내 재발 → 반복 카운트
-                        if (now - lastIdleMs < 3000) {
-                            idleRepeatCount++
-                        } else {
-                            idleRepeatCount = 1
-                        }
-                        lastIdleMs = now
-                        diag("IDLE count=$idleRepeatCount (${now - lastIdleMs}ms)")
-
-                        // ★ IDLE이면 자동 재생 재시도
-                        try {
-                            mediaController?.prepare()
-                            mediaController?.play()
-                        } catch (_: Exception) {}
-
-                        if (idleRepeatCount >= 2) {
+                        val gap = if (lastIdleMs > 0) now - lastIdleMs else Long.MAX_VALUE
+                        val isPlayingNow = try { mediaController?.isPlaying == true } catch (_: Exception) { false }
+                        if (isPlayingNow) {
+                            diag("IDLE (playing=true, ignore)")
+                            lastIdleMs = now
                             idleRepeatCount = 0
-                            diag("IDLE 2회 반복 → 다음 곡")
-                            runOnUiThread {
-                                android.widget.Toast.makeText(
-                                    this@AudioPlayerActivity,
-                                    "재생 실패 → 다음 곡",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
+                        } else {
+                            if (gap < 3000) {
+                                idleRepeatCount++
+                            } else {
+                                idleRepeatCount = 1
                             }
-                            trySkipToNextInQueue(currentVideoId)
+                            lastIdleMs = now
+                            diag("IDLE count=$idleRepeatCount (gap=${gap}ms)")
+                            try {
+                                mediaController?.prepare()
+                                mediaController?.play()
+                            } catch (_: Exception) {}
+                            if (idleRepeatCount >= 3) {
+                                idleRepeatCount = 0
+                                if (now - lastSkipMs < 5000) {
+                                    diag("skip cooldown (${now - lastSkipMs}ms)")
+                                } else {
+                                    lastSkipMs = now
+                                    diag("IDLE 3x -> next")
+                                    runOnUiThread {
+                                        android.widget.Toast.makeText(
+                                            this@AudioPlayerActivity,
+                                            "재생 실패 -> 다음 곡",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                    trySkipToNextInQueue(currentVideoId)
+                                }
+                            }
                         }
                     }
                 }
