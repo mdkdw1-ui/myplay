@@ -7,10 +7,18 @@ class MyApp : Application() {
         super.onCreate()
         instance = this
 
-        // ★ IPv4 강제 (IPv6 fallback "Unable to resolve host" 문제 해결)
         try {
             System.setProperty("java.net.preferIPv4Stack", "true")
             System.setProperty("java.net.preferIPv6Addresses", "false")
+        } catch (_: Exception) {}
+
+        // ★ visitorData 미리 획득
+        try {
+            kotlinx.coroutines.GlobalScope.launch(
+                kotlinx.coroutines.Dispatchers.IO
+            ) {
+                try { YouTubeVisitorFetcher.ensure(applicationContext) } catch (_: Exception) {}
+            }
         } catch (_: Exception) {}
     }
 
