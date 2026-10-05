@@ -45,11 +45,20 @@ object YouTubeStream {
     suspend fun extract(videoId: String): StreamResult = withContext(Dispatchers.IO) {
         val sb = StringBuilder()
 
-        // ★ 1차: Invidious/Piped 직접 (NewPipe 우회)
+        // ★ 1차: Invidious/Piped 직접
+        // ★ video 트랙이 있으면 즉시 반환, 없으면 NewPipe 폴백 시도
+        var fallbackAudio: String? = null
+        var fallbackDebug = ""
         try {
             val direct = YouTubeApiHelper.extractStream(videoId)
-            if (direct.audioUrl != null || direct.videoUrl != null || direct.muxedUrl != null) {
-                sb.append("direct: ${direct.source}\n")
+            val hasVideo = direct.muxedUrl != null || direct.videoUrl != null
+            sb.append("direct src=${direct.source} ")
+            sb.append("a=${direct.audioUrl != null} ")
+            sb.append("v=${direct.videoUrl != null} ")
+            sb.append("m=${direct.muxedUrl != null}\n")
+
+            if (hasVideo) {
+                // video 있음 → 즉시 반환
                 return@withContext StreamResult(
                     videoUrl = direct.videoUrl,
                     audioUrl = direct.audioUrl,
@@ -61,7 +70,15 @@ object YouTubeStream {
                     audioUrlBest = direct.audioUrl
                 )
             }
-            sb.append("direct fail\n")
+
+            // ★ video 없고 audio만 있으면 저장해두고 NewPipe 시도
+            if (direct.audioUrl != null) {
+                fallbackAudio = direct.audioUrl
+                fallbackDebug = "direct(audio only): ${direct.source}\n"
+                sb.append("→ video 없음, NewPipe 폴백 시도\n")
+            } else {
+                sb.append("direct fail (no streams)\n")
+            }
         } catch (e: Exception) {
             sb.append("direct err: ${e.message?.take(60)}\n")
         }
@@ -184,6 +201,20 @@ object YouTubeStream {
             sb.append("newpipe outer err: ${e.message?.take(60)}\n")
         }
 
+        // ★ NewPipe도 실패 → fallbackAudio가 있으면 오디오만이라도 반환
+        if (fallbackAudio != null) {
+            sb.append("→ NewPipe 실패, fallback: 오디오만 반환\n")
+            return@withContext StreamResult(
+                videoUrl = null,
+                audioUrl = fallbackAudio,
+                muxedUrl = null,
+                title = "",
+                channelName = "",
+                description = "",
+                debug = sb.toString() + fallbackDebug,
+                audioUrlBest = fallbackAudio
+            )
+        }
         StreamResult(null, null, null, "", "", "", sb.toString())
     }
 }
