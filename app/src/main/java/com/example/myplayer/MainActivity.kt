@@ -160,6 +160,13 @@ class MainActivity : AppCompatActivity() {
                 .setPositiveButton("삭제") { _, _ ->
                     RecentSearches.clear(this)
                     loadRecentSearches()
+
+        // ★ visitorData 1회 획득 (봇 차단 우회)
+        lifecycleScope.launch {
+            try {
+                YouTubeVisitorFetcher.ensure(applicationContext)
+            } catch (_: Exception) {}
+        }
                 }
                 .setNegativeButton("취소", null)
                 .show()
