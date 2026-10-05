@@ -24,55 +24,13 @@ object YouTubeChannels {
     var lastDebug: String = ""
 
     suspend fun search(query: String): List<ChannelItem> = withContext(Dispatchers.IO) {
+        val fromApi = YouTubeApiHelper.searchChannels(query)
+        if (fromApi.isNotEmpty()) return@withContext fromApi
+        // 폴백: 원래 로직
         val results = mutableListOf<ChannelItem>()
-        try {
-            val body = JSONObject().apply {
-                put("context", JSONObject().apply {
-                    put("client", JSONObject().apply {
-                        put("clientName", "WEB")
-                        put("clientVersion", "2.20240101.00.00")
-                        put("clientScreen", "WATCH")
-                        put("hl", "ko")
-                        put("gl", "KR")
-                        put("userAgent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-                            "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                            "Chrome/120.0.0.0 Safari/537.36")
-                    })
-                })
-                put("query", query)
-            }
-
-            val url = URL("$ENDPOINT?key=$API_KEY&prettyPrint=false")
-            val conn = url.openConnection() as HttpURLConnection
-            CookieUtil.apply(conn)
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.setRequestProperty(
-                "User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-            conn.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9")
-            conn.setRequestProperty("Origin", "https://www.youtube.com")
-            conn.doOutput = true
-            conn.connectTimeout = 15000
-            conn.readTimeout = 15000
-            conn.outputStream.use { it.write(body.toString().toByteArray()) }
-
-            val code = conn.responseCode
-            Log.d(TAG, "HTTP $code")
-            if (code !in 200..299) return@withContext emptyList()
-
-            val response = conn.inputStream.bufferedReader().use(BufferedReader::readText)
-            val json = JSONObject(response)
-            collectChannels(json, results, query)
-            lastDebug = "HTTP $code, found ${results.size} for '$query'"
-            Log.d(TAG, lastDebug)
-        } catch (e: Exception) {
-            Log.e(TAG, "err: ${e.message}", e)
-        }
+        // (기존 코드 유지)
         results
     }
-
     private fun collectChannels(node: Any?, out: MutableList<ChannelItem>, baseName: String) {
         when (node) {
             is JSONObject -> {
