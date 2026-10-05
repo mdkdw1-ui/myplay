@@ -374,7 +374,15 @@ object YouTubeApiHelper {
 
                 val fs = obj.optJSONArray("formatStreams")
                 if (fs != null && fs.length() > 0) {
-                    muxed = fs.getJSONObject(0).optString("url", null)
+                    // muxed 우선 (video+audio 통합)
+                    for (i in 0 until fs.length()) {
+                        val f = fs.getJSONObject(i)
+                        val u = f.optString("url", "")
+                        if (u.isNotBlank()) {
+                            muxed = u
+                            break
+                        }
+                    }
                 }
 
                 if (audioUrl != null || videoUrl != null || muxed != null) {
@@ -409,22 +417,30 @@ object YouTubeApiHelper {
                     }
                 }
 
+                var muxed: String? = null
                 val vStreams = obj.optJSONArray("videoStreams")
                 if (vStreams != null) {
                     for (i in 0 until vStreams.length()) {
                         val f = vStreams.getJSONObject(i)
                         val h = f.optInt("height", 0)
                         val u = f.optString("url", "")
-                        if (u.isNotBlank() && h > videoHeight) {
+                        val onlyVideo = f.optBoolean("videoOnly", false)
+                        if (u.isBlank()) continue
+
+                        // ★ muxed (video+audio) 우선
+                        if (!onlyVideo && muxed == null) {
+                            muxed = u
+                        }
+                        if (h > videoHeight) {
                             videoHeight = h
                             videoUrl = u
                         }
                     }
                 }
 
-                if (audioUrl != null || videoUrl != null) {
-                    Log.d(TAG, "extractStream piped: a=${audioUrl != null} v=${videoUrl != null}")
-                    return@withContext StreamUrls(audioUrl, null, videoUrl, title, author, "piped")
+                if (audioUrl != null || videoUrl != null || muxed != null) {
+                    Log.d(TAG, "extractStream piped: a=${audioUrl != null} v=${videoUrl != null} m=${muxed != null}")
+                    return@withContext StreamUrls(audioUrl, muxed, videoUrl, title, author, "piped")
                 }
             } catch (e: Exception) { }
         }

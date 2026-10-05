@@ -1247,7 +1247,13 @@ class PlayerActivity : AppCompatActivity() {
             currentQualities = result.qualities
             currentAudioUrl = result.audioUrlBest
             currentVideoBestUrl = result.videoUrl
-            val streamUrl = result.muxedUrl ?: result.videoUrl ?: result.audioUrl
+            android.util.Log.d("PlayerActivity", "extract 결과: muxed=${result.muxedUrl?.take(80)} video=${result.videoUrl?.take(80)} audioBest=${result.audioUrlBest?.take(80)} audio=${result.audioUrl?.take(80)}")
+
+            // ★ 비디오 모드: muxed 우선, 없으면 videoUrl+audioUrl (MergingMediaSource 필요)
+            val streamUrl = result.muxedUrl
+                ?: result.videoUrl
+                ?: result.audioUrlBest
+                ?: result.audioUrl
 
             // ★ 자동 번역 없이 원본 자막만 (429 방지)
             val autoSub = subtitleTracks.firstOrNull { it.languageCode.startsWith("ko") }
