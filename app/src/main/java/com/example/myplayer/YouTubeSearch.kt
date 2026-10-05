@@ -70,43 +70,10 @@ object YouTubeSearch {
             emptyList()
         }
     }
-    suspend fun searchPage(query: String, filter: SearchFilter? = null): SearchPage =
-        withContext(Dispatchers.IO) {
-            val videos = mutableListOf<VideoItem>()
-            var cont: String? = null
-            try {
-                val body = JSONObject().apply {
-                    put("context", JSONObject().apply {
-                        put("client", JSONObject().apply {
-                            put("clientName", "WEB")
-                            put("clientVersion", "2.20240101.00.00")
-                            put("clientScreen", "WATCH")
-                            put("hl", "ko")
-                            put("gl", "KR")
-                            put("userAgent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-                                "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                                "Chrome/120.0.0.0 Safari/537.36")
-                        })
-                    })
-                    put("query", query)
-                    // 필터 파라미터 (조합)
-                    if (filter != null) {
-                        val p = buildFilterParams(filter)
-                        if (p.isNotEmpty()) put("params", p)
-                    } else {
-                        put("params", "EgIQAQ%3D%3D")
-                    }
-                }
-                val response = post(ENDPOINT, body.toString())
-                    ?: return@withContext SearchPage(emptyList(), null)
-                val json = JSONObject(response)
-                collectVideos(json, videos)
-                cont = findContinuation(json)
-            } catch (e: Exception) {
-                Log.e(TAG, "err: ${e.message}", e)
-            }
-            SearchPage(videos, cont)
-        }
+    suspend fun searchPage(query: String, filter: SearchFilter? = null): SearchPage = withContext(Dispatchers.IO) {
+        val videos = YouTubeApiHelper.searchVideos(query)
+        SearchPage(videos, null)
+    }
 
     /**
      * YouTube 검색 필터 params는 base64 인코딩된 protobuf 조합.
@@ -143,33 +110,7 @@ object YouTubeSearch {
     }
 
     suspend fun searchMore(continuation: String): SearchPage = withContext(Dispatchers.IO) {
-        val videos = mutableListOf<VideoItem>()
-        var cont: String? = null
-        try {
-            val body = JSONObject().apply {
-                put("context", JSONObject().apply {
-                    put("client", JSONObject().apply {
-                        put("clientName", "WEB")
-                        put("clientVersion", "2.20240101.00.00")
-                        put("clientScreen", "WATCH")
-                        put("hl", "ko")
-                        put("gl", "KR")
-                        put("userAgent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-                            "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                            "Chrome/120.0.0.0 Safari/537.36")
-                    })
-                })
-                put("continuation", continuation)
-            }
-            val response = post(ENDPOINT, body.toString())
-                ?: return@withContext SearchPage(emptyList(), null)
-            val json = JSONObject(response)
-            collectVideos(json, videos)
-            cont = findContinuation(json)
-        } catch (e: Exception) {
-            Log.e(TAG, "err: ${e.message}", e)
-        }
-        SearchPage(videos, cont)
+        SearchPage(emptyList(), null)
     }
 
     private fun post(urlStr: String, bodyStr: String): String? {
