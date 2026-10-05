@@ -11,6 +11,31 @@ import java.net.URL
 class DownloaderImpl : Downloader() {
 
     override fun execute(request: Request): Response {
+        // ★ DNS 실패/타임아웃 재시도
+        var lastErr: Exception? = null
+        for (attempt in 0 until 3) {
+            try {
+                return executeOnce(request)
+            } catch (e: java.net.UnknownHostException) {
+                lastErr = e
+                android.util.Log.w("DownloaderImpl",
+                    "DNS 실패 (${attempt + 1}/3): ${e.message}")
+                if (attempt < 2) {
+                    try { Thread.sleep(500L * (attempt + 1)) } catch (_: Exception) {}
+                }
+            } catch (e: java.net.SocketTimeoutException) {
+                lastErr = e
+                android.util.Log.w("DownloaderImpl",
+                    "타임아웃 (${attempt + 1}/3): ${e.message}")
+                if (attempt < 2) {
+                    try { Thread.sleep(800L * (attempt + 1)) } catch (_: Exception) {}
+                }
+            }
+        }
+        throw lastErr ?: Exception("DownloaderImpl: all attempts failed")
+    }
+
+    private fun executeOnce(request: Request): Response {
         val httpMethod = request.httpMethod()
         val url = request.url()
         val headers = request.headers()

@@ -1247,13 +1247,39 @@ class PlayerActivity : AppCompatActivity() {
             currentQualities = result.qualities
             currentAudioUrl = result.audioUrlBest
             currentVideoBestUrl = result.videoUrl
-            android.util.Log.d("PlayerActivity", "extract 결과: muxed=${result.muxedUrl?.take(80)} video=${result.videoUrl?.take(80)} audioBest=${result.audioUrlBest?.take(80)} audio=${result.audioUrl?.take(80)}")
+            android.util.Log.d("PlayerActivity",
+                "extract 결과:\n" +
+                "  muxed=${result.muxedUrl?.take(80)}\n" +
+                "  video=${result.videoUrl?.take(80)}\n" +
+                "  audioBest=${result.audioUrlBest?.take(80)}\n" +
+                "  audio=${result.audioUrl?.take(80)}\n" +
+                "  debug=${result.debug.take(300)}")
 
-            // ★ 비디오 모드: muxed 우선, 없으면 videoUrl+audioUrl (MergingMediaSource 필요)
-            val streamUrl = result.muxedUrl
-                ?: result.videoUrl
-                ?: result.audioUrlBest
-                ?: result.audioUrl
+            // ★ 비디오 모드: muxed 또는 video 트랙 필수 (오디오만으로는 재생 금지)
+            val streamUrl = result.muxedUrl ?: result.videoUrl
+
+            if (streamUrl.isNullOrBlank()) {
+                android.util.Log.e("PlayerActivity",
+                    "video 트랙 없음! muxed=${result.muxedUrl} " +
+                    "video=${result.videoUrl} audio=${result.audioUrl}")
+                progress.visibility = View.GONE
+                AlertDialog.Builder(this@PlayerActivity)
+                    .setTitle("영상 트랙 없음")
+                    .setMessage(
+                        "이 영상은 영상 스트림을 가져올 수 없습니다.\n\n" +
+                        "원인: ${result.debug.take(500)}\n\n" +
+                        "· 오디오 모드로 전환하시겠어요?"
+                    )
+                    .setPositiveButton("오디오 모드") { _, _ ->
+                        switchToAudioMode()
+                    }
+                    .setNegativeButton("닫기") { _, _ ->
+                        finish()
+                    }
+                    .setCancelable(false)
+                    .show()
+                return@launch
+            }
 
             // ★ 자동 번역 없이 원본 자막만 (429 방지)
             val autoSub = subtitleTracks.firstOrNull { it.languageCode.startsWith("ko") }
