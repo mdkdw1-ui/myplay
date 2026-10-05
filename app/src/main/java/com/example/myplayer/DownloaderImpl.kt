@@ -4,34 +4,11 @@ import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
-import java.io.IOException
-import java.net.Inet4Address
-import java.net.InetAddress
-import java.util.concurrent.TimeUnit
-import okhttp3.Dns
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.BufferedReader
+import java.net.HttpURLConnection
+import java.net.URL
 
 class DownloaderImpl : Downloader() {
-
-    private val ipv4Dns = object : Dns {
-        override fun lookup(hostname: String): List<InetAddress> {
-            val all = Dns.SYSTEM.lookup(hostname)
-            val v4 = all.filterIsInstance<Inet4Address>()
-            return if (v4.isNotEmpty()) v4 else all
-        }
-    }
-
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .dns(ipv4Dns)
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .retryOnConnectionFailure(true)
-        .build()
 
     override fun execute(request: Request): Response {
         val httpMethod = request.httpMethod()
@@ -39,104 +16,75 @@ class DownloaderImpl : Downloader() {
         val headers = request.headers()
         val dataToSend = request.dataToSend()
 
-        // ★ visitor_id 요청 가로채기
-        if (url.contains("youtubei/v1/visitor_id")) {
-            try {
-                val ctx = MyApp.instance.applicationContext
-                val cached = YouTubeVisitorData.load(ctx)
-                if (cached.isNotBlank()) {
-                    val fakeJson = """{"responseContext":{"visitorData":"$cached"}}"""
-                    android.util.Log.d("Downloader", "visitor_id 가로채기 len=${cached.length}")
-                    return Response(200, "OK", emptyMap(), fakeJson, url)
-                } else {
-                    android.util.Log.d("Downloader", "visitor_id 요청 but 캐시 비었음")
-                }
-            } catch (_: Exception) {}
-        }
+        val connection = URL(url).openConnection() as HttpURLConnection
+        connection.requestMethod = httpMethod
+        connection.connectTimeout = 15000
+        connection.readTimeout = 15000
+        connection.instanceFollowRedirects = true
 
-        val builder = okhttp3.Request.Builder().url(url)
-
-        val ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-            "AppleWebKit/537.36 (KHTML, like Gecko) " +
-            "Chrome/120.0.0.0 Safari/537.36"
-
-        var newPipeUa: String? = null
         headers?.forEach { entry ->
             val key = entry.key
+            if (key.equals("User-Agent", ignoreCase = true)) return@forEach
             if (key.equals("Accept-Language", ignoreCase = true)) return@forEach
-            if (key.equals("Content-Length", ignoreCase = true)) return@forEach
-            if (key.equals("User-Agent", ignoreCase = true)) {
-                newPipeUa = entry.value.joinToString(",")
-                return@forEach
-            }
-            try {
-                builder.header(key, entry.value.joinToString(","))
-            } catch (_: Exception) {}
+            connection.setRequestProperty(key, entry.value.joinToString(","))
         }
 
-        // ★ NewPipe가 보낸 UA 우선 (ANDROID 클라이언트 위함)
-        builder.header("User-Agent", newPipeUa ?: ua)
-        builder.header("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
-        builder.header("Accept", "*/*")
-        builder.header("Origin", "https://www.youtube.com")
-        builder.header("Referer", "https://www.youtube.com/")
-        // ★ X-YouTube-Client-Name/Version 제거 (NewPipe 자체 client 사용)
-        builder.header("X-Origin", "https://www.youtube.com")
-        builder.header("X-Goog-AuthUser", "0")
+        // ★ 봇 차단 회피: 실제 브라우저 UA 강제
+        connection.setRequestProperty(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+            "AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "Chrome/120.0.0.0 Safari/537.36"
+        )
+        connection.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
+        connection.setRequestProperty("Accept", "*/*")
 
+        // ★ YouTube 로그인 쿠키 첨부 (있으면)
         try {
             val ctx = MyApp.instance.applicationContext
             val cookie = YouTubeCookieManager.load(ctx)
             if (cookie.isNotBlank()) {
-                builder.header("Cookie", cookie)
-                try {
-                    val hash = YouTubeVisitorData.sapisidHash(cookie)
-                    if (hash != null) builder.header("Authorization", hash)
-                } catch (_: Exception) {}
-            }
-            val vd = YouTubeVisitorData.load(ctx)
-            if (vd.isNotBlank()) {
-                builder.header("X-Goog-Visitor-Id", vd)
+                connection.setRequestProperty("Cookie", cookie)
             }
         } catch (_: Exception) {}
 
-        if (dataToSend != null && httpMethod != "GET" && httpMethod != "HEAD") {
-            val ct = (headers?.get("Content-Type")?.firstOrNull() ?: "application/json")
-                .toMediaType()
-            builder.method(httpMethod, dataToSend.toRequestBody(ct))
-        } else {
-            builder.method(httpMethod, null)
+        if (dataToSend != null) {
+            connection.doOutput = true
+            connection.outputStream.use { it.write(dataToSend) }
         }
 
-        val okResp = client.newCall(builder.build()).execute()
-        val code = okResp.code
-        if (code == 429) {
-            okResp.close()
+        val responseCode = connection.responseCode
+        val responseMessage = connection.responseMessage
+
+        if (responseCode == 429) {
             throw ReCaptchaException("reCaptcha challenge requested", url)
         }
-        val body = okResp.body?.string() ?: ""
-        val respHeaders = mutableMapOf<String, List<String>>()
-        // ★ OkHttp headers 순회 (각 값 개별)
-        for (i in 0 until okResp.headers.size) {
-            val name = okResp.headers.name(i)
-            val value = okResp.headers.value(i)
-            val existing = respHeaders[name]
-            if (existing == null) {
-                respHeaders[name] = listOf(value)
-            } else {
-                respHeaders[name] = existing + value
+
+        val inputStream = if (responseCode in 200..299)
+            connection.inputStream
+        else
+            connection.errorStream
+
+        val responseBody = inputStream?.bufferedReader()?.use(BufferedReader::readText) ?: ""
+
+        val latestUrl = connection.url.toString()
+
+        // ★ 핵심: Map<String, List<String>> 형태로 변환
+        val responseHeaders = mutableMapOf<String, List<String>>()
+        connection.headerFields?.forEach { entry ->
+            val key = entry.key
+            if (key != null) {
+                responseHeaders[key] = entry.value ?: emptyList()
             }
         }
-        val latestUrl = okResp.request.url.toString()
-        val msg = okResp.message
-        okResp.close()
 
-        @Suppress("UNCHECKED_CAST")
+        connection.disconnect()
+
         return Response(
-            code,
-            msg,
-            respHeaders as Map<String, List<String>>,
-            body,
+            responseCode,
+            responseMessage,
+            responseHeaders,
+            responseBody,
             latestUrl
         )
     }
