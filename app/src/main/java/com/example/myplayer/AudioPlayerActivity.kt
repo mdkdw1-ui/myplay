@@ -154,6 +154,12 @@ class AudioPlayerActivity : AppCompatActivity() {
             true
         }
 
+        // ★ 채널명 롱프레스 → 구독 확인
+        findViewById<android.widget.TextView>(R.id.tvChannel)?.setOnLongClickListener {
+            showSubscribeDialog()
+            true
+        }
+
         val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
         controllerFuture.addListener({
@@ -524,16 +530,21 @@ class AudioPlayerActivity : AppCompatActivity() {
                 ?: result.muxedUrl
                 ?: result.videoUrl
 
-            if (url.isNullOrBlank()) {
+            // ★ 오디오 없으면 muxed/video 폴백
+            val fallbackUrl = result.muxedUrl ?: result.videoUrl ?: result.audioUrlBest
+
+            if (url.isNullOrBlank() && fallbackUrl.isNullOrBlank()) {
                 runOnUiThread {
                     Toast.makeText(this@AudioPlayerActivity,
-                        "이 곡 실패 → 다음 곡 시도", Toast.LENGTH_SHORT).show()
+                        "이 곡 실패 → 다음 곡", Toast.LENGTH_SHORT).show()
                 }
                 loadingNext = false
-                // ★ 큐의 다음 곡 자동 시도
                 trySkipToNextInQueue(videoId)
                 return@launch
             }
+
+            // 실제 사용할 URL
+            val useUrl = url ?: fallbackUrl!!
 
             // ★ 자막 URL - 자동생성 포함, 언어 우선순위
             currentSubtitleUrl = result.subtitles
@@ -583,6 +594,40 @@ class AudioPlayerActivity : AppCompatActivity() {
             attachEqualizer()
             loadingNext = false
         }
+    }
+
+    /** 채널명 롱프레스 → 구독 */
+    private fun showSubscribeDialog() {
+        if (currentChannel.isBlank()) return
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(currentChannel)
+            .setMessage("이 채널을 구독할까요?")
+            .setPositiveButton("구독") { _, _ ->
+                lifecycleScope.launch {
+                    try {
+                        val dao = HistoryDatabase.get(applicationContext).subscriptionDao()
+                        val exists = dao.isSubscribed(currentChannel)
+                        if (exists) {
+                            Toast.makeText(this@AudioPlayerActivity, "이미 구독 중", Toast.LENGTH_SHORT).show()
+                        } else {
+                            dao.insert(
+                                SubscriptionEntity(
+                                    channelId = currentChannel,
+                                    name = currentChannel,
+                                    avatar = "",
+                                    subscribers = "",
+                                    subscribedAt = System.currentTimeMillis()
+                                )
+                            )
+                            Toast.makeText(this@AudioPlayerActivity, "구독됨: $currentChannel", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(this@AudioPlayerActivity, "실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
 
     private fun attachPlayerListener() {
