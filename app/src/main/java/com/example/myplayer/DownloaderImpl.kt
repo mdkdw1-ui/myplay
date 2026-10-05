@@ -60,17 +60,22 @@ class DownloaderImpl : Downloader() {
             "AppleWebKit/537.36 (KHTML, like Gecko) " +
             "Chrome/120.0.0.0 Safari/537.36"
 
+        var newPipeUa: String? = null
         headers?.forEach { entry ->
             val key = entry.key
-            if (key.equals("User-Agent", ignoreCase = true)) return@forEach
             if (key.equals("Accept-Language", ignoreCase = true)) return@forEach
             if (key.equals("Content-Length", ignoreCase = true)) return@forEach
+            if (key.equals("User-Agent", ignoreCase = true)) {
+                newPipeUa = entry.value.joinToString(",")
+                return@forEach
+            }
             try {
                 builder.header(key, entry.value.joinToString(","))
             } catch (_: Exception) {}
         }
 
-        builder.header("User-Agent", ua)
+        // ★ NewPipe가 보낸 UA 우선 (ANDROID 클라이언트 위함)
+        builder.header("User-Agent", newPipeUa ?: ua)
         builder.header("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
         builder.header("Accept", "*/*")
         builder.header("Origin", "https://www.youtube.com")
