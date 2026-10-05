@@ -511,7 +511,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
 
             val result = YouTubeStream.extract(videoId)
-            diag("extract($videoId): hasAny=${result.hasAny} debug=${result.debug.take(80)}")
+            diag("extract($videoId): hasAny=${result.hasAny} audioBest=${result.audioUrlBest?.take(60)} muxed=${result.muxedUrl?.take(60)} video=${result.videoUrl?.take(60)} debug=${result.debug.take(100)}")
 
             // ★ 라이브 스킵
             if (result.isLive) {

@@ -174,10 +174,49 @@ object YouTubeApiHelper {
     // ═══════════════════════════════════════════════
     // 채널 영상
     // ═══════════════════════════════════════════════
-    suspend fun channelVideos(channelId: String): ChannelVideosPage = withContext(Dispatchers.IO) {
+    /** ★ 채널명 or ID → 실제 채널 ID */
+    suspend fun resolveChannelId(nameOrId: String): String? = withContext(Dispatchers.IO) {
+        if (nameOrId.startsWith("UC") && nameOrId.length > 20) return@withContext nameOrId
+        val q = URLEncoder.encode(nameOrId, "UTF-8")
+        // Piped 검색으로 채널 ID 찾기
+        for (inst in PIPED) {
+            val obj = getJsonObject("$inst/search?q=$q&filter=channels") ?: continue
+            try {
+                val items = obj.optJSONArray("items") ?: continue
+                if (items.length() > 0) {
+                    val first = items.optJSONObject(0) ?: continue
+                    val url = first.optString("url", "")
+                    val id = url.substringAfter("/channel/", "")
+                    if (id.startsWith("UC")) return@withContext id
+                }
+            } catch (e: Exception) { }
+        }
         // Invidious
         for (inst in INVIDIOUS) {
-            val obj = getJsonObject("$inst/api/v1/channels/$channelId/videos?page=1") ?: continue
+            val arr = getJsonArray("$inst/api/v1/search?q=$q&type=channel") ?: continue
+            try {
+                if (arr.length() > 0) {
+                    val first = arr.optJSONObject(0) ?: continue
+                    val id = first.optString("authorId", "")
+                    if (id.startsWith("UC")) return@withContext id
+                }
+            } catch (e: Exception) { }
+        }
+        null
+    }
+
+    suspend fun channelVideos(channelId: String): ChannelVideosPage = withContext(Dispatchers.IO) {
+        // ★ 채널명이면 ID로 변환
+        val realId = if (channelId.startsWith("UC") && channelId.length > 20) {
+            channelId
+        } else {
+            resolveChannelId(channelId) ?: channelId
+        }
+        Log.d(TAG, "channelVideos: input=$channelId realId=$realId")
+
+        // Invidious
+        for (inst in INVIDIOUS) {
+            val obj = getJsonObject("$inst/api/v1/channels/$realId/videos?page=1") ?: continue
             try {
                 val videos = obj.optJSONArray("videos") ?: continue
                 val out = mutableListOf<VideoItem>()
@@ -202,7 +241,7 @@ object YouTubeApiHelper {
 
         // Piped
         for (inst in PIPED) {
-            val obj = getJsonObject("$inst/channel/$channelId") ?: continue
+            val obj = getJsonObject("$inst/channel/$realId") ?: continue
             try {
                 val rel = obj.optJSONArray("relatedStreams") ?: continue
                 val out = mutableListOf<VideoItem>()
