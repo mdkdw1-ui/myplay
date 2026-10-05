@@ -92,19 +92,36 @@ class DownloaderImpl : Downloader() {
             builder.method(httpMethod, null)
         }
 
-        val resp = client.newCall(builder.build()).execute()
-        val code = resp.code
+        val okResp = client.newCall(builder.build()).execute()
+        val code = okResp.code
         if (code == 429) {
-            resp.close()
+            okResp.close()
             throw ReCaptchaException("reCaptcha challenge requested", url)
         }
-        val body = resp.body?.string() ?: ""
+        val body = okResp.body?.string() ?: ""
         val respHeaders = mutableMapOf<String, List<String>>()
-        for ((name, values) in resp.headers) {
-            respHeaders[name] = values
+        // ★ OkHttp headers 순회 (각 값 개별)
+        for (i in 0 until okResp.headers.size) {
+            val name = okResp.headers.name(i)
+            val value = okResp.headers.value(i)
+            val existing = respHeaders[name]
+            if (existing == null) {
+                respHeaders[name] = listOf(value)
+            } else {
+                respHeaders[name] = existing + value
+            }
         }
-        val latestUrl = resp.request.url.toString()
-        resp.close()
-        return Response(code, resp.message, respHeaders, body, latestUrl)
+        val latestUrl = okResp.request.url.toString()
+        val msg = okResp.message
+        okResp.close()
+
+        @Suppress("UNCHECKED_CAST")
+        return Response(
+            code,
+            msg,
+            respHeaders as Map<String, List<String>>,
+            body,
+            latestUrl
+        )
     }
 }
