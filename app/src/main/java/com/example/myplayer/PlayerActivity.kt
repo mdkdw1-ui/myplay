@@ -1677,6 +1677,43 @@ class PlayerActivity : AppCompatActivity() {
 
 
     // ========== 채널 페이지 이동 ==========
+        /** ★ 채널명 롱프레스 → 구독 확인 */
+    private fun showSubscribeDialog() {
+        if (currentChannel.isBlank()) return
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(currentChannel)
+            .setMessage("이 채널을 구독할까요?")
+            .setPositiveButton("구독") { _, _ ->
+                lifecycleScope.launch {
+                    try {
+                        val dao = HistoryDatabase.get(applicationContext).subscriptionDao()
+                        val exists = dao.isSubscribed(currentChannel)
+                        if (exists) {
+                            Toast.makeText(this@PlayerActivity,
+                                "이미 구독 중", Toast.LENGTH_SHORT).show()
+                        } else {
+                            dao.insert(
+                                SubscriptionEntity(
+                                    channelId = currentChannel,
+                                    name = currentChannel,
+                                    avatar = "",
+                                    subscribers = "",
+                                    subscribedAt = System.currentTimeMillis()
+                                )
+                            )
+                            Toast.makeText(this@PlayerActivity,
+                                "구독됨: $currentChannel", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(this@PlayerActivity,
+                            "실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
     private fun openChannelFromPlayer() {
         if (currentChannel.isBlank()) {
             Toast.makeText(this, "채널 정보 없음", Toast.LENGTH_SHORT).show()
