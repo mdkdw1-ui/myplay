@@ -512,40 +512,33 @@ class AudioPlayerActivity : AppCompatActivity() {
 
             val result = YouTubeStream.extract(videoId)
             diag("extract($videoId)")
-            diag("  aBest=${result.audioUrlBest?.take(60)}")
-            diag("  audio=${result.audioUrl?.take(60)}")
-            diag("  muxed=${result.muxedUrl?.take(60)}")
-            diag("  video=${result.videoUrl?.take(60)}")
-            diag("  aBest=${result.audioUrlBest?.take(60)}")
-            diag("  audio=${result.audioUrl?.take(60)}")
-            diag("  muxed=${result.muxedUrl?.take(60)}")
-            diag("  video=${result.videoUrl?.take(60)}")
             diag("  audioBest=${result.audioUrlBest?.take(80)}")
-            diag("  audio=${result.audioUrl?.take(80)}")
             diag("  muxed=${result.muxedUrl?.take(80)}")
             diag("  video=${result.videoUrl?.take(80)}")
+            diag("  audio=${result.audioUrl?.take(80)}")
             diag("  debug=${result.debug.take(200)}")
 
             // ★ 라이브 스킵
             if (result.isLive) {
-                diag("skip LIVE: $videoId")
+                android.util.Log.d("AudioPlayer", "skip LIVE: $videoId")
                 runOnUiThread {
                     Toast.makeText(this@AudioPlayerActivity, "라이브는 오디오 모드 제외", Toast.LENGTH_SHORT).show()
                 }
                 loadingNext = false
+                // 자동으로 다음 곡
                 bgScope.launch { delay(500); playNextRelatedBg() }
                 return@launch
             }
 
-            // ★★ 오디오 모드: muxed/video URL도 오디오로 사용 가능
-            //   ExoPlayer가 자동으로 오디오 트랙만 재생함
             val url = result.audioUrlBest
                 ?: result.audioUrl
                 ?: result.muxedUrl
                 ?: result.videoUrl
 
-            if (url.isNullOrBlank()) {
-                diag("❌ 오디오 스트림 없음 → 다음 곡")
+            // ★ 오디오 없으면 muxed/video 폴백
+            val fallbackUrl = result.muxedUrl ?: result.videoUrl ?: result.audioUrlBest
+
+            if (url.isNullOrBlank() && fallbackUrl.isNullOrBlank()) {
                 runOnUiThread {
                     Toast.makeText(this@AudioPlayerActivity,
                         "이 곡 실패 → 다음 곡", Toast.LENGTH_SHORT).show()
@@ -555,89 +548,8 @@ class AudioPlayerActivity : AppCompatActivity() {
                 return@launch
             }
 
-            val urlKind = when (url) {
-                result.audioUrlBest -> "audioBest"
-                result.audioUrl -> "audio"
-                result.muxedUrl -> "muxed"
-                result.videoUrl -> "video"
-                else -> "?"
-            }
-            diag("▶ 사용 URL kind=$urlKind")
-
-            // ★ 자막 URL 우선순위
-            currentSubtitleUrl = result.subtitles
-                .firstOrNull { it.languageCode.startsWith("ko") }?.url
-                ?: result.subtitles.firstOrNull { it.languageCode.startsWith("en") }?.url
-                ?: result.subtitles.firstOrNull()?.url
-                ?: ""
-
-            // ★ MediaMetadata (블루투스/잠금화면용)
-            val artist = currentArtist.ifBlank { currentChannel }
-            val metadata = MediaMetadata.Builder()
-                .setTitle(currentTitle)
-                .setArtist(artist)
-                .setAlbumTitle(currentChannel)
-                .setArtworkUri(android.net.Uri.parse(currentThumb))
-                .build()
-
-            val mediaItem = MediaItem.Builder()
-                .setUri(url)
-                .setMediaId(videoId)
-                .setMediaMetadata(metadata)
-                .build()
-
-            // ★ prefs 저장 (PlaybackService가 다음 곡 결정 시 사용)
-            pref?.edit()
-                ?.putString("current_video_id", videoId)
-                ?.putString("current_title", currentTitle)
-                ?.putString("current_channel", currentChannel)
-                ?.putString("current_thumbnail", currentThumb)
-                ?.putString("current_artist", currentArtist)
-                ?.putString("current_subtitle_url", currentSubtitleUrl)
-                ?.apply()
-
-            runOnUiThread {
-                mediaController?.setMediaItem(mediaItem)
-                mediaController?.prepare()
-                mediaController?.playWhenReady = true
-                updateUI()
-            }
-
-            // ★ 진단 로그 강화
-            diag("audio 후보:")
-            diag("  audioBest=${result.audioUrlBest?.take(60)}")
-            diag("  audio=${result.audioUrl?.take(60)}")
-            diag("  muxed=${result.muxedUrl?.take(60)}")
-            diag("  video=${result.videoUrl?.take(60)}")
-
-            // ★ 우선순위: audioBest > audio > muxed > video
-            //   (오디오만 있어도 되고, muxed/video도 ExoPlayer가 오디오 트랙만 뽑아냄)
-            val url = result.audioUrlBest
-                ?: result.audioUrl
-                ?: result.muxedUrl
-                ?: result.videoUrl
-
-            if (url.isNullOrBlank()) {
-                diag("❌ 모든 URL null → 다음 곡")
-                runOnUiThread {
-                    Toast.makeText(this@AudioPlayerActivity,
-                        "이 곡 실패 (스트림 없음) → 다음 곡", Toast.LENGTH_SHORT).show()
-                }
-                loadingNext = false
-                trySkipToNextInQueue(videoId)
-                return@launch
-            }
-
             // 실제 사용할 URL
-            val useUrl = url
-            val urlKind = when {
-                url == result.audioUrlBest -> "audioBest"
-                url == result.audioUrl -> "audio"
-                url == result.muxedUrl -> "muxed"
-                url == result.videoUrl -> "video"
-                else -> "?"
-            }
-            diag("▶ 사용 URL kind=$urlKind")
+            val useUrl = url ?: fallbackUrl!!
 
             // ★ 자막 URL - 자동생성 포함, 언어 우선순위
             currentSubtitleUrl = result.subtitles
@@ -658,7 +570,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 .build()
 
             val mediaItem = MediaItem.Builder()
-                .setUri(useUrl)
+                .setUri(url)
                 .setMediaId(videoId)
                 .setMediaMetadata(metadata)
                 .build()
@@ -813,11 +725,10 @@ class AudioPlayerActivity : AppCompatActivity() {
                 bufferingWatchJob?.cancel()
                 bufferingWatchJob = bgScope.launch {
                     try {
-                        // ★ 8초로 단축 (기존 15초)
-                        kotlinx.coroutines.delay(8_000)
+                        kotlinx.coroutines.delay(15_000)
                         if (bufferingStartMs > 0 &&
-                            System.currentTimeMillis() - bufferingStartMs >= 8_000) {
-                            diag("BUFFERING 8초 초과 → 다음 곡")
+                            System.currentTimeMillis() - bufferingStartMs >= 15_000) {
+                            diag("BUFFERING 15초 초과 → 다음 곡")
                             runOnUiThread {
                                 android.widget.Toast.makeText(
                                     this@AudioPlayerActivity,
@@ -834,12 +745,6 @@ class AudioPlayerActivity : AppCompatActivity() {
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 android.util.Log.e("AudioPlayer",
                     "onPlayerError: ${error.errorCodeName} / ${error.message}", error)
-                // ★ 현재 URL 정보도 진단
-                try {
-                    val curUrl = mediaController?.currentMediaItem
-                        ?.localConfiguration?.uri?.toString() ?: "(null)"
-                    diag("❌ ERR ${error.errorCodeName} url=${curUrl.take(80)}")
-                } catch (_: Exception) {}
                 // ★ 진단: 화면에 에러 표시
                 runOnUiThread {
                     tvTitle.text = "[ERR ${error.errorCodeName}] $currentTitle"
