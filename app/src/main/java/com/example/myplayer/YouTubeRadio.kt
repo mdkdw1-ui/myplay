@@ -20,48 +20,12 @@ object YouTubeRadio {
         title: String = "",
         channel: String = ""
     ): List<VideoItem> = withContext(Dispatchers.IO) {
-        val primary = try {
-            fetchFromNext(videoId)
-        } catch (e: Exception) {
-            Log.e(TAG, "next err: ${e.message}", e)
-            emptyList()
+        val inv = YouTubeApiHelper.related(videoId)
+        if (inv.isNotEmpty()) {
+            Log.d(TAG, "inv related: ${inv.size}")
+            return@withContext inv
         }
-
-        if (primary.size >= 3) {
-            Log.d(TAG, "next: ${primary.size}")
-            return@withContext primary
-        }
-
-        val out = primary.toMutableList()
-        if (out.size < 3 && title.isNotBlank()) {
-            try {
-                val kw = title.split(" ")
-                    .filter { it.isNotBlank() && it.length >= 2 }
-                    .take(4).joinToString(" ")
-                if (kw.isNotBlank()) {
-                    val r = YouTubeSearch.search(kw)
-                    for (v in r) {
-                        if (v.videoId == videoId) continue
-                        if (out.none { it.videoId == v.videoId }) out.add(v)
-                    }
-                    Log.d(TAG, "title search '$kw': ${r.size}")
-                }
-            } catch (e: Exception) { }
-        }
-
-        if (out.size < 3 && channel.isNotBlank()) {
-            try {
-                val r = YouTubeSearch.search(channel)
-                for (v in r) {
-                    if (v.videoId == videoId) continue
-                    if (out.none { it.videoId == v.videoId }) out.add(v)
-                }
-                Log.d(TAG, "channel search '$channel': ${r.size}")
-            } catch (e: Exception) { }
-        }
-
-        Log.d(TAG, "final: ${out.size}")
-        out.distinctBy { it.videoId }.take(30)
+        emptyList()
     }
 
     private suspend fun fetchFromNext(videoId: String): List<VideoItem> =
