@@ -512,6 +512,10 @@ class AudioPlayerActivity : AppCompatActivity() {
 
             val result = YouTubeStream.extract(videoId)
             diag("extract($videoId)")
+            diag("  aBest=${result.audioUrlBest?.take(60)}")
+            diag("  audio=${result.audioUrl?.take(60)}")
+            diag("  muxed=${result.muxedUrl?.take(60)}")
+            diag("  video=${result.videoUrl?.take(60)}")
             diag("  audioBest=${result.audioUrlBest?.take(80)}")
             diag("  muxed=${result.muxedUrl?.take(80)}")
             diag("  video=${result.videoUrl?.take(80)}")
