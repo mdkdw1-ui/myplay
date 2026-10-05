@@ -4,11 +4,34 @@ import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
-import java.io.BufferedReader
-import java.net.HttpURLConnection
-import java.net.URL
+import java.io.IOException
+import java.net.Inet4Address
+import java.net.InetAddress
+import java.util.concurrent.TimeUnit
+import okhttp3.Dns
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class DownloaderImpl : Downloader() {
+
+    private val ipv4Dns = object : Dns {
+        override fun lookup(hostname: String): List<InetAddress> {
+            val all = Dns.SYSTEM.lookup(hostname)
+            val v4 = all.filterIsInstance<Inet4Address>()
+            return if (v4.isNotEmpty()) v4 else all
+        }
+    }
+
+    private val client: OkHttpClient = OkHttpClient.Builder()
+        .dns(ipv4Dns)
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .retryOnConnectionFailure(true)
+        .build()
 
     override fun execute(request: Request): Response {
         val httpMethod = request.httpMethod()
@@ -16,104 +39,72 @@ class DownloaderImpl : Downloader() {
         val headers = request.headers()
         val dataToSend = request.dataToSend()
 
-        // ★ IPv4 강제 (IPv6 fallback "Unable to resolve host" 방지)
-        val connection = try {
-            val parsedUrl = java.net.URL(url)
-            val host = parsedUrl.host
-            val port = if (parsedUrl.port > 0) parsedUrl.port
-                       else if (parsedUrl.protocol == "https") 443 else 80
+        val builder = okhttp3.Request.Builder().url(url)
 
-            // ★ IPv4 주소만 조회
-            val ipv4 = java.net.InetAddress.getAllByName(host)
-                .filterIsInstance<java.net.Inet4Address>()
-                .firstOrNull()
-
-            if (ipv4 != null) {
-                val newUrl = java.net.URL(
-                    parsedUrl.protocol,
-                    ipv4.hostAddress,
-                    port,
-                    parsedUrl.file
-                )
-                val conn = newUrl.openConnection() as HttpURLConnection
-                // ★ Host 헤더에 원본 도메인 (SNI/TLS용)
-                conn.setRequestProperty("Host", host)
-                conn
-            } else {
-                java.net.URL(url).openConnection() as HttpURLConnection
-            }
-        } catch (e: Exception) {
-            java.net.URL(url).openConnection() as HttpURLConnection
-        }
-        connection.requestMethod = httpMethod
-        connection.connectTimeout = 30000   // ★ 30초 (DNS 여유)
-        connection.readTimeout = 30000
-        connection.instanceFollowRedirects = true
+        val ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+            "AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "Chrome/120.0.0.0 Safari/537.36"
 
         headers?.forEach { entry ->
             val key = entry.key
             if (key.equals("User-Agent", ignoreCase = true)) return@forEach
             if (key.equals("Accept-Language", ignoreCase = true)) return@forEach
-            connection.setRequestProperty(key, entry.value.joinToString(","))
+            if (key.equals("Content-Length", ignoreCase = true)) return@forEach
+            try {
+                builder.header(key, entry.value.joinToString(","))
+            } catch (_: Exception) {}
         }
 
-        // ★ 봇 차단 회피: 실제 브라우저 UA 강제
-        connection.setRequestProperty(
-            "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-            "AppleWebKit/537.36 (KHTML, like Gecko) " +
-            "Chrome/120.0.0.0 Safari/537.36"
-        )
-        connection.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
-        connection.setRequestProperty("Accept", "*/*")
+        builder.header("User-Agent", ua)
+        builder.header("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
+        builder.header("Accept", "*/*")
+        builder.header("Origin", "https://www.youtube.com")
+        builder.header("Referer", "https://www.youtube.com/")
+        builder.header("X-YouTube-Client-Name", "1")
+        builder.header("X-YouTube-Client-Version", "2.20240101.00.00")
+        builder.header("X-Origin", "https://www.youtube.com")
+        builder.header("X-Goog-AuthUser", "0")
+        builder.header("Sec-Fetch-Site", "same-origin")
+        builder.header("Sec-Fetch-Mode", "cors")
+        builder.header("Sec-Fetch-Dest", "empty")
 
-        // ★ YouTube 로그인 쿠키 첨부 (있으면)
         try {
             val ctx = MyApp.instance.applicationContext
             val cookie = YouTubeCookieManager.load(ctx)
             if (cookie.isNotBlank()) {
-                connection.setRequestProperty("Cookie", cookie)
+                builder.header("Cookie", cookie)
+                try {
+                    val hash = YouTubeVisitorData.sapisidHash(cookie)
+                    if (hash != null) builder.header("Authorization", hash)
+                } catch (_: Exception) {}
+            }
+            val vd = YouTubeVisitorData.load(ctx)
+            if (vd.isNotBlank()) {
+                builder.header("X-Goog-Visitor-Id", vd)
             }
         } catch (_: Exception) {}
 
-        if (dataToSend != null) {
-            connection.doOutput = true
-            connection.outputStream.use { it.write(dataToSend) }
+        if (dataToSend != null && httpMethod != "GET" && httpMethod != "HEAD") {
+            val ct = (headers?.get("Content-Type")?.firstOrNull() ?: "application/json")
+                .toMediaType()
+            builder.method(httpMethod, dataToSend.toRequestBody(ct))
+        } else {
+            builder.method(httpMethod, null)
         }
 
-        val responseCode = connection.responseCode
-        val responseMessage = connection.responseMessage
-
-        if (responseCode == 429) {
+        val resp = client.newCall(builder.build()).execute()
+        val code = resp.code
+        if (code == 429) {
+            resp.close()
             throw ReCaptchaException("reCaptcha challenge requested", url)
         }
-
-        val inputStream = if (responseCode in 200..299)
-            connection.inputStream
-        else
-            connection.errorStream
-
-        val responseBody = inputStream?.bufferedReader()?.use(BufferedReader::readText) ?: ""
-
-        val latestUrl = connection.url.toString()
-
-        // ★ 핵심: Map<String, List<String>> 형태로 변환
-        val responseHeaders = mutableMapOf<String, List<String>>()
-        connection.headerFields?.forEach { entry ->
-            val key = entry.key
-            if (key != null) {
-                responseHeaders[key] = entry.value ?: emptyList()
-            }
+        val body = resp.body?.string() ?: ""
+        val respHeaders = mutableMapOf<String, List<String>>()
+        for ((name, values) in resp.headers) {
+            respHeaders[name] = values
         }
-
-        connection.disconnect()
-
-        return Response(
-            responseCode,
-            responseMessage,
-            responseHeaders,
-            responseBody,
-            latestUrl
-        )
+        val latestUrl = resp.request.url.toString()
+        resp.close()
+        return Response(code, resp.message, respHeaders, body, latestUrl)
     }
 }
