@@ -353,17 +353,25 @@ object YouTubeApiHelper {
                 if (formats != null) {
                     for (i in 0 until formats.length()) {
                         val f = formats.getJSONObject(i)
-                        val type = f.optString("type", "")
+                        // ★ type 필드가 없으면 encoding 필드도 확인
+                        val type = f.optString("type",
+                            f.optString("encoding", ""))
                         val u = f.optString("url", "")
                         if (u.isBlank()) continue
-                        if (type.startsWith("audio/")) {
-                            val br = f.optInt("bitrate", 0)
+                        val typeLower = type.lowercase()
+                        if (typeLower.startsWith("audio/") ||
+                            typeLower.contains("audio")) {
+                            val br = f.optInt("bitrate",
+                                f.optInt("bitrateAvg", 0))
                             if (br > audioBitrate) {
                                 audioBitrate = br
                                 audioUrl = u
                             }
-                        } else if (type.startsWith("video/")) {
-                            val h = f.optInt("height", 0)
+                        } else if (typeLower.startsWith("video/") ||
+                                   typeLower.contains("video") ||
+                                   typeLower.contains("mp4")) {
+                            val h = f.optInt("height",
+                                f.optInt("resolution", 0))
                             if (h > videoHeight) {
                                 videoHeight = h
                                 videoUrl = u
@@ -372,15 +380,18 @@ object YouTubeApiHelper {
                     }
                 }
 
+                // ★ formatStreams (muxed) — 최고 화질 우선
                 val fs = obj.optJSONArray("formatStreams")
                 if (fs != null && fs.length() > 0) {
-                    // muxed 우선 (video+audio 통합)
+                    var bestMuxedH = 0
                     for (i in 0 until fs.length()) {
                         val f = fs.getJSONObject(i)
                         val u = f.optString("url", "")
-                        if (u.isNotBlank()) {
+                        if (u.isBlank()) continue
+                        val h = f.optInt("height", 0)
+                        if (h >= bestMuxedH) {
+                            bestMuxedH = h
                             muxed = u
-                            break
                         }
                     }
                 }
@@ -418,6 +429,7 @@ object YouTubeApiHelper {
                 }
 
                 var muxed: String? = null
+                var bestMuxedH = 0
                 val vStreams = obj.optJSONArray("videoStreams")
                 if (vStreams != null) {
                     for (i in 0 until vStreams.length()) {
@@ -427,10 +439,12 @@ object YouTubeApiHelper {
                         val onlyVideo = f.optBoolean("videoOnly", false)
                         if (u.isBlank()) continue
 
-                        // ★ muxed (video+audio) 우선
-                        if (!onlyVideo && muxed == null) {
+                        // ★ muxed (video+audio) 최고 화질
+                        if (!onlyVideo && h >= bestMuxedH) {
+                            bestMuxedH = h
                             muxed = u
                         }
+                        // ★ video-only도 저장 (최고 화질)
                         if (h > videoHeight) {
                             videoHeight = h
                             videoUrl = u
