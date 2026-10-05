@@ -73,8 +73,12 @@ object YouTubeRadio {
                         put("client", JSONObject().apply {
                             put("clientName", "WEB")
                             put("clientVersion", "2.20240101.00.00")
+                            put("clientScreen", "WATCH")
                             put("hl", "ko")
                             put("gl", "KR")
+                            put("userAgent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                                "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                                "Chrome/120.0.0.0 Safari/537.36")
                         })
                     })
                     put("videoId", videoId)

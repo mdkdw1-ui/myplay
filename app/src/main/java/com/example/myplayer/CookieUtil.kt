@@ -17,6 +17,19 @@ object CookieUtil {
             val cookie = YouTubeCookieManager.load(ctx)
             if (cookie.isNotBlank()) {
                 conn.setRequestProperty("Cookie", cookie)
+                // ★ SAPISIDHASH (사람 인증)
+                try {
+                    val hash = YouTubeVisitorData.sapisidHash(cookie)
+                    if (hash != null) {
+                        conn.setRequestProperty("Authorization", hash)
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // ★ visitorData (봇 차단 회피)
+            val vd = YouTubeVisitorData.load(ctx)
+            if (vd.isNotBlank()) {
+                conn.setRequestProperty("X-Goog-Visitor-Id", vd)
             }
         } catch (_: Exception) {}
     }
