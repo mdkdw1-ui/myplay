@@ -60,6 +60,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var bufferingStartMs: Long = 0L
     private var bufferingWatchJob: kotlinx.coroutines.Job? = null
     private var idleRepeatCount: Int = 0
+    private val failedIds = mutableSetOf<String>()
     private var reuseSubtitleUrl: String = ""
 
     private val audioHistory = mutableListOf<AudioHistoryItem>()
@@ -160,7 +161,11 @@ class AudioPlayerActivity : AppCompatActivity() {
             attachPlayerListener()
             startUpdateLoop()
             attachEqualizer()
-            if (currentVideoId.isNotEmpty()) loadAudio(currentVideoId, isInitial = true)
+            if (currentVideoId.isNotEmpty() && currentVideoId !in failedIds) {
+                loadAudio(currentVideoId, isInitial = true)
+            } else {
+                diag("onCreate skip failed: $currentVideoId")
+            }
         }, MoreExecutors.directExecutor())
     }
 
@@ -317,6 +322,10 @@ class AudioPlayerActivity : AppCompatActivity() {
     /** ★ 큐에서 다음 곡으로 skip (실패 시) */
     private fun trySkipToNextInQueue(failedVideoId: String) {
         try {
+            // ★ 실패 곡 블랙리스트
+            failedIds.add(failedVideoId)
+            diag("failedIds += $failedVideoId (총 ${failedIds.size}개)")
+
             val queue = QueueManager.get(this)
             val curIdx = queue.indexOfFirst { it.videoId == failedVideoId }
             diag("trySkip: queue=${queue.size} curIdx=$curIdx failed=$failedVideoId")
@@ -329,7 +338,8 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
             
             if (curIdx < 0) {
-                val first = queue.firstOrNull { it.videoId != failedVideoId }
+                // ★ failedIds 제외한 첫 곡
+                val first = queue.firstOrNull { it.videoId !in failedIds }
                 if (first != null) {
                     currentVideoId = first.videoId
                     currentTitle = first.title
@@ -340,8 +350,13 @@ class AudioPlayerActivity : AppCompatActivity() {
                 }
                 return
             }
-            if (curIdx < queue.size - 1) {
-                val next = queue[curIdx + 1]
+            // ★ curIdx 다음부터 failedIds 제외한 곡 찾기
+            var nextIdx = curIdx + 1
+            while (nextIdx < queue.size && queue[nextIdx].videoId in failedIds) {
+                nextIdx++
+            }
+            if (nextIdx < queue.size) {
+                val next = queue[nextIdx]
                 currentVideoId = next.videoId
                 currentTitle = next.title
                 currentChannel = next.channel
@@ -363,24 +378,30 @@ class AudioPlayerActivity : AppCompatActivity() {
             val fileUri = intent.getStringExtra("FILE_URI")
             diag("loadAudio local:download fileUri=$fileUri")
             if (!fileUri.isNullOrBlank()) {
+                // ★ 파일 크기 확인 (IO 스레드)
                 bgScope.launch {
                     try {
-                        // ★ 로컬 파일 크기 확인
-                        try {
-                            val p = android.net.Uri.parse(fileUri).path
-                            if (p != null) {
-                                val f = java.io.File(p)
-                                diag("local file exists=${f.exists()} size=${f.length() / 1024 / 1024}MB")
-                            }
-                        } catch (_: Exception) {}
-                        val mi = MediaItem.fromUri(fileUri)
-                        runOnUiThread {
-                            mediaController?.setMediaItem(mi)
-                            mediaController?.prepare()
-                            mediaController?.playWhenReady = true
+                        val p = android.net.Uri.parse(fileUri).path
+                        if (p != null) {
+                            val f = java.io.File(p)
+                            diag("local file exists=${f.exists()} size=${f.length() / 1024 / 1024}MB")
                         }
-                    } catch (e: Exception) { }
+                    } catch (_: Exception) {}
                 }
+
+                // ★ PlayerActivity와 동일하게 UI 스레드에서 즉시 setMediaItem
+                try {
+                    val mi = MediaItem.fromUri(fileUri)
+                    mediaController?.setMediaItem(mi)
+                    mediaController?.prepare()
+                    mediaController?.playWhenReady = true
+                    mediaController?.setPlaybackSpeed(currentSpeed)
+                    diag("local:download 재생 시작")
+                } catch (e: Exception) {
+                    diag("local:download err: ${e.message}")
+                }
+            } else {
+                diag("local:download fileUri null!")
             }
             return
         }
@@ -556,6 +577,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
 
             addToHistory(videoId, currentTitle, currentChannel, currentThumb)
+            failedIds.remove(videoId)   // ★ 성공 시 블랙리스트 해제
 
             delay(500)
             attachEqualizer()
