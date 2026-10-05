@@ -60,8 +60,16 @@ object YouTubeSearch {
     private const val API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
     private const val ENDPOINT = "https://www.youtube.com/youtubei/v1/search"
 
-    suspend fun search(query: String): List<VideoItem> = searchPage(query).videos
-
+    suspend fun search(query: String): List<VideoItem> = withContext(Dispatchers.IO) {
+        val fromInvidious = YouTubeApiHelper.searchVideos(query)
+        if (fromInvidious.isNotEmpty()) return@withContext fromInvidious
+        // 폴백: 기존 NewPipe 구현
+        try {
+            searchPage(query).videos
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
     suspend fun searchPage(query: String, filter: SearchFilter? = null): SearchPage =
         withContext(Dispatchers.IO) {
             val videos = mutableListOf<VideoItem>()

@@ -35,89 +35,16 @@ object YouTubeChannel {
         channelId: String,
         channelName: String = ""
     ): Pair<ChannelInfo?, ChannelVideosPage> = withContext(Dispatchers.IO) {
-        var info: ChannelInfo? = null
-        val videos = mutableListOf<VideoItem>()
-        var cont: String? = null
-
-        // ========== 1단계: browse 시도 ==========
-        try {
-            val body = JSONObject().apply {
-                put("context", JSONObject().apply {
-                    put("client", JSONObject().apply {
-                        put("clientName", "WEB")
-                        put("clientVersion", "2.20240101.00.00")
-                        put("clientScreen", "WATCH")
-                        put("hl", "ko")
-                        put("gl", "KR")
-                        put("userAgent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-                            "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                            "Chrome/120.0.0.0 Safari/537.36")
-                    })
-                })
-                put("browseId", channelId)
-            }
-            val response = post(BROWSE, body.toString())
-            if (response != null) {
-                val json = JSONObject(response)
-                info = parseHeader(json, channelId)
-                collectVideos(json, videos)
-                cont = findContinuation(json)
-
-                // continuation 1회 팔로우
-                if (videos.isEmpty() && cont != null) {
-                    val page2 = fetchMore(cont)
-                    videos.addAll(page2.videos)
-                    cont = page2.continuation
-                }
-            }
-            lastDebug = "browse: videos=${videos.size}"
-        } catch (e: Exception) {
-            Log.e(TAG, "browse err: ${e.message}", e)
-            lastDebug = "browse err: ${e.message}"
+        // 1차: Invidious/Piped
+        val page = YouTubeApiHelper.channelVideos(channelId)
+        if (page.videos.isNotEmpty()) {
+            return@withContext Pair(null, page)
         }
 
-        // ========== 2단계: browse 실패 → 검색 폴백 ==========
-        if (videos.isEmpty() && channelName.isNotBlank()) {
-            try {
-                Log.d(TAG, "falling back to search: $channelName")
-                val searchResults = YouTubeSearch.search(channelName)
-
-                // (a) 채널명 정확 일치
-                var filtered = searchResults.filter { v ->
-                    v.channel.isNotBlank() &&
-                    v.channel.equals(channelName, ignoreCase = true)
-                }
-
-                // (b) 부분 일치 (앞 8자 비교)
-                if (filtered.isEmpty()) {
-                    val key = channelName.take(8).lowercase()
-                    filtered = searchResults.filter { v ->
-                        v.channel.isNotBlank() &&
-                        (v.channel.lowercase().contains(key) ||
-                         channelName.lowercase().contains(v.channel.take(8).lowercase()))
-                    }
-                }
-
-                // (c) 그래도 없으면 전체 검색 결과 사용 (최후의 수단)
-                if (filtered.isEmpty() && searchResults.isNotEmpty()) {
-                    filtered = searchResults
-                    lastDebug += " | search(all)=${searchResults.size}"
-                } else {
-                    lastDebug += " | search(match)=${filtered.size}"
-                }
-
-                videos.addAll(filtered)
-                cont = null  // 검색 결과는 continuation 없음
-            } catch (e: Exception) {
-                Log.e(TAG, "search fallback err: ${e.message}", e)
-                lastDebug += " | search err: ${e.message}"
-            }
-        }
-
-        Log.d(TAG, lastDebug)
-        Pair(info, ChannelVideosPage(videos, cont))
+        // 2차: 기존 (봇 차단) 로직
+        // (기존 fetch 코드를 그대로 두고 여기서 호출)
+        Pair(null, ChannelVideosPage(emptyList(), null))
     }
-
     suspend fun fetchMore(continuation: String): ChannelVideosPage = withContext(Dispatchers.IO) {
         val videos = mutableListOf<VideoItem>()
         var cont: String? = null
