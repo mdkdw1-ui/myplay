@@ -577,7 +577,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             } finally {
                 extractInProgress = false
             }
-            diag("extract($videoId)")
+            diag("extractAudioOnly($videoId)")
             diag("  aBest=${result.audioUrlBest?.take(60)}")
             diag("  audio=${result.audioUrl?.take(60)}")
             diag("  muxed=${result.muxedUrl?.take(60)}")
