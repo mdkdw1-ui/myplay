@@ -59,6 +59,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var reuseStreamUrl: String = ""
     private var bufferingStartMs: Long = 0L
     private var bufferingWatchJob: kotlinx.coroutines.Job? = null
+    private var extractInProgress: Boolean = false
+    private var lastMediaSetMs: Long = 0L
     private var idleRepeatCount: Int = 0
     private var lastIdleMs: Long = 0L
     private var lastSkipMs: Long = 0L
@@ -511,7 +513,12 @@ class AudioPlayerActivity : AppCompatActivity() {
                 }
             }
 
-            val result = YouTubeStream.extract(videoId)
+            extractInProgress = true
+            val result = try {
+                YouTubeStream.extract(videoId)
+            } finally {
+                extractInProgress = false
+            }
             diag("extract($videoId)")
             diag("  aBest=${result.audioUrlBest?.take(60)}")
             diag("  audio=${result.audioUrl?.take(60)}")
@@ -590,6 +597,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 ?.putString("current_subtitle_url", currentSubtitleUrl)
                 ?.apply()
 
+            lastMediaSetMs = System.currentTimeMillis()
             runOnUiThread {
                 mediaController?.setMediaItem(mediaItem)
                 mediaController?.prepare()
@@ -683,6 +691,17 @@ class AudioPlayerActivity : AppCompatActivity() {
                         idleRepeatCount = 0
                     }
                     Player.STATE_IDLE -> {
+                        // ★ extract 진행 중이면 IDLE 무시
+                        if (extractInProgress) {
+                            diag("IDLE (extract 진행 중, 무시)")
+                            return
+                        }
+                        // ★ setMediaItem 후 3초간 안정화 대기 (IDLE 무시)
+                        val sinceSet = System.currentTimeMillis() - lastMediaSetMs
+                        if (lastMediaSetMs > 0 && sinceSet < 3000) {
+                            diag("IDLE (settle ${sinceSet}ms, 무시)")
+                            return
+                        }
                         val now = System.currentTimeMillis()
                         val gap = if (lastIdleMs > 0) now - lastIdleMs else Long.MAX_VALUE
                         val isPlayingNow = try { mediaController?.isPlaying == true } catch (_: Exception) { false }
@@ -759,6 +778,13 @@ class AudioPlayerActivity : AppCompatActivity() {
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 android.util.Log.e("AudioPlayer",
                     "onPlayerError: ${error.errorCodeName} / ${error.message}", error)
+                // ★ 상세 진단
+                try {
+                    val curItem = mediaController?.currentMediaItem
+                    val curUrl = curItem?.localConfiguration?.uri?.toString() ?: "(null)"
+                    diag("❌ ERR ${error.errorCodeName}: ${error.message?.take(80)}")
+                    diag("   url=${curUrl.take(80)}")
+                } catch (_: Exception) {}
                 // ★ 진단: 화면에 에러 표시
                 runOnUiThread {
                     tvTitle.text = "[ERR ${error.errorCodeName}] $currentTitle"
