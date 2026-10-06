@@ -292,6 +292,19 @@ class AudioPlayerActivity : AppCompatActivity() {
             val savedGain = pref?.getInt("loudness_gain_mb", 0) ?: 0
             LoudnessManager.attach(session, savedGain)
         }
+        // ★★ 오디오 모드 재확인: 비디오 트랙 무조건 비활성화
+        try {
+            val mc = mediaController
+            if (mc != null) {
+                mc.trackSelectionParameters = mc.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                    .build()
+                diag("video 트랙 비활성화 재적용")
+            }
+        } catch (e: Exception) {
+            diag("track 재적용 err: ${e.message}")
+        }
     }
 
     private fun updateUI() {
@@ -536,8 +549,11 @@ class AudioPlayerActivity : AppCompatActivity() {
                                 .buildUpon()
                                 .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
                                 .build()
+                            diag("video 트랙 비활성화 완료 (reuse)")
                         }
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) {
+                        diag("track disable reuse err: ${e.message}")
+                    }
                     mediaController?.playWhenReady = true
                 }
                 addToHistory(videoId, currentTitle, currentChannel, currentThumb)
@@ -1260,6 +1276,17 @@ class AudioPlayerActivity : AppCompatActivity() {
         // LiveSubtitleActivity에서 돌아오면 상태 재확인
         audioLiveActive = false
         updateAudioLiveSubButton()
+        // ★ 오디오 모드 복귀 시 비디오 트랙 강제 비활성화
+        try {
+            val mc = mediaController
+            if (mc != null) {
+                mc.trackSelectionParameters = mc.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                    .build()
+                diag("onResume: video 트랙 비활성화")
+            }
+        } catch (_: Exception) {}
     }
 
 
