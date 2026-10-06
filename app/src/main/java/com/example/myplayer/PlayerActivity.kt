@@ -1191,6 +1191,17 @@ class PlayerActivity : AppCompatActivity() {
         currentStreamUrl = url
         mediaController?.setMediaItem(MediaItem.fromUri(url))
         mediaController?.prepare()
+        // ★ 비디오 트랙 재활성화
+        try {
+            val mc = mediaController
+            if (mc != null) {
+                mc.trackSelectionParameters = mc.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+                    .build()
+                android.util.Log.d("PlayerActivity", "video 트랙 재활성화 완료")
+            }
+        } catch (_: Exception) {}
         mediaController?.playWhenReady = true
         mediaController?.setPlaybackSpeed(currentSpeed)
         (findViewById<TextView>(R.id.tvDescription)).text = "(URL 직접 재생)"
@@ -1369,6 +1380,19 @@ class PlayerActivity : AppCompatActivity() {
         } else {
             mc?.setMediaItem(builder.build(), startPosMs)
             mc?.prepare()
+            // ★ 비디오 트랙 재활성화 (오디오 모드에서 비활성화된 것 복원)
+            try {
+                val controller = mc
+                if (controller != null) {
+                    controller.trackSelectionParameters = controller.trackSelectionParameters
+                        .buildUpon()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+                        .build()
+                    android.util.Log.d("PlayerActivity", "video 트랙 재활성화 완료")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PlayerActivity", "video 트랙 활성화 실패", e)
+            }
             mc?.playWhenReady = true
         }
         mc?.setPlaybackSpeed(currentSpeed)
