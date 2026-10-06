@@ -16,6 +16,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -496,6 +497,16 @@ class AudioPlayerActivity : AppCompatActivity() {
                 runOnUiThread {
                     mediaController?.setMediaItem(mediaItem)
                     mediaController?.prepare()
+                    // ★ 오디오 모드: 비디오 트랙 비활성화
+                    try {
+                        val mc = mediaController
+                        if (mc != null) {
+                            mc.trackSelectionParameters = mc.trackSelectionParameters
+                                .buildUpon()
+                                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                                .build()
+                        }
+                    } catch (_: Exception) {}
                     mediaController?.playWhenReady = true
                 }
                 addToHistory(videoId, currentTitle, currentChannel, currentThumb)
@@ -601,6 +612,19 @@ class AudioPlayerActivity : AppCompatActivity() {
             runOnUiThread {
                 mediaController?.setMediaItem(mediaItem)
                 mediaController?.prepare()
+                // ★ 오디오 모드: 비디오 트랙 비활성화 (디코더 에러 방지)
+                try {
+                    val mc = mediaController
+                    if (mc != null) {
+                        mc.trackSelectionParameters = mc.trackSelectionParameters
+                            .buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                            .build()
+                        diag("video 트랙 비활성화 완료")
+                    }
+                } catch (e: Exception) {
+                    diag("track disable err: ${e.message}")
+                }
                 mediaController?.playWhenReady = true
                 updateUI()
             }
