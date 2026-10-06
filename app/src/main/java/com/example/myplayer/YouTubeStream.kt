@@ -25,6 +25,32 @@ object YouTubeStream {
 
     private const val TAG = "YouTubeStream"
 
+    // ★ 스트림 URL 캐시 (5분 TTL)
+    private data class CachedStream(
+        val result: StreamResult,
+        val timestamp: Long
+    )
+    private val streamCache = mutableMapOf<String, CachedStream>()
+    private const val CACHE_TTL_MS = 5 * 60 * 1000L  // 5분
+
+    private fun getCached(videoId: String): StreamResult? {
+        val cached = streamCache[videoId] ?: return null
+        if (System.currentTimeMillis() - cached.timestamp > CACHE_TTL_MS) {
+            streamCache.remove(videoId)
+            return null
+        }
+        return cached.result
+    }
+
+    private fun putCache(videoId: String, result: StreamResult) {
+        streamCache[videoId] = CachedStream(result, System.currentTimeMillis())
+        // 캐시 크기 제한 (최대 30개)
+        if (streamCache.size > 30) {
+            val oldest = streamCache.minByOrNull { it.value.timestamp }
+            oldest?.let { streamCache.remove(it.key) }
+        }
+    }
+
     data class StreamResult(
         val videoUrl: String?,
         val audioUrl: String?,
@@ -43,6 +69,12 @@ object YouTubeStream {
     }
 
     suspend fun extract(videoId: String): StreamResult = withContext(Dispatchers.IO) {
+        // ★ 캐시 확인 (5분 내 재생 이력)
+        getCached(videoId)?.let {
+            android.util.Log.d(TAG, "cache hit: $videoId")
+            return@withContext it
+        }
+
         val sb = StringBuilder()
 
         // ★ 1차: Invidious/Piped 직접
@@ -59,7 +91,7 @@ object YouTubeStream {
 
             if (hasVideo) {
                 // video 있음 → 즉시 반환
-                return@withContext StreamResult(
+                val __result = StreamResult(
                     videoUrl = direct.videoUrl,
                     audioUrl = direct.audioUrl,
                     muxedUrl = direct.muxedUrl,
@@ -69,6 +101,8 @@ object YouTubeStream {
                     debug = sb.toString(),
                     audioUrlBest = direct.audioUrl
                 )
+                putCache(videoId, __result)
+                return@withContext __result
             }
 
             // ★ video 없고 audio만 있으면 저장해두고 NewPipe 시도
@@ -165,7 +199,7 @@ object YouTubeStream {
 
             if (muxed != null) {
                 sb.append("→ muxed 반환\n")
-                return@withContext StreamResult(
+                val __result = StreamResult(
                     videoUrl = null,
                     audioUrl = null,
                     muxedUrl = muxed.content,
@@ -174,11 +208,13 @@ object YouTubeStream {
                     subtitles = subs, qualities = qualities,
                     audioUrlBest = bestAudio
                 )
+                putCache(videoId, __result)
+                return@withContext __result
             }
             // ★ muxed 없으면 video-only + audio 조합
             if (videoOnly != null) {
                 sb.append("→ video-only 반환 (오디오 병합 필요)\n")
-                return@withContext StreamResult(
+                val __result = StreamResult(
                     videoUrl = videoOnly.content,
                     audioUrl = bestAudio,
                     muxedUrl = null,
@@ -187,6 +223,8 @@ object YouTubeStream {
                     subtitles = subs, qualities = qualities,
                     audioUrlBest = bestAudio
                 )
+                putCache(videoId, __result)
+                return@withContext __result
             }
             val audio = try {
                 info.audioStreams.filter { it.isUrl }.maxByOrNull { it.averageBitrate }

@@ -35,8 +35,9 @@ object YouTubeApiHelper {
     private suspend fun getRaw(url: String): String? = withContext(Dispatchers.IO) {
         try {
             val conn = URL(url).openConnection() as HttpURLConnection
-            conn.connectTimeout = 6000
-            conn.readTimeout = 10000
+            // ★ 첫 로딩 단축: 3초/5초로 축소
+            conn.connectTimeout = 3000
+            conn.readTimeout = 5000
             conn.setRequestProperty("User-Agent", "Mozilla/5.0")
             conn.setRequestProperty("Accept", "application/json")
             CookieUtil.apply(conn)
@@ -335,8 +336,9 @@ object YouTubeApiHelper {
     )
 
     suspend fun extractStream(videoId: String): StreamUrls = withContext(Dispatchers.IO) {
-        // Invidious
-        for (inst in INVIDIOUS) {
+        // ★ 첫 로딩 단축: Invidious는 1개 서버만 빠르게 시도
+        val quickInvidious = INVIDIOUS.take(1)
+        for (inst in quickInvidious) {
             val obj = getJsonObject("$inst/api/v1/videos/$videoId") ?: continue
             try {
                 if (obj.optBoolean("liveNow", false)) continue
@@ -403,8 +405,9 @@ object YouTubeApiHelper {
             } catch (e: Exception) { }
         }
 
-        // Piped
-        for (inst in PIPED) {
+        // ★ Piped도 1개만
+        val quickPiped = PIPED.take(1)
+        for (inst in quickPiped) {
             val obj = getJsonObject("$inst/streams/$videoId") ?: continue
             try {
                 val title = obj.optString("title", "")
