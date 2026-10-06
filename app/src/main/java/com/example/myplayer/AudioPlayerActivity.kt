@@ -299,7 +299,6 @@ class AudioPlayerActivity : AppCompatActivity() {
                 mc.trackSelectionParameters = mc.trackSelectionParameters
                     .buildUpon()
                     .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
-                    .setTrackTypeNotSupported(C.TRACK_TYPE_VIDEO, true)
                     .build()
                 diag("video 트랙 비활성화 재적용")
             }
@@ -549,7 +548,6 @@ class AudioPlayerActivity : AppCompatActivity() {
                             mc.trackSelectionParameters = mc.trackSelectionParameters
                                 .buildUpon()
                                 .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
-                                .setTrackTypeNotSupported(C.TRACK_TYPE_VIDEO, true)
                                 .build()
                             diag("video 트랙 비활성화 완료 (reuse)")
                         }
@@ -668,7 +666,6 @@ class AudioPlayerActivity : AppCompatActivity() {
                         mc.trackSelectionParameters = mc.trackSelectionParameters
                             .buildUpon()
                             .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
-                            .setTrackTypeNotSupported(C.TRACK_TYPE_VIDEO, true)
                             .build()
                         diag("video 트랙 비활성화 완료")
                     }
@@ -1286,7 +1283,6 @@ class AudioPlayerActivity : AppCompatActivity() {
                 mc.trackSelectionParameters = mc.trackSelectionParameters
                     .buildUpon()
                     .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
-                    .setTrackTypeNotSupported(C.TRACK_TYPE_VIDEO, true)
                     .build()
                 diag("onResume: video 트랙 비활성화")
             }
