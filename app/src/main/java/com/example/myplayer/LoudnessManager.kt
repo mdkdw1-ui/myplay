@@ -41,7 +41,7 @@ object LoudnessManager {
     }
 
     fun getTargetGain(): Int = try {
-        enhancer?.targetGain ?: 0
+        enhancer?.targetGain?.toInt() ?: 0
     } catch (e: Exception) { 0 }
 
     fun isEnabled(): Boolean = try {
