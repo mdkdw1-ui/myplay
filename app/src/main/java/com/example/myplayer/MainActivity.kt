@@ -228,6 +228,50 @@ class MainActivity : AppCompatActivity() {
 
         // ★ 구독 알림 스케줄
         scheduleSubscriptionWorker()
+
+        // ★ #13: 이전 세션 복원 (마지막 오디오 재생)
+        tryRestoreLastAudioSession()
+    }
+
+    // ★ #13: 이전 오디오 세션 복원 다이얼로그
+    private fun tryRestoreLastAudioSession() {
+        try {
+            val pref = getSharedPreferences("audio_prefs", MODE_PRIVATE)
+            val lastId = pref.getString("current_video_id", null)
+            val lastTitle = pref.getString("current_title", null)
+            val lastChannel = pref.getString("current_channel", null)
+            val lastThumb = pref.getString("current_thumbnail", null)
+            val lastPosition = pref.getLong("current_position_ms", 0L)
+
+            if (lastId.isNullOrBlank() || lastId.startsWith("local:")) return
+
+            val titleShort = lastTitle?.take(40) ?: lastId
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("🎵 이어서 재생?")
+                .setMessage("마지막 재생: $titleShort\n" +
+                        "채널: ${lastChannel ?: ""}\n" +
+                        "위치: ${formatTimeForRestore(lastPosition)}")
+                .setPositiveButton("이어 재생") { _, _ ->
+                    startActivity(android.content.Intent(this, AudioPlayerActivity::class.java).apply {
+                        putExtra("VIDEO_ID", lastId)
+                        putExtra("VIDEO_TITLE", lastTitle ?: "")
+                        putExtra("VIDEO_CHANNEL", lastChannel ?: "")
+                        putExtra("VIDEO_THUMB", lastThumb ?: "")
+                        putExtra("FROM_PLAYLIST", false)
+                    })
+                }
+                .setNegativeButton("닫기", null)
+                .show()
+        } catch (_: Exception) {}
+    }
+
+    private fun formatTimeForRestore(ms: Long): String {
+        if (ms <= 0) return "처음부터"
+        val s = ms / 1000
+        val h = s / 3600
+        val m = (s % 3600) / 60
+        val sec = s % 60
+        return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
     }
 
     override fun onResume() {

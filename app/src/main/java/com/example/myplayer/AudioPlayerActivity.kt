@@ -100,6 +100,32 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         pref = getSharedPreferences("audio_prefs", MODE_PRIVATE)
 
+        // ★ #4: 오디오 모드 화면 꺼짐 방지 자동 ON
+        try {
+            val keepOn = pref?.getBoolean("keep_screen_on_audio", true) ?: true
+            if (keepOn) {
+                window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        } catch (_: Exception) {}
+
+        // ★ #1: 자동 다음 곡 기본 ON
+        try {
+            pref?.edit()?.putBoolean("auto_next", true)?.apply()
+        } catch (_: Exception) {}
+
+        // ★ #4: 오디오 모드 진입 시 화면 꺼짐 방지 ON (기본값)
+        try {
+            val keepOn = pref?.getBoolean("keep_screen_on_audio", true) ?: true
+            if (keepOn) {
+                window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        } catch (_: Exception) {}
+
+        // ★ #1: 자동 다음 곡 기본 ON (오디오 모드)
+        try {
+            pref?.edit()?.putBoolean("auto_next", true)?.apply()
+        } catch (_: Exception) {}
+
         ivArt = findViewById(R.id.ivArt)
         ivBackground = findViewById(R.id.ivBackground)
         tvTitle = findViewById(R.id.tvTitle)
@@ -260,7 +286,12 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     private fun attachEqualizer() {
         val session = PlaybackService.exoPlayer?.audioSessionId ?: 0
-        if (session != 0) EqualizerManager.attach(session)
+        if (session != 0) {
+            EqualizerManager.attach(session)
+            // ★ #5: 음량 부스트도 함께 attach (저장된 값 복원)
+            val savedGain = pref?.getInt("loudness_gain_mb", 0) ?: 0
+            LoudnessManager.attach(session, savedGain)
+        }
     }
 
     private fun updateUI() {
@@ -1174,6 +1205,51 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
 
+    // ========== 🔊 음량 부스트 (#5) ==========
+    private fun showLoudnessDialog() {
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            val p = (24 * resources.displayMetrics.density).toInt()
+            setPadding(p, p, p, p)
+        }
+
+        val label = android.widget.TextView(this).apply {
+            text = "음량 부스트: ${LoudnessManager.getTargetGain() / 100}dB"
+            textSize = 14f
+            setTextColor(0xFFF5F5F7.toInt())
+        }
+        container.addView(label)
+
+        val seek = android.widget.SeekBar(this).apply {
+            max = 1500
+            progress = LoudnessManager.getTargetGain()
+        }
+        seek.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: android.widget.SeekBar?, p: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                LoudnessManager.setTargetGain(p)
+                label.text = "음량 부스트: ${p / 100}dB"
+            }
+            override fun onStartTrackingTouch(s: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(s: android.widget.SeekBar?) {
+                pref?.edit()?.putInt("loudness_gain_mb", s?.progress ?: 0)?.apply()
+            }
+        })
+        container.addView(seek)
+
+        android.app.AlertDialog.Builder(this)
+            .setTitle("🔊 음량 부스트 (0 ~ +15dB)")
+            .setView(container)
+            .setPositiveButton("저장") { _, _ ->
+                pref?.edit()?.putInt("loudness_gain_mb", seek.progress)?.apply()
+            }
+            .setNeutralButton("초기화") { _, _ ->
+                LoudnessManager.setTargetGain(0)
+                pref?.edit()?.putInt("loudness_gain_mb", 0)?.apply()
+            }
+            .show()
+    }
+
     // ========== 🎙 실시간 자막 (오디오 모드) ==========
     private fun toggleAudioLiveSubtitle() {
         startActivity(Intent(this, LiveSubtitleActivity::class.java))
@@ -1221,6 +1297,17 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     /** 음악 아닌 영상(말 많은 것) 필터 */
     private fun isMusicLike(title: String): Boolean {
+        // ★ #2: 화이트리스트 먼저 — 음악 영상이면 무조건 통과
+        val goodKeywords = listOf(
+            "노래모음", "노래 모음", "playlist", "플레이리스트", "재생목록",
+            "1시간", "2시간", "3시간", "한시간", "hours", "hour",
+            "가사", "lyrics", "ost", "bpm", "music", "음악",
+            "노래", "song", "album", "앨범", "커버", "cover",
+            "명품", "소울", "발라드", "kpop", "k-pop", "cafe", "카페",
+            "bgm", "study", "공부", "릴렉스", "relax", "chill"
+        )
+        if (goodKeywords.any { title.contains(it, ignoreCase = true) }) return true
+
         val badKeywords = listOf(
             "뉴스", "속보", "인터뷰", "강연", "토크", "팟캐스트", "podcast",
             "ep.", "회차", "라이브", "생방송", "예능", "드라마", "시사",
@@ -1252,6 +1339,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 .setItems(arrayOf(
                     "💡 화면 켜짐 유지 (토글)",
                     "🎛 이퀄라이저",
+                    "🔊 음량 부스트",
                     "👎 싫어요 (다음부터 제외)",
                     "📺 영상 모드로 전환",
                     "🎚 재생 속도"
@@ -1259,8 +1347,9 @@ class AudioPlayerActivity : AppCompatActivity() {
                     when (which) {
                         0 -> toggleKeepScreenOn()
                         1 -> showEqDialog()
-                        2 -> dislikeCurrent()
-                        3 -> {
+                        2 -> showLoudnessDialog()
+                        3 -> dislikeCurrent()
+                        4 -> {
                             if (currentVideoId.startsWith("local:") || currentVideoId.isBlank()) {
                                 Toast.makeText(this, "로컬 파일은 영상 모드가 없습니다", Toast.LENGTH_SHORT).show()
                             } else {
@@ -1276,7 +1365,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                                 finish()
                             }
                         }
-                        4 -> showSpeedDialog()
+                        5 -> showSpeedDialog()
                     }
                 }
                 .show()
@@ -1413,6 +1502,8 @@ class AudioPlayerActivity : AppCompatActivity() {
         stopAnimation()
         updateJob?.cancel()
         bgScope.cancel()
+        // ★ #5: 음량 부스트 해제
+        try { LoudnessManager.release() } catch (_: Exception) {}
 
         // ★ 재생 중이면 MediaController release 안 함 (백그라운드 재생 유지)
         try {
