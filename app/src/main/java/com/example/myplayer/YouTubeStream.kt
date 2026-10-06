@@ -68,6 +68,33 @@ object YouTubeStream {
             get() = muxedUrl != null || videoUrl != null || audioUrl != null
     }
 
+    /** ★ 오디오 모드 전용: muxed 대신 audio-only 스트림 우선 */
+    suspend fun extractAudioOnly(videoId: String): StreamResult = withContext(Dispatchers.IO) {
+        // 캐시 확인
+        getCached(videoId)?.let {
+            android.util.Log.d(TAG, "audio-only cache hit: $videoId")
+            return@withContext it
+        }
+
+        val full = extract(videoId)
+        // audio가 있으면 audio-only로 재구성
+        val audioUrl = full.audioUrlBest ?: full.audioUrl
+        if (audioUrl != null) {
+            val audioOnly = full.copy(
+                muxedUrl = null,
+                videoUrl = null,
+                audioUrl = audioUrl,
+                audioUrlBest = audioUrl
+            )
+            putCache(videoId, audioOnly)
+            android.util.Log.d(TAG, "audio-only 반환: $videoId")
+            return@withContext audioOnly
+        }
+        // 오디오 없으면 muxed라도 반환 (폴백)
+        android.util.Log.d(TAG, "audio-only 없음, muxed 폴백: $videoId")
+        full
+    }
+
     suspend fun extract(videoId: String): StreamResult = withContext(Dispatchers.IO) {
         // ★ 캐시 확인 (5분 내 재생 이력)
         getCached(videoId)?.let {
