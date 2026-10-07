@@ -940,9 +940,19 @@ class AudioPlayerActivity : AppCompatActivity() {
 
             // ★ 3-소스 병렬 (radio / artist / search 동시 실행)
             val artistName = currentArtist.ifBlank { currentChannel }
-            val keyword = currentTitle.split(" ")
-                .filter { it.isNotBlank() && it.length >= 2 }
-                .take(4).joinToString(" ")
+            // ★ 검색 키워드: 아티스트 우선, 뉴스/야구 등 제외
+            val badKw = listOf("뉴스", "야구", "경기", "역전", "쓰리런", "불펜",
+                               "특집", "광고", "라이브", "생방송", "중국", "일본",
+                               "예능", "드라마", "시사", "정치", "속보", "사건",
+                               "사고", "화재", "날씨", "주가", "부동산")
+            val keyword = if (artistName.isNotBlank() && artistName.length >= 2) {
+                artistName
+            } else {
+                currentTitle.split(" ")
+                    .filter { it.isNotBlank() && it.length >= 2 }
+                    .filter { w -> badKw.none { w.contains(it, true) } }
+                    .take(3).joinToString(" ")
+            }
 
             val radioDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
                 try {
@@ -1002,13 +1012,27 @@ class AudioPlayerActivity : AppCompatActivity() {
                 try {
                     val history = HistoryDatabase.get(applicationContext)
                         .historyDao().getAllOnce()
-                    val candidates = history
+                    val baseFilter = history
                         .filter { it.videoId != currentVideoId }
                         .filter { it.videoId !in failedIds }
                         .filter { it.videoId !in disliked }
-                    if (candidates.isNotEmpty()) {
-                        val pick = candidates.random()
-                        diag("playNext: 이력 폴백 → ${pick.videoId}")
+
+                    // ★ 1순위: 같은 아티스트/채널
+                    val sameArtist = baseFilter.filter {
+                        (currentArtist.isNotBlank() && it.channel.contains(currentArtist, true)) ||
+                        (currentChannel.isNotBlank() && it.channel == currentChannel)
+                    }.sortedByDescending { it.watchedAt }
+
+                    // ★ 2순위: 한글 제목
+                    val korean = baseFilter.filter { it.title.any { c -> c in '가'..'힣' } }
+                        .sortedByDescending { it.watchedAt }
+
+                    val pick = sameArtist.firstOrNull()
+                        ?: korean.firstOrNull()
+                        ?: baseFilter.sortedByDescending { it.watchedAt }.firstOrNull()
+
+                    if (pick != null) {
+                        diag("playNext: 이력 폴백 → ${pick.videoId} (${pick.title.take(30)})")
                         currentVideoId = pick.videoId
                         currentTitle = pick.title
                         currentChannel = pick.channel
@@ -1261,7 +1285,11 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
         } catch (_: Exception) { true }
 
-        if (!screenOn) {
+        val bgEnabled = pref?.getBoolean("keep_bg_playback", true) ?: true
+        if (!bgEnabled) {
+            diag("onStop: 백그라운드 재생 OFF → pause")
+            try { mediaController?.pause() } catch (_: Exception) {}
+        } else if (!screenOn) {
             diag("onStop: 화면 꺼짐 → 오디오 재생 유지")
             try { acquireWakeLock() } catch (_: Exception) {}
         } else {
@@ -1341,6 +1369,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             AlertDialog.Builder(this)
                 .setItems(arrayOf(
                     "💡 화면 켜짐 유지 (토글)",
+                    "🔋 백그라운드 재생 유지 (토글)",
                     "🎛 이퀄라이저",
                     "🔊 음량 부스트",
                     "👎 싫어요 (다음부터 제외)",
@@ -1349,10 +1378,11 @@ class AudioPlayerActivity : AppCompatActivity() {
                 )) { _, which ->
                     when (which) {
                         0 -> toggleKeepScreenOn()
-                        1 -> showEqDialog()
-                        2 -> showLoudnessDialog()
-                        3 -> dislikeCurrent()
-                        4 -> {
+                        1 -> toggleBackgroundPlayback()
+                        2 -> showEqDialog()
+                        3 -> showLoudnessDialog()
+                        4 -> dislikeCurrent()
+                        5 -> {
                             if (currentVideoId.startsWith("local:") || currentVideoId.isBlank()) {
                                 Toast.makeText(this, "로컬 파일은 영상 모드가 없습니다", Toast.LENGTH_SHORT).show()
                             } else {
@@ -1368,7 +1398,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                                 finish()
                             }
                         }
-                        5 -> showSpeedDialog()
+                        6 -> showSpeedDialog()
                     }
                 }
                 .show()
@@ -1682,9 +1712,11 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         try {
             val isPlaying = mediaController?.isPlaying == true
-            if (!isPlaying) {
+            val bgEnabled = pref?.getBoolean("keep_bg_playback", true) ?: true
+            if (!isPlaying || !bgEnabled) {
                 releaseWakeLock()
                 MediaController.releaseFuture(controllerFuture)
+                diag("onDestroy: MediaController release (bgEnabled=$bgEnabled)")
             } else {
                 diag("onDestroy: 재생 중 → MediaController 유지 (백그라운드)")
                 try { acquireWakeLock() } catch (_: Exception) {}
