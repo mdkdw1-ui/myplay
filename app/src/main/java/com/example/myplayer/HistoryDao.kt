@@ -15,6 +15,9 @@ interface HistoryDao {
     @Query("SELECT * FROM watch_history ORDER BY watchedAt DESC")
     fun getAll(): Flow<List<HistoryEntity>>
 
+    @Query("SELECT * FROM watch_history ORDER BY watchedAt DESC")
+    suspend fun getAllOnce(): List<HistoryEntity>
+
     @Query("SELECT * FROM watch_history WHERE videoId = :videoId LIMIT 1")
     suspend fun getById(videoId: String): HistoryEntity?
 
