@@ -113,6 +113,59 @@ class PlaybackService : MediaSessionService() {
         mediaSession = MediaSession.Builder(this, player)
             .setSessionActivity(sessionActivity)
             .build()
+
+        // ★ Foreground Service 승격 (Doze 모드에서도 네트워크 유지)
+        try {
+            val pref = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
+            val bgEnabled = pref.getBoolean("keep_bg_playback", true)
+            if (bgEnabled) {
+                startForegroundInternal()
+            } else {
+                Log.d("PlaybackService", "백그라운드 재생 OFF — Foreground 미승격")
+            }
+        } catch (e: Exception) {
+            Log.e("PlaybackService", "startForeground err", e)
+        }
+    }
+
+    /** 알림 생성 + startForeground */
+    private fun startForegroundInternal() {
+        val channelId = "playback_channel"
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (nm.getNotificationChannel(channelId) == null) {
+                val ch = android.app.NotificationChannel(
+                    channelId, "재생 중", android.app.NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    setShowBadge(false)
+                    enableVibration(false)
+                    enableLights(false)
+                }
+                nm.createNotificationChannel(ch)
+            }
+        }
+
+        val intent = Intent(this, AudioPlayerActivity::class.java)
+        val pi = PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notif = androidx.core.app.NotificationCompat.Builder(this, channelId)
+            .setContentTitle("MyPlayer")
+            .setContentText("백그라운드 재생 중")
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentIntent(pi)
+            .setOngoing(true)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+            .build()
+
+        try {
+            startForeground(1001, notif)
+            Log.d("PlaybackService", "startForeground OK")
+        } catch (e: Exception) {
+            Log.e("PlaybackService", "startForeground failed: ${e.message}", e)
+        }
     }
 
     /**
@@ -349,6 +402,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        try { stopForeground(true) } catch (_: Exception) {}
         mediaSession?.run {
             player.removeListener(endListener)
             player.release()
