@@ -772,10 +772,19 @@ class AudioPlayerActivity : AppCompatActivity() {
             runOnUiThread {
                 // ★ ExoPlayer 큐 완전히 비우기 (transition 잔재 방지)
                 try {
-                    mediaController?.stop()
-                    mediaController?.clearMediaItems()
-                } catch (_: Exception) {}
-                mediaController?.setMediaItem(mediaItem)
+                    val mc = mediaController
+                    if (mc != null) {
+                        // setMediaItem 전에 반드시 clear
+                        mc.stop()
+                        mc.clearMediaItems()
+                        // 확실히 반영되도록 잠깐 대기 X (동기라 OK)
+                        diag("ExoPlayer 큐 비움 (itemCount=${mc.mediaItemCount})")
+                    }
+                } catch (e: Exception) {
+                    diag("clear err: ${e.message}")
+                }
+                // ★ setMediaItems(단일)로 큐 확실히 리셋
+                mediaController?.setMediaItems(listOf(mediaItem), 0, 0L)
                 mediaController?.prepare()
                 try {
                     val mc = mediaController
@@ -784,7 +793,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                             .buildUpon()
                             .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
                             .build()
-                        diag("video 트랙 비활성화 완료")
+                        diag("video 트랙 비활성화 완료 (itemCount=${mc.mediaItemCount})")
                     }
                 } catch (e: Exception) {
                     diag("track disable err: ${e.message}")
@@ -1016,24 +1025,38 @@ class AudioPlayerActivity : AppCompatActivity() {
         val queue = QueueManager.get(this)
         val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
         if (curIdx >= 0 && curIdx < queue.size - 1) {
-            val nextFromQueue = queue[curIdx + 1]
-            diag("playNext: 큐 다음 곡 → ${nextFromQueue.videoId} (${nextFromQueue.title.take(30)})")
-            currentVideoId = nextFromQueue.videoId
-            currentTitle = nextFromQueue.title
-            currentChannel = nextFromQueue.channel
-            currentThumb = nextFromQueue.thumbnail
-            QueueManager.setCurrent(this, nextFromQueue.videoId)
-            runOnUiThread { updateUI() }
-            loadAudio(nextFromQueue.videoId, isInitial = false)
-            return
+            // ★ 실패/재생중 곡 건너뛰기
+            var nextIdx = curIdx + 1
+            while (nextIdx < queue.size && queue[nextIdx].videoId in failedIds) {
+                nextIdx++
+            }
+            if (nextIdx >= queue.size) {
+                diag("playNext: 큐 다음 곡 없음 (모두 실패)")
+                // 폴백으로 진행 (아래 코드)
+            } else {
+                val nextFromQueue = queue[nextIdx]
+                diag("playNext: 큐 다음 곡 → ${nextFromQueue.videoId} (${nextFromQueue.title.take(30)})")
+                currentVideoId = nextFromQueue.videoId
+                currentTitle = nextFromQueue.title
+                currentChannel = nextFromQueue.channel
+                currentThumb = nextFromQueue.thumbnail
+                QueueManager.setCurrent(this, nextFromQueue.videoId)
+                runOnUiThread { updateUI() }
+                loadAudio(nextFromQueue.videoId, isInitial = false)
+                return
+            }
         }
 
-        // prefetch 캐시 우선 (큐 끝났을 때) — 현재 곡 제외
+        // prefetch 캐시 우선 (큐 끝났을 때) — 현재 곡 제외 + 오래된 캐시 제거
+        val now = System.currentTimeMillis()
+        // 3분 이상 된 캐시 제거
+        prefetchedStreams.entries.removeAll { now - it.value.timestamp > 180_000 }
+
         val prefetchEntry = prefetchedStreams.entries.firstOrNull { it.key != currentVideoId }
         if (prefetchEntry != null) {
             val (prefetchId, _) = prefetchEntry
             diag("playNext: prefetch 캐시 히트 → $prefetchId")
-            // ★ 사용한 캐시 즉시 제거
+            // ★ 사용한 캐시 즉시 제거 (다음에 재사용 방지)
             prefetchedStreams.remove(prefetchId)
             bgScope.launch {
                 val related = try {
