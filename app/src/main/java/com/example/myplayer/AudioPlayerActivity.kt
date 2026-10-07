@@ -1069,24 +1069,72 @@ class AudioPlayerActivity : AppCompatActivity() {
 
             var related = emptyList<VideoItem>()
 
-            // ★ 1차: 유튜브 radio (타임아웃 5초)
+            // ★ 3-소스 병렬 검색 (radio / artist / search)
+            //    - 각각 개별 타임아웃 (radio=10s, artist=8s, search=8s)
+            //    - 먼저 성공한 것부터 순서대로 채택
             try {
-                related = try {
-                    kotlinx.coroutines.withTimeoutOrNull(5000) {
-                        if (sameArtistMode) {
+                val radioDeferred = bgScope.async(Dispatchers.IO) {
+                    try {
+                        kotlinx.coroutines.withTimeoutOrNull(10_000) {
+                            if (sameArtistMode) {
+                                val artist = currentArtist.ifBlank { currentChannel }
+                                YouTubeArtist.fetchSongs(artist, currentVideoId)
+                                    .filter { it.videoId !in disliked }
+                                    .filter { it.videoId != currentVideoId }
+                            } else {
+                                YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                                    .filter { it.videoId !in disliked }
+                                    .filter { it.videoId != currentVideoId }
+                                    .filter { isMusicLike(it.title) }
+                            }
+                        } ?: emptyList()
+                    } catch (e: Exception) { emptyList() }
+                }
+
+                val artistDeferred = bgScope.async(Dispatchers.IO) {
+                    try {
+                        kotlinx.coroutines.withTimeoutOrNull(8_000) {
                             val artist = currentArtist.ifBlank { currentChannel }
-                            YouTubeArtist.fetchSongs(artist, currentVideoId)
+                            if (artist.isBlank()) emptyList()
+                            else YouTubeArtist.fetchSongs(artist, currentVideoId)
                                 .filter { it.videoId !in disliked }
-                        } else {
-                            YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                                .filter { it.videoId != currentVideoId }
+                        } ?: emptyList()
+                    } catch (e: Exception) { emptyList() }
+                }
+
+                val searchDeferred = bgScope.async(Dispatchers.IO) {
+                    try {
+                        kotlinx.coroutines.withTimeoutOrNull(8_000) {
+                            val kw = currentTitle.split(" ")
+                                .filter { it.isNotBlank() && it.length >= 2 }
+                                .take(4).joinToString(" ")
+                            if (kw.isBlank()) emptyList()
+                            else YouTubeSearch.search(kw)
                                 .filter { it.videoId !in disliked }
-                                .filter { isMusicLike(it.title) }
-                        }
-                    } ?: emptyList()
-                } catch (e: Exception) { emptyList() }
-                diag("playNext radio: ${related.size} 개")
+                                .filter { it.videoId != currentVideoId }
+                        } ?: emptyList()
+                    } catch (e: Exception) { emptyList() }
+                }
+
+                // radio 먼저 대기 (최대 10초), 비어있으면 artist, 그다음 search
+                val radioResult = radioDeferred.await()
+                diag("playNext radio: ${radioResult.size} 개")
+                if (radioResult.isNotEmpty()) {
+                    related = radioResult
+                } else {
+                    val artistResult = artistDeferred.await()
+                    diag("playNext artist: ${artistResult.size} 개")
+                    if (artistResult.isNotEmpty()) {
+                        related = artistResult
+                    } else {
+                        val searchResult = searchDeferred.await()
+                        diag("playNext search: ${searchResult.size} 개")
+                        related = searchResult
+                    }
+                }
             } catch (e: Exception) {
-                diag("playNext radio err: ${e.message}")
+                diag("playNext 병렬 err: ${e.message}")
             }
 
             // ★ 2차: 같은 아티스트 검색
@@ -1122,6 +1170,30 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
 
             if (related.isEmpty()) {
+                diag("playNext: 유튜브 소스 실패 → 이력 폴백 시도")
+                // ★ 최후 폴백: 재생 이력에서 랜덤 (현재 곡 제외, 실패 목록 제외)
+                try {
+                    val history = HistoryDatabase.get(applicationContext)
+                        .historyDao().getAll().kotlinx.coroutines.flow.first()
+                    val candidates = history
+                        .filter { it.videoId != currentVideoId }
+                        .filter { it.videoId !in failedIds }
+                        .filter { it.videoId !in disliked }
+                    if (candidates.isNotEmpty()) {
+                        val pick = candidates.random()
+                        diag("playNext: 이력 폴백 → ${pick.videoId} (${pick.title.take(30)})")
+                        currentVideoId = pick.videoId
+                        currentTitle = pick.title
+                        currentChannel = pick.channel
+                        currentThumb = pick.thumbnail
+                        runOnUiThread { updateUI() }
+                        loadAudio(pick.videoId, isInitial = false)
+                        return@launch
+                    }
+                } catch (e: Exception) {
+                    diag("playNext 이력 폴백 err: ${e.message}")
+                }
+
                 loadingNext = false
                 playNextFailCount++  // ★ 실패 카운트 증가
                 lastPlayNextFailMs = System.currentTimeMillis()
@@ -1616,11 +1688,16 @@ class AudioPlayerActivity : AppCompatActivity() {
         try { LoudnessManager.release() } catch (_: Exception) {}
 
         // ★ 재생 중이면 MediaController release 안 함 (백그라운드 재생 유지)
+        //    - MediaSessionService가 계속 살아있어 다음 곡 자동 재생
         try {
             val isPlaying = mediaController?.isPlaying == true
             if (!isPlaying) {
                 releaseWakeLock()
                 MediaController.releaseFuture(controllerFuture)
+            } else {
+                diag("onDestroy: 재생 중 → MediaController 유지 (백그라운드)")
+                // WakeLock 유지 (만료 대비 재획득)
+                try { acquireWakeLock() } catch (_: Exception) {}
             }
         } catch (e: Exception) {
             try { MediaController.releaseFuture(controllerFuture) } catch (_: Exception) {}
