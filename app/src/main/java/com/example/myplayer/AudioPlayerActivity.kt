@@ -337,9 +337,20 @@ class AudioPlayerActivity : AppCompatActivity() {
                 if (queue.isNotEmpty()) return@launch
 
                 diag("prefetch: 다음 곡 미리 검색")
-                val related = YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
-                    .filter { it.videoId != currentVideoId }
-                    .filter { it.videoId !in failedIds }
+                // ★ artist 먼저 (radio보다 빠름)
+                val artistName = currentArtist.ifBlank { currentChannel }
+                val related = if (artistName.isNotBlank()) {
+                    val artistSongs = try {
+                        kotlinx.coroutines.withTimeoutOrNull(4_000) {
+                            YouTubeArtist.fetchSongs(artistName, currentVideoId)
+                        } ?: emptyList()
+                    } catch (_: Exception) { emptyList() }
+                    if (artistSongs.isNotEmpty()) artistSongs
+                    else YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                } else {
+                    YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                }.filter { it.videoId != currentVideoId }
+                 .filter { it.videoId !in failedIds }
                 val next = related.firstOrNull() ?: return@launch
 
                 val result = kotlinx.coroutines.withTimeoutOrNull(15_000) {
@@ -919,6 +930,14 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
 
+        // ★ 최근 2초 내 이미 처리했으면 skip (transition 중복 방지)
+        val sinceLast = System.currentTimeMillis() - lastMediaSetMs
+        if (lastMediaSetMs > 0 && sinceLast < 2000) {
+            diag("playNext skip: transition 직후 ($sinceLast ms)")
+            loadingNext = false
+            return
+        }
+
         // prefetch 캐시 우선
         if (prefetchedStreams.isNotEmpty()) {
             val (prefetchId, _) = prefetchedStreams.entries.first()
@@ -997,7 +1016,7 @@ class AudioPlayerActivity : AppCompatActivity() {
 
             val radioDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
                 try {
-                    kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                    kotlinx.coroutines.withTimeoutOrNull(3_000) {
                         if (sameArtistMode) {
                             YouTubeArtist.fetchSongs(artistName, currentVideoId)
                         } else {
