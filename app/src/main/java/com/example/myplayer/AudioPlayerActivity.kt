@@ -932,10 +932,10 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
 
-        // ★ 현재 곡이 실패 목록에 있고, 큐도 비었으면 이전 곡 재생 금지
-        val queue = QueueManager.get(this)
-        if (queue.isEmpty() && currentVideoId in failedIds) {
-            diag("playNext: 현재 곡이 실패 목록에 있음, 이전 곡 재생 금지")
+        // ★ 현재 곡이 실패 목록에 있으면 이전 곡 재생 금지
+        val currentFailed = currentVideoId in failedIds
+        if (currentFailed) {
+            diag("playNext: 현재 곡이 실패 목록에 있음")
         }
 
         // ★ ExoPlayer 큐에 다음 곡 남아있으면 처리하지 않음 (ExoPlayer가 자동 진행)

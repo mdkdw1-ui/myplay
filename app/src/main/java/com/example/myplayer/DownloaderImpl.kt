@@ -11,24 +11,24 @@ import java.net.URL
 class DownloaderImpl : Downloader() {
 
     override fun execute(request: Request): Response {
-        // ★ DNS 실패/타임아웃 재시도
+        // ★ DNS 실패/타임아웃 재시도 (5회로 강화, exponential backoff)
         var lastErr: Exception? = null
-        for (attempt in 0 until 3) {
+        for (attempt in 0 until 5) {
             try {
                 return executeOnce(request)
             } catch (e: java.net.UnknownHostException) {
                 lastErr = e
                 android.util.Log.w("DownloaderImpl",
-                    "DNS 실패 (${attempt + 1}/3): ${e.message}")
-                if (attempt < 2) {
-                    try { Thread.sleep(500L * (attempt + 1)) } catch (_: Exception) {}
+                    "DNS 실패 (${attempt + 1}/5): ${e.message}")
+                if (attempt < 4) {
+                    try { Thread.sleep(500L * (1L shl attempt)) } catch (_: Exception) {}
                 }
             } catch (e: java.net.SocketTimeoutException) {
                 lastErr = e
                 android.util.Log.w("DownloaderImpl",
-                    "타임아웃 (${attempt + 1}/3): ${e.message}")
-                if (attempt < 2) {
-                    try { Thread.sleep(800L * (attempt + 1)) } catch (_: Exception) {}
+                    "타임아웃 (${attempt + 1}/5): ${e.message}")
+                if (attempt < 4) {
+                    try { Thread.sleep(800L * (1L shl attempt)) } catch (_: Exception) {}
                 }
             }
         }

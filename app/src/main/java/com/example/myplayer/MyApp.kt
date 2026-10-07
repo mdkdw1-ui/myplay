@@ -13,9 +13,8 @@ class MyApp : Application() {
         try {
             System.setProperty("java.net.preferIPv4Stack", "true")
             System.setProperty("java.net.preferIPv6Addresses", "false")
-            // ★ DNS 서버 명시 (youtubei DNS 실패 우회)
-            System.setProperty("sun.net.spi.nameservice.nameservers", "8.8.8.8,1.1.1.1")
-            System.setProperty("sun.net.spi.nameservice.provider.1", "dns,sun")
+            // ★ Android는 sun.net.spi.nameservice 지원 안 함
+            //   → 시스템 DNS 리졸버 사용 (제거)
         } catch (_: Exception) {}
 
         // ★ visitorData 미리 획득
