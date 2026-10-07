@@ -531,6 +531,24 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
+        // ★ YouTube 라이브/뉴스 필터 (로컬 제외)
+        if (!videoId.startsWith("local:")) {
+            val lower = currentTitle.lowercase()
+            val badTitle = listOf("라이브", "생방송", "live", "뉴스", "속보", "방송",
+                                  "개표", "선거", "중계").any { lower.contains(it) }
+                || Regex("\\btv\\b").containsMatchIn(lower)
+            if (badTitle) {
+                diag("loadAudio skip (라이브/뉴스): ${currentTitle.take(40)}")
+                runOnUiThread {
+                    Toast.makeText(this@AudioPlayerActivity,
+                        "라이브/뉴스 제외 → 다음 곡", Toast.LENGTH_SHORT).show()
+                }
+                loadingNext = false
+                bgScope.launch { delay(300); trySkipToNextInQueue(videoId) }
+                return
+            }
+        }
+
         if (videoId.startsWith("local:download:")) {
             val fileUri = intent.getStringExtra("FILE_URI")
             diag("loadAudio local:download fileUri=$fileUri")
