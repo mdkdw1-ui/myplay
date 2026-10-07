@@ -158,17 +158,12 @@ object YouTubeStream {
             val url = "https://www.youtube.com/watch?v=$videoId"
             var info: StreamInfo? = null
             var lastErr: Exception? = null
-            for (attempt in 0 until 3) {
-                try {
-                    info = StreamInfo.getInfo(ServiceList.YouTube, url)
-                    if (info != null) break
-                } catch (e: Exception) {
-                    lastErr = e
-                    sb.append("newpipe try ${attempt + 1} FAIL: ${e.message?.take(60)}\n")
-                    if (attempt < 2) {
-                        try { Thread.sleep(800L * (attempt + 1)) } catch (_: Exception) {}
-                    }
-                }
+            // ★ 첫 로딩 속도: 재시도 1회만
+            try {
+                info = StreamInfo.getInfo(ServiceList.YouTube, url)
+            } catch (e: Exception) {
+                lastErr = e
+                sb.append("newpipe try FAIL: ${e.message?.take(60)}\n")
             }
 
             if (info == null) {
