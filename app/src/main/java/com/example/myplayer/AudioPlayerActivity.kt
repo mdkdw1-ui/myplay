@@ -333,25 +333,48 @@ class AudioPlayerActivity : AppCompatActivity() {
         prefetchJob = bgScope.launch {
             try {
                 diag("prefetch: 즉시 시작")
-                val queue = QueueManager.get(this@AudioPlayerActivity)
-                if (queue.isNotEmpty()) return@launch
 
-                diag("prefetch: 다음 곡 미리 검색")
-                // ★ artist 먼저 (radio보다 빠름)
-                val artistName = currentArtist.ifBlank { currentChannel }
-                val related = if (artistName.isNotBlank()) {
-                    val artistSongs = try {
-                        kotlinx.coroutines.withTimeoutOrNull(4_000) {
-                            YouTubeArtist.fetchSongs(artistName, currentVideoId)
-                        } ?: emptyList()
-                    } catch (_: Exception) { emptyList() }
-                    if (artistSongs.isNotEmpty()) artistSongs
-                    else YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                // ★ 1순위: 큐의 다음 곡
+                val queue = QueueManager.get(this@AudioPlayerActivity)
+                val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+                val queueNext: HomeVideo? = if (curIdx >= 0 && curIdx < queue.size - 1) {
+                    queue[curIdx + 1]
+                } else null
+
+                val next: HomeVideo? = if (queueNext != null) {
+                    diag("prefetch: 큐 다음 곡 → ${queueNext.videoId} (${queueNext.title.take(30)})")
+                    queueNext
                 } else {
-                    YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
-                }.filter { it.videoId != currentVideoId }
-                 .filter { it.videoId !in failedIds }
-                val next = related.firstOrNull() ?: return@launch
+                    // ★ 2순위: 유튜브 radio/artist
+                    diag("prefetch: 큐 끝 → 유튜브 검색")
+                    val artistName = currentArtist.ifBlank { currentChannel }
+                    val related = if (artistName.isNotBlank()) {
+                        val artistSongs = try {
+                            kotlinx.coroutines.withTimeoutOrNull(4_000) {
+                                YouTubeArtist.fetchSongs(artistName, currentVideoId)
+                            } ?: emptyList()
+                        } catch (_: Exception) { emptyList() }
+                        if (artistSongs.isNotEmpty()) artistSongs
+                        else YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                    } else {
+                        YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                    }.filter { it.videoId != currentVideoId }
+                     .filter { it.videoId !in failedIds }
+                    related.firstOrNull()?.let {
+                        HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
+                    }
+                }
+
+                if (next == null) {
+                    diag("prefetch: 다음 곡 없음")
+                    return@launch
+                }
+
+                // 이미 prefetch된 곡이면 skip
+                if (prefetchedStreams.containsKey(next.videoId)) {
+                    diag("prefetch: 이미 캐시됨 → skip")
+                    return@launch
+                }
 
                 val result = kotlinx.coroutines.withTimeoutOrNull(15_000) {
                     YouTubeStream.extractAudioOnly(next.videoId)
@@ -938,7 +961,23 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
 
-        // prefetch 캐시 우선
+        // ★★ 큐 우선 확인 (플레이리스트 순서 유지)
+        val queue = QueueManager.get(this)
+        val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+        if (curIdx >= 0 && curIdx < queue.size - 1) {
+            val nextFromQueue = queue[curIdx + 1]
+            diag("playNext: 큐 다음 곡 → ${nextFromQueue.videoId} (${nextFromQueue.title.take(30)})")
+            currentVideoId = nextFromQueue.videoId
+            currentTitle = nextFromQueue.title
+            currentChannel = nextFromQueue.channel
+            currentThumb = nextFromQueue.thumbnail
+            QueueManager.setCurrent(this, nextFromQueue.videoId)
+            runOnUiThread { updateUI() }
+            loadAudio(nextFromQueue.videoId, isInitial = false)
+            return
+        }
+
+        // prefetch 캐시 우선 (큐 끝났을 때)
         if (prefetchedStreams.isNotEmpty()) {
             val (prefetchId, _) = prefetchedStreams.entries.first()
             diag("playNext: prefetch 캐시 히트 → $prefetchId")
@@ -1336,13 +1375,22 @@ class AudioPlayerActivity : AppCompatActivity() {
         abJob?.cancel()
         cancelAutoNext()
         val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        // ★ 화면 꺼짐 다중 체크 (AOD/제조사 대응)
         val screenOn = try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT_WATCH) {
+            @Suppress("DEPRECATION")
+            val interactive = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT_WATCH) {
                 pm.isInteractive
             } else {
-                @Suppress("DEPRECATION")
                 pm.isScreenOn
             }
+            val isScreenOn = try { pm.isScreenOn } catch (_: Exception) { interactive }
+            val isInteractive = try { pm.isInteractive } catch (_: Exception) { interactive }
+            val displayOff = try {
+                val dm = getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+                dm.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.state != android.view.Display.STATE_ON
+            } catch (_: Exception) { false }
+            diag("onStop screen check: interactive=$isInteractive, isScreenOn=$isScreenOn, displayOff=$displayOff")
+            isInteractive && isScreenOn && !displayOff
         } catch (_: Exception) { true }
 
         val bgEnabled = pref?.getBoolean("keep_bg_playback", true) ?: true
