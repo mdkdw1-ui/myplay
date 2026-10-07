@@ -345,22 +345,36 @@ class AudioPlayerActivity : AppCompatActivity() {
                     diag("prefetch: 큐 다음 곡 → ${queueNext.videoId} (${queueNext.title.take(30)})")
                     queueNext
                 } else {
-                    // ★ 2순위: 유튜브 radio/artist
-                    diag("prefetch: 큐 끝 → 유튜브 검색")
+                    // ★ 2순위: radio + artist 병렬 (다양성 확보)
+                    diag("prefetch: 큐 끝 → 유튜브 병렬 검색")
                     val artistName = currentArtist.ifBlank { currentChannel }
-                    val related = if (artistName.isNotBlank()) {
-                        val artistSongs = try {
-                            kotlinx.coroutines.withTimeoutOrNull(4_000) {
-                                YouTubeArtist.fetchSongs(artistName, currentVideoId)
+
+                    val radioDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
+                        try {
+                            kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                                YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
                             } ?: emptyList()
                         } catch (_: Exception) { emptyList() }
-                        if (artistSongs.isNotEmpty()) artistSongs
-                        else YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
-                    } else {
-                        YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
-                    }.filter { it.videoId != currentVideoId }
-                     .filter { it.videoId !in failedIds }
-                    related.firstOrNull()?.let {
+                    }
+                    val artistDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
+                        try {
+                            kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                                if (artistName.isNotBlank())
+                                    YouTubeArtist.fetchSongs(artistName, currentVideoId)
+                                else emptyList<VideoItem>()
+                            } ?: emptyList()
+                        } catch (_: Exception) { emptyList() }
+                    }
+
+                    val radioList = radioDeferred.await().filter { it.videoId != currentVideoId && it.videoId !in failedIds }
+                    val artistList = artistDeferred.await().filter { it.videoId != currentVideoId && it.videoId !in failedIds }
+
+                    // ★ radio + artist 섞기 (radio 우선, artist 보충)
+                    val combined = (radioList + artistList)
+                        .distinctBy { it.videoId }
+                        .filter { it.videoId !in failedIds }
+
+                    combined.firstOrNull()?.let {
                         HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
                     }
                 }
@@ -902,6 +916,9 @@ class AudioPlayerActivity : AppCompatActivity() {
                 val newId = mediaItem?.mediaId ?: return
                 if (newId == currentVideoId) return
                 diag("transition to $newId reason=$reason")
+                // ★ ExoPlayer 자동 진행 시 lastMediaSetMs 갱신 → playNext 중복 방지
+                lastMediaSetMs = System.currentTimeMillis()
+                loadingNext = false
                 currentVideoId = newId
                 currentTitle = mediaItem.mediaMetadata.title?.toString() ?: currentTitle
                 currentChannel = mediaItem.mediaMetadata.artist?.toString() ?: currentChannel
