@@ -50,6 +50,21 @@ class AudioPlayerActivity : AppCompatActivity() {
     private val bgScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var wakeLock: PowerManager.WakeLock? = null
 
+    private var liveSubtitleActive = false
+    private var mediaProjection: android.media.projection.MediaProjection? = null
+    private var liveCaptureManager: AudioCaptureManager? = null
+    private var liveGroqManager: GroqSttManager? = null
+    private val liveBuilder = StringBuilder()
+    private var lastLiveText = ""
+    private var sbCheckJob: kotlinx.coroutines.Job? = null
+    private var previewJob: kotlinx.coroutines.Job? = null
+    private var abJob: kotlinx.coroutines.Job? = null
+    private var abStart: Long = -1L
+    private var abEnd: Long = -1L
+    private var previewShown = false
+    private var sponsorSegments: List<SkipSegment> = emptyList()
+    private var sbEnabled: Boolean = true
+    private var sbCategories: List<String> = SponsorBlock.DEFAULT_CATEGORIES
     private var currentVideoId: String = ""
     private var currentTitle: String = ""
     private var currentChannel: String = ""
