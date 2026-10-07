@@ -165,15 +165,51 @@ class PlaybackService : MediaSessionService() {
             val sameArtist = prefs.getBoolean("same_artist_mode", false)
             val disliked = prefs.getStringSet("disliked_ids", emptySet()) ?: emptySet()
 
-            val related = if (sameArtist && currentArtist.isNotBlank()) {
-                YouTubeArtist.fetchSongs(currentArtist, currentVideoId)
-            } else {
-                YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
-            }
+            // ★ 3-소스 병렬 + 이력 폴백
+            val related = try {
+                kotlinx.coroutines.withTimeoutOrNull(12_000) {
+                    if (sameArtist && currentArtist.isNotBlank()) {
+                        YouTubeArtist.fetchSongs(currentArtist, currentVideoId)
+                    } else {
+                        YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                    }
+                } ?: emptyList()
+            } catch (e: Exception) { emptyList() }
 
-            return related.firstOrNull {
+            val found = related.firstOrNull {
                 it.videoId != currentVideoId && it.videoId !in disliked
             }
+            if (found != null) return found
+
+            // ★ artist 폴백
+            if (currentArtist.isNotBlank()) {
+                val artistSongs = try {
+                    kotlinx.coroutines.withTimeoutOrNull(8_000) {
+                        YouTubeArtist.fetchSongs(currentArtist, currentVideoId)
+                    } ?: emptyList()
+                } catch (e: Exception) { emptyList() }
+                artistSongs.firstOrNull {
+                    it.videoId != currentVideoId && it.videoId !in disliked
+                }?.let { return it }
+            }
+
+            // ★ 이력 폴백 (마지막 수단)
+            try {
+                val history = HistoryDatabase.get(this@PlaybackService)
+                    .historyDao().getAll().kotlinx.coroutines.flow.first()
+                val candidates = history
+                    .filter { it.videoId != currentVideoId }
+                    .filter { it.videoId !in disliked }
+                if (candidates.isNotEmpty()) {
+                    val pick = candidates.random()
+                    Log.d("PlaybackService", "history fallback: ${pick.videoId}")
+                    return VideoItem(pick.videoId, pick.title, pick.channel, pick.thumbnail)
+                }
+            } catch (e: Exception) {
+                Log.e("PlaybackService", "history fallback err", e)
+            }
+
+            return null
         } catch (e: Exception) {
             Log.e("PlaybackService", "resolveNext err", e)
             return null
