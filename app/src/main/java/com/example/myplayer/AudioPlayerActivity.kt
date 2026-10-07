@@ -990,6 +990,33 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
 
+        // ★ prefetch된 곡이 있으면 최우선 재생 (네트워크 요청 없이 즉시)
+        if (prefetchedStreams.isNotEmpty()) {
+            val (prefetchId, _) = prefetchedStreams.entries.first()
+            diag("playNext: prefetch 캐시 히트 → $prefetchId")
+            // prefetch는 이미 스트림 추출 완료. 곡 제목/채널은 나중에 채워도 됨.
+            try {
+                // prefetch된 videoId로 검색해서 제목/채널 가져오기 (실패해도 진행)
+                bgScope.launch {
+                    val related = try {
+                        kotlinx.coroutines.withTimeoutOrNull(3_000) {
+                            YouTubeSearch.search(prefetchId)
+                        } ?: emptyList()
+                    } catch (_: Exception) { emptyList() }
+                    val meta = related.firstOrNull { it.videoId == prefetchId }
+                    currentVideoId = prefetchId
+                    currentTitle = meta?.title ?: "다음 곡"
+                    currentChannel = meta?.channel ?: ""
+                    currentThumb = meta?.thumbnail ?: ""
+                    runOnUiThread { updateUI() }
+                    loadAudio(prefetchId, isInitial = false)
+                }
+                return
+            } catch (e: Exception) {
+                diag("prefetch 재생 err: ${e.message}")
+            }
+        }
+
         if (!isPlayingFromHistory && historyIndex >= 0 && historyIndex < audioHistory.size - 1) {
             historyIndex++
             val next = audioHistory[historyIndex]
@@ -1433,17 +1460,9 @@ class AudioPlayerActivity : AppCompatActivity() {
         // LiveSubtitleActivity에서 돌아오면 상태 재확인
         audioLiveActive = false
         updateAudioLiveSubButton()
-        // ★ 오디오 모드 복귀 시 비디오 트랙 강제 비활성화
-        try {
-            val mc = mediaController
-            if (mc != null) {
-                mc.trackSelectionParameters = mc.trackSelectionParameters
-                    .buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
-                    .build()
-                diag("onResume: video 트랙 비활성화")
-            }
-        } catch (_: Exception) {}
+        // ★ 오디오 모드 복귀: 재생 중단 방지를 위해 video 트랙 disable 안 함
+        //   (muxed 스트림 재생 시 문제 발생)
+        diag("onResume: 재생 상태 유지 (video 트랙 건드리지 않음)")
     }
 
 
@@ -1678,6 +1697,40 @@ class AudioPlayerActivity : AppCompatActivity() {
         val s = sec % 60
         return if (h > 0) String.format("%d:%02d:%02d", h, m, s)
         else String.format("%d:%02d", m, s)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (liveSubtitleActive) stopLiveSubtitle()
+        sbCheckJob?.cancel()
+        previewJob?.cancel()
+        abJob?.cancel()
+        savePosition()
+        cancelAutoNext()
+        // ★ 화면 꺼짐/백그라운드에서도 오디오 모드는 재생 유지
+        val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val screenOn = try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT_WATCH) {
+                pm.isInteractive
+            } else {
+                @Suppress("DEPRECATION")
+                pm.isScreenOn
+            }
+        } catch (_: Exception) { true }
+
+        if (!screenOn) {
+            // ★ 화면 꺼짐 → 무조건 재생 유지 + WakeLock 재획득
+            diag("onStop: 화면 꺼짐 → 오디오 재생 유지")
+            try { acquireWakeLock() } catch (_: Exception) {}
+        } else {
+            val keepAudio = pref?.getBoolean("keep_screen_on_audio", true) ?: true
+            if (!isInPictureInPictureMode && !keepAudio) {
+                mediaController?.pause()
+            } else {
+                diag("onStop: 오디오 모드 → 재생 유지")
+                try { acquireWakeLock() } catch (_: Exception) {}
+            }
+        }
     }
 
     override fun onDestroy() {
