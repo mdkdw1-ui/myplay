@@ -1069,22 +1069,22 @@ class AudioPlayerActivity : AppCompatActivity() {
 
             var related = emptyList<VideoItem>()
 
-            // ★ 1차: 유튜브 radio (타임아웃 3초)
+            // ★ 1차: 유튜브 radio (타임아웃 5초)
             try {
-                val radioJob = kotlinx.coroutines.async(Dispatchers.IO) {
-                    if (sameArtistMode) {
-                        val artist = currentArtist.ifBlank { currentChannel }
-                        YouTubeArtist.fetchSongs(artist, currentVideoId).filter { it.videoId !in disliked }
-                    } else {
-                        YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
-                            .filter { it.videoId !in disliked }
-                            .filter { isMusicLike(it.title) }
-                    }
-                }
                 related = try {
-                    kotlinx.coroutines.withTimeoutOrNull(5000) { radioJob.await() } ?: emptyList()
+                    kotlinx.coroutines.withTimeoutOrNull(5000) {
+                        if (sameArtistMode) {
+                            val artist = currentArtist.ifBlank { currentChannel }
+                            YouTubeArtist.fetchSongs(artist, currentVideoId)
+                                .filter { it.videoId !in disliked }
+                        } else {
+                            YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                                .filter { it.videoId !in disliked }
+                                .filter { isMusicLike(it.title) }
+                        }
+                    } ?: emptyList()
                 } catch (e: Exception) { emptyList() }
-                diag("playNext radio: ${related.size}개")
+                diag("playNext radio: ${related.size} 개")
             } catch (e: Exception) {
                 diag("playNext radio err: ${e.message}")
             }
