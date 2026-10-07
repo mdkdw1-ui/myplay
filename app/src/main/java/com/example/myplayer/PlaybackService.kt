@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 class PlaybackService : MediaSessionService() {
@@ -196,7 +197,7 @@ class PlaybackService : MediaSessionService() {
             // ★ 이력 폴백 (마지막 수단)
             try {
                 val history = HistoryDatabase.get(this@PlaybackService)
-                    .historyDao().getAll().kotlinx.coroutines.flow.first()
+                    .historyDao().getAll().first()
                 val candidates = history
                     .filter { it.videoId != currentVideoId }
                     .filter { it.videoId !in disliked }
