@@ -62,6 +62,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var bufferingWatchJob: kotlinx.coroutines.Job? = null
     private var extractInProgress: Boolean = false
     private var playNextFailCount: Int = 0
+    private var prefetchJob: kotlinx.coroutines.Job? = null
+    private val prefetchedStreams = mutableMapOf<String, YouTubeStream.StreamResult>()
     private var lastPlayNextFailMs: Long = 0L
     private var lastMediaSetMs: Long = 0L
     private var idleRepeatCount: Int = 0
@@ -284,6 +286,35 @@ class AudioPlayerActivity : AppCompatActivity() {
     private fun releaseWakeLock() {
         try { wakeLock?.let { if (it.isHeld) it.release() } } catch (e: Exception) { }
         wakeLock = null
+    }
+
+    /** ★ 다음 곡 미리 로딩 (재생 중 30초 전) */
+    private fun prefetchNext() {
+        prefetchJob?.cancel()
+        prefetchJob = bgScope.launch {
+            try {
+                kotlinx.coroutines.delay(20_000)  // 재생 시작 후 20초 대기
+                // 현재 곡 재생 중이고, 큐가 비었으면 미리 다음 곡 찾기
+                val queue = QueueManager.get(this@AudioPlayerActivity)
+                if (queue.isNotEmpty()) return@launch  // 큐 있으면 skip
+
+                diag("prefetch: 다음 곡 미리 검색")
+                val related = YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                    .filter { it.videoId != currentVideoId }
+                    .filter { it.videoId !in failedIds }
+                val next = related.firstOrNull() ?: return@launch
+
+                // 스트림 미리 extract (5초 이내)
+                val result = kotlinx.coroutines.withTimeoutOrNull(15_000) {
+                    YouTubeStream.extractAudioOnly(next.videoId)
+                } ?: return@launch
+
+                if (result.hasAny) {
+                    prefetchedStreams[next.videoId] = result
+                    diag("prefetch 완료: ${next.videoId} (${next.title.take(30)})")
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     private fun attachEqualizer() {
@@ -563,6 +594,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 reuseSubtitleUrl = ""
                 delay(500)
                 attachEqualizer()
+                prefetchNext()   // ★ 다음 곡 미리 로딩
                 loadingNext = false
                 return@launch
             }
@@ -574,11 +606,19 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
 
             extractInProgress = true
-            val result = try {
-                YouTubeStream.extractAudioOnly(videoId)
-            } finally {
-                extractInProgress = false
+            // ★ prefetch된 스트림 있으면 재사용
+            val prefetched = prefetchedStreams.remove(videoId)
+            val result = if (prefetched != null) {
+                diag("prefetch hit: $videoId")
+                prefetched
+            } else {
+                try {
+                    YouTubeStream.extractAudioOnly(videoId)
+                } finally {
+                    extractInProgress = false
+                }
             }
+            extractInProgress = false
             diag("extractAudioOnly($videoId)")
             diag("  aBest=${result.audioUrlBest?.take(60)}")
             diag("  audio=${result.audioUrl?.take(60)}")
@@ -1029,16 +1069,21 @@ class AudioPlayerActivity : AppCompatActivity() {
 
             var related = emptyList<VideoItem>()
 
-            // ★ 1차: 유튜브 radio
+            // ★ 1차: 유튜브 radio (타임아웃 3초)
             try {
-                related = if (sameArtistMode) {
-                    val artist = currentArtist.ifBlank { currentChannel }
-                    YouTubeArtist.fetchSongs(artist, currentVideoId).filter { it.videoId !in disliked }
-                } else {
-                    YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
-                        .filter { it.videoId !in disliked }
-                        .filter { isMusicLike(it.title) }
+                val radioJob = kotlinx.coroutines.async(Dispatchers.IO) {
+                    if (sameArtistMode) {
+                        val artist = currentArtist.ifBlank { currentChannel }
+                        YouTubeArtist.fetchSongs(artist, currentVideoId).filter { it.videoId !in disliked }
+                    } else {
+                        YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                            .filter { it.videoId !in disliked }
+                            .filter { isMusicLike(it.title) }
+                    }
                 }
+                related = try {
+                    kotlinx.coroutines.withTimeoutOrNull(5000) { radioJob.await() } ?: emptyList()
+                } catch (e: Exception) { emptyList() }
                 diag("playNext radio: ${related.size}개")
             } catch (e: Exception) {
                 diag("playNext radio err: ${e.message}")
