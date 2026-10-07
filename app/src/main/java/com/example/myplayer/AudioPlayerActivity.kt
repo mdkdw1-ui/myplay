@@ -1047,11 +1047,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
         }
 
-        // prefetch 캐시 우선 (큐 끝났을 때) — 현재 곡 제외 + 오래된 캐시 제거
-        val now = System.currentTimeMillis()
-        // 3분 이상 된 캐시 제거
-        prefetchedStreams.entries.removeAll { now - it.value.timestamp > 180_000 }
-
+        // prefetch 캐시 우선 (큐 끝났을 때) — 현재 곡 제외
         val prefetchEntry = prefetchedStreams.entries.firstOrNull { it.key != currentVideoId }
         if (prefetchEntry != null) {
             val (prefetchId, _) = prefetchEntry
