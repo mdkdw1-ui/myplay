@@ -1011,19 +1011,6 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
         isPlayingFromHistory = false
 
-        val queue = QueueManager.get(this)
-        val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
-        if (curIdx >= 0 && curIdx < queue.size - 1) {
-            val next = queue[curIdx + 1]
-            currentVideoId = next.videoId
-            currentTitle = next.title
-            currentChannel = next.channel
-            currentThumb = next.thumbnail
-            runOnUiThread { updateUI() }
-            loadAudio(next.videoId, isInitial = false)
-            return
-        }
-
         if (localOnlyMode) {
             loadingNext = false
             runOnUiThread {
