@@ -35,6 +35,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import java.net.HttpURLConnection
 import java.net.URL
@@ -80,6 +81,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var playNextFailCount: Int = 0
     private var prefetchJob: kotlinx.coroutines.Job? = null
     private val prefetchedStreams = mutableMapOf<String, YouTubeStream.StreamResult>()
+    private var lastRelatedCache: List<VideoItem> = emptyList()
+    private var lastRelatedCacheTime: Long = 0L
     private var lastPlayNextFailMs: Long = 0L
     private var lastMediaSetMs: Long = 0L
     private var idleRepeatCount: Int = 0
@@ -288,7 +291,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         prefetchJob?.cancel()
         prefetchJob = bgScope.launch {
             try {
-                kotlinx.coroutines.delay(20_000)
+                diag("prefetch: 즉시 시작")
                 val queue = QueueManager.get(this@AudioPlayerActivity)
                 if (queue.isNotEmpty()) return@launch
 
@@ -845,6 +848,8 @@ class AudioPlayerActivity : AppCompatActivity() {
                     updateUI()
                     updateLyricsButtonLabel()
                 }
+                // ★ 새 곡 시작 시 prefetch 재예약
+                try { prefetchNext() } catch (_: Exception) {}
             }
         })
     }
@@ -933,57 +938,63 @@ class AudioPlayerActivity : AppCompatActivity() {
 
             var related = emptyList<VideoItem>()
 
-            try {
-                related = kotlinx.coroutines.withTimeoutOrNull(10_000) {
-                    if (sameArtistMode) {
-                        val artist = currentArtist.ifBlank { currentChannel }
-                        YouTubeArtist.fetchSongs(artist, currentVideoId)
-                            .filter { it.videoId !in disliked }
-                            .filter { it.videoId != currentVideoId }
-                    } else {
-                        YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
-                            .filter { it.videoId !in disliked }
-                            .filter { it.videoId != currentVideoId }
-                            .filter { isMusicLike(it.title) }
-                    }
-                } ?: emptyList()
-                diag("playNext radio: ${related.size} 개")
-            } catch (e: Exception) {
-                diag("playNext radio err: ${e.message}")
+            // ★ 3-소스 병렬 (radio / artist / search 동시 실행)
+            val artistName = currentArtist.ifBlank { currentChannel }
+            val keyword = currentTitle.split(" ")
+                .filter { it.isNotBlank() && it.length >= 2 }
+                .take(4).joinToString(" ")
+
+            val radioDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                        if (sameArtistMode) {
+                            YouTubeArtist.fetchSongs(artistName, currentVideoId)
+                        } else {
+                            YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                        }.filter { it.videoId !in disliked }
+                         .filter { it.videoId != currentVideoId }
+                    } ?: emptyList()
+                } catch (e: Exception) { emptyList() }
+            }
+            val artistDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                        if (artistName.isNotBlank())
+                            YouTubeArtist.fetchSongs(artistName, currentVideoId)
+                        else emptyList<VideoItem>()
+                    } ?: emptyList()
+                } catch (e: Exception) { emptyList() }
+            }
+            val searchDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                        if (keyword.isNotBlank())
+                            YouTubeSearch.search(keyword)
+                        else emptyList<VideoItem>()
+                    } ?: emptyList()
+                } catch (e: Exception) { emptyList() }
             }
 
-            if (related.isEmpty()) {
-                try {
-                    val artist = currentArtist.ifBlank { currentChannel }
-                    if (artist.isNotBlank()) {
-                        related = kotlinx.coroutines.withTimeoutOrNull(8_000) {
-                            YouTubeArtist.fetchSongs(artist, currentVideoId)
-                                .filter { it.videoId !in disliked }
-                                .filter { it.videoId != currentVideoId }
-                        } ?: emptyList()
-                        diag("playNext artist: ${related.size} 개")
-                    }
-                } catch (e: Exception) {
-                    diag("playNext artist err: ${e.message}")
+            // ★ 먼저 완료되는 것부터 채택 (순서: radio → artist → search)
+            val radioResult = radioDeferred.await()
+            diag("playNext radio: ${radioResult.size} 개")
+            if (radioResult.isNotEmpty()) {
+                related = radioResult.filter { it.videoId !in disliked }.filter { it.videoId != currentVideoId }
+            } else {
+                val artistResult = artistDeferred.await()
+                diag("playNext artist: ${artistResult.size} 개")
+                if (artistResult.isNotEmpty()) {
+                    related = artistResult.filter { it.videoId !in disliked }.filter { it.videoId != currentVideoId }
+                } else {
+                    val searchResult = searchDeferred.await()
+                    diag("playNext search: ${searchResult.size} 개")
+                    related = searchResult.filter { it.videoId !in disliked }.filter { it.videoId != currentVideoId }
                 }
             }
-
-            if (related.isEmpty()) {
-                try {
-                    val kw = currentTitle.split(" ")
-                        .filter { it.isNotBlank() && it.length >= 2 }
-                        .take(4).joinToString(" ")
-                    if (kw.isNotBlank()) {
-                        related = kotlinx.coroutines.withTimeoutOrNull(8_000) {
-                            YouTubeSearch.search(kw)
-                                .filter { it.videoId !in disliked }
-                                .filter { it.videoId != currentVideoId }
-                        } ?: emptyList()
-                        diag("playNext search '$kw': ${related.size} 개")
-                    }
-                } catch (e: Exception) {
-                    diag("playNext search err: ${e.message}")
-                }
+            // ★ 다음 곡 후보 캐시 (수동 seek 대비)
+            if (related.isNotEmpty()) {
+                lastRelatedCache = related
+                lastRelatedCacheTime = System.currentTimeMillis()
             }
 
             if (related.isEmpty()) {
@@ -1394,6 +1405,12 @@ class AudioPlayerActivity : AppCompatActivity() {
                 isDragging = false
                 val dur = mc.duration
                 if (dur > 0) mc.seekTo((dur * (sb?.progress ?: 0) / 1000))
+                // ★ 끝 90% 이상으로 이동 시 prefetch 즉시 시작
+                val pos = sb?.progress ?: 0
+                if (pos >= 900 && prefetchedStreams.isEmpty()) {
+                    diag("seekbar 90%+ → prefetch 즉시 시작")
+                    try { prefetchNext() } catch (_: Exception) {}
+                }
             }
         })
     }
