@@ -332,6 +332,11 @@ class AudioPlayerActivity : AppCompatActivity() {
         prefetchJob?.cancel()
         prefetchJob = bgScope.launch {
             try {
+                // ★ extract 진행 중이면 prefetch skip (transition 싸움 방지)
+                if (extractInProgress) {
+                    diag("prefetch: extract 진행 중 → skip")
+                    return@launch
+                }
                 diag("prefetch: 즉시 시작")
 
                 // ★ 1순위: 큐의 다음 곡
@@ -694,6 +699,16 @@ class AudioPlayerActivity : AppCompatActivity() {
                 }
             }
 
+            // ★ extract 전에 ExoPlayer 완전히 정지 (transition 방지)
+            runOnUiThread {
+                try {
+                    mediaController?.stop()
+                    mediaController?.clearMediaItems()
+                    diag("extract 전 ExoPlayer 정지")
+                } catch (_: Exception) {}
+            }
+            kotlinx.coroutines.delay(50)
+
             extractInProgress = true
             val prefetched = prefetchedStreams.remove(videoId)
             val result = if (prefetched != null) {
@@ -959,6 +974,16 @@ class AudioPlayerActivity : AppCompatActivity() {
                 val newId = mediaItem?.mediaId ?: return
                 if (newId == currentVideoId) return
                 diag("transition to $newId reason=$reason")
+                // ★ extract 진행 중이면 transition 무시 (새 곡 설정 직전)
+                if (extractInProgress) {
+                    diag("transition 무시 (extract 진행 중)")
+                    return
+                }
+                // ★ loadAudio 진행 중이면 transition 무시
+                if (loadingNext) {
+                    diag("transition 무시 (loadingNext=true)")
+                    return
+                }
                 // ★ ExoPlayer 자동 진행 시 lastMediaSetMs 갱신 → playNext 중복 방지
                 lastMediaSetMs = System.currentTimeMillis()
                 loadingNext = false
