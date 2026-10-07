@@ -35,6 +35,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -1174,7 +1176,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 // ★ 최후 폴백: 재생 이력에서 랜덤 (현재 곡 제외, 실패 목록 제외)
                 try {
                     val history = HistoryDatabase.get(applicationContext)
-                        .historyDao().getAll().kotlinx.coroutines.flow.first()
+                        .historyDao().getAll().first()
                     val candidates = history
                         .filter { it.videoId != currentVideoId }
                         .filter { it.videoId !in failedIds }
