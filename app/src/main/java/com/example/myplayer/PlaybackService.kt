@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
@@ -167,15 +168,39 @@ class PlaybackService : MediaSessionService() {
             val disliked = prefs.getStringSet("disliked_ids", emptySet()) ?: emptySet()
 
             // ★ 3-소스 병렬 + 이력 폴백
-            val related = try {
-                kotlinx.coroutines.withTimeoutOrNull(12_000) {
-                    if (sameArtist && currentArtist.isNotBlank()) {
-                        YouTubeArtist.fetchSongs(currentArtist, currentVideoId)
-                    } else {
-                        YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
-                    }
-                } ?: emptyList()
-            } catch (e: Exception) { emptyList() }
+            val relatedDeferred = serviceScope.async(Dispatchers.IO) {
+                try {
+                    kotlinx.coroutines.withTimeoutOrNull(10_000) {
+                        if (sameArtist && currentArtist.isNotBlank()) {
+                            YouTubeArtist.fetchSongs(currentArtist, currentVideoId)
+                        } else {
+                            YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                        }
+                    } ?: emptyList()
+                } catch (e: Exception) { emptyList() }
+            }
+            val artistDeferred = serviceScope.async(Dispatchers.IO) {
+                try {
+                    kotlinx.coroutines.withTimeoutOrNull(8_000) {
+                        if (currentArtist.isNotBlank())
+                            YouTubeArtist.fetchSongs(currentArtist, currentVideoId)
+                        else if (currentChannel.isNotBlank())
+                            YouTubeArtist.fetchSongs(currentChannel, currentVideoId)
+                        else emptyList()
+                    } ?: emptyList()
+                } catch (e: Exception) { emptyList() }
+            }
+
+            val related = relatedDeferred.await()
+            if (related.isEmpty()) {
+                val alt = artistDeferred.await()
+                if (alt.isNotEmpty()) {
+                    Log.d("PlaybackService", "artist fallback: ${alt.size}")
+                    alt.firstOrNull {
+                        it.videoId != currentVideoId && it.videoId !in disliked
+                    }?.let { return it }
+                }
+            }
 
             val found = related.firstOrNull {
                 it.videoId != currentVideoId && it.videoId !in disliked
