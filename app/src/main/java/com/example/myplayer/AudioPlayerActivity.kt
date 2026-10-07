@@ -35,6 +35,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -933,21 +934,19 @@ class AudioPlayerActivity : AppCompatActivity() {
             var related = emptyList<VideoItem>()
 
             try {
-                related = try {
-                    kotlinx.coroutines.withTimeoutOrNull(10_000) {
-                        if (sameArtistMode) {
-                            val artist = currentArtist.ifBlank { currentChannel }
-                            YouTubeArtist.fetchSongs(artist, currentVideoId)
-                                .filter { it.videoId !in disliked }
-                                .filter { it.videoId != currentVideoId }
-                        } else {
-                            YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
-                                .filter { it.videoId !in disliked }
-                                .filter { it.videoId != currentVideoId }
-                                .filter { isMusicLike(it.title) }
-                        }
-                    } ?: emptyList()
-                } catch (e: Exception) { emptyList() }
+                related = kotlinx.coroutines.withTimeoutOrNull(10_000) {
+                    if (sameArtistMode) {
+                        val artist = currentArtist.ifBlank { currentChannel }
+                        YouTubeArtist.fetchSongs(artist, currentVideoId)
+                            .filter { it.videoId !in disliked }
+                            .filter { it.videoId != currentVideoId }
+                    } else {
+                        YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                            .filter { it.videoId !in disliked }
+                            .filter { it.videoId != currentVideoId }
+                            .filter { isMusicLike(it.title) }
+                    }
+                } ?: emptyList()
                 diag("playNext radio: ${related.size} 개")
             } catch (e: Exception) {
                 diag("playNext radio err: ${e.message}")
@@ -957,13 +956,11 @@ class AudioPlayerActivity : AppCompatActivity() {
                 try {
                     val artist = currentArtist.ifBlank { currentChannel }
                     if (artist.isNotBlank()) {
-                        related = try {
-                            kotlinx.coroutines.withTimeoutOrNull(8_000) {
-                                YouTubeArtist.fetchSongs(artist, currentVideoId)
-                                    .filter { it.videoId !in disliked }
-                                    .filter { it.videoId != currentVideoId }
-                            } ?: emptyList()
-                        } catch (e: Exception) { emptyList() }
+                        related = kotlinx.coroutines.withTimeoutOrNull(8_000) {
+                            YouTubeArtist.fetchSongs(artist, currentVideoId)
+                                .filter { it.videoId !in disliked }
+                                .filter { it.videoId != currentVideoId }
+                        } ?: emptyList()
                         diag("playNext artist: ${related.size} 개")
                     }
                 } catch (e: Exception) {
@@ -977,13 +974,11 @@ class AudioPlayerActivity : AppCompatActivity() {
                         .filter { it.isNotBlank() && it.length >= 2 }
                         .take(4).joinToString(" ")
                     if (kw.isNotBlank()) {
-                        related = try {
-                            kotlinx.coroutines.withTimeoutOrNull(8_000) {
-                                YouTubeSearch.search(kw)
-                                    .filter { it.videoId !in disliked }
-                                    .filter { it.videoId != currentVideoId }
-                            } ?: emptyList()
-                        } catch (e: Exception) { emptyList() }
+                        related = kotlinx.coroutines.withTimeoutOrNull(8_000) {
+                            YouTubeSearch.search(kw)
+                                .filter { it.videoId !in disliked }
+                                .filter { it.videoId != currentVideoId }
+                        } ?: emptyList()
                         diag("playNext search '$kw': ${related.size} 개")
                     }
                 } catch (e: Exception) {
@@ -995,7 +990,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 diag("playNext: 유튜브 소스 실패 → 이력 폴백 시도")
                 try {
                     val history = HistoryDatabase.get(applicationContext)
-                        .historyDao().getAll().first()
+                        .historyDao().getAllOnce()
                     val candidates = history
                         .filter { it.videoId != currentVideoId }
                         .filter { it.videoId !in failedIds }
