@@ -370,9 +370,20 @@ class AudioPlayerActivity : AppCompatActivity() {
                     val artistList = artistDeferred.await().filter { it.videoId != currentVideoId && it.videoId !in failedIds }
 
                     // ★ radio + artist 섞기 (radio 우선, artist 보충)
+                    // ★ 다양성: 같은 아티스트 반복 방지 (최근 5곡 제외)
+                    val recentArtistNames = audioHistory.takeLast(5)
+                        .map { it.channel }
+                        .filter { it.isNotBlank() }
+                        .toSet()
+
                     val combined = (radioList + artistList)
                         .distinctBy { it.videoId }
                         .filter { it.videoId !in failedIds }
+                        .filter { it.videoId != currentVideoId }
+                        // 최근 곡 제외
+                        .filter { v -> audioHistory.none { it.videoId == v.videoId } }
+                        // 같은 아티스트 3연속 방지
+                        .sortedBy { v -> if (v.channel in recentArtistNames) 1 else 0 }
 
                     combined.firstOrNull()?.let {
                         HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
@@ -759,6 +770,11 @@ class AudioPlayerActivity : AppCompatActivity() {
 
             lastMediaSetMs = System.currentTimeMillis()
             runOnUiThread {
+                // ★ ExoPlayer 큐 완전히 비우기 (transition 잔재 방지)
+                try {
+                    mediaController?.stop()
+                    mediaController?.clearMediaItems()
+                } catch (_: Exception) {}
                 mediaController?.setMediaItem(mediaItem)
                 mediaController?.prepare()
                 try {
@@ -988,9 +1004,9 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
 
-        // ★ 최근 2초 내 이미 처리했으면 skip (transition 중복 방지)
+        // ★ 최근 3초 내 이미 처리했으면 skip (transition 중복 방지)
         val sinceLast = System.currentTimeMillis() - lastMediaSetMs
-        if (lastMediaSetMs > 0 && sinceLast < 2000) {
+        if (lastMediaSetMs > 0 && sinceLast < 3000) {
             diag("playNext skip: transition 직후 ($sinceLast ms)")
             loadingNext = false
             return
@@ -1012,10 +1028,13 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
 
-        // prefetch 캐시 우선 (큐 끝났을 때)
-        if (prefetchedStreams.isNotEmpty()) {
-            val (prefetchId, _) = prefetchedStreams.entries.first()
+        // prefetch 캐시 우선 (큐 끝났을 때) — 현재 곡 제외
+        val prefetchEntry = prefetchedStreams.entries.firstOrNull { it.key != currentVideoId }
+        if (prefetchEntry != null) {
+            val (prefetchId, _) = prefetchEntry
             diag("playNext: prefetch 캐시 히트 → $prefetchId")
+            // ★ 사용한 캐시 즉시 제거
+            prefetchedStreams.remove(prefetchId)
             bgScope.launch {
                 val related = try {
                     kotlinx.coroutines.withTimeoutOrNull(3_000) {
