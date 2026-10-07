@@ -209,6 +209,47 @@ class AudioPlayerActivity : AppCompatActivity() {
                 diag("onCreate skip failed: $currentVideoId")
             }
         }, MoreExecutors.directExecutor())
+
+        // ★ 배터리 최적화 제외 요청 (첫 실행 시)
+        try { checkBatteryOptimization() } catch (_: Exception) {}
+    }
+
+    private fun checkBatteryOptimization() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M) return
+
+        val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        if (pm.isIgnoringBatteryOptimizations(packageName)) return
+
+        val asked = pref?.getBoolean("battery_opt_asked", false) ?: false
+        if (asked) return
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("🔋 배터리 최적화 제외")
+            .setMessage(
+                "화면이 꺼져도 음악이 계속 재생되려면\n" +
+                "배터리 최적화에서 이 앱을 제외해야 합니다.\n\n" +
+                "설정으로 이동할까요?"
+            )
+            .setPositiveButton("설정 열기") { _, _ ->
+                pref?.edit()?.putBoolean("battery_opt_asked", true)?.apply()
+                try {
+                    startActivity(Intent(
+                        android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                    ).apply {
+                        data = android.net.Uri.parse("package:$packageName")
+                    })
+                } catch (e: Exception) {
+                    try {
+                        startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                    } catch (_: Exception) {
+                        Toast.makeText(this, "설정을 열 수 없습니다", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("나중에") { _, _ ->
+                pref?.edit()?.putBoolean("battery_opt_asked", true)?.apply()
+            }
+            .show()
     }
 
     private val diagLines = java.util.ArrayDeque<String>()
@@ -1310,6 +1351,42 @@ class AudioPlayerActivity : AppCompatActivity() {
         } catch (e: Exception) { }
     }
 
+    private fun openBatterySettings() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M) {
+            Toast.makeText(this, "Android 6.0 이상 필요", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            if (pm.isIgnoringBatteryOptimizations(packageName)) {
+                Toast.makeText(this, "✅ 이미 배터리 최적화 제외됨", Toast.LENGTH_SHORT).show()
+            } else {
+                startActivity(Intent(
+                    android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                ).apply {
+                    data = android.net.Uri.parse("package:$packageName")
+                })
+            }
+        } catch (e: Exception) {
+            try {
+                startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: Exception) {
+                Toast.makeText(this, "설정을 열 수 없습니다", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun toggleBackgroundPlayback() {
+        val on = pref?.getBoolean("keep_bg_playback", true) ?: true
+        val next = !on
+        pref?.edit()?.putBoolean("keep_bg_playback", next)?.apply()
+        Toast.makeText(
+            this,
+            if (next) "🔋 백그라운드 재생 ON\n(화면 꺼져도 다음 곡 재생)" else "🔋 백그라운드 재생 OFF\n(화면 꺼지면 정지)",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
     private fun toggleKeepScreenOn() {
         val on = (window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0
         if (on) {
@@ -1370,6 +1447,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 .setItems(arrayOf(
                     "💡 화면 켜짐 유지 (토글)",
                     "🔋 백그라운드 재생 유지 (토글)",
+                    "⚙️ 배터리 최적화 설정 열기",
                     "🎛 이퀄라이저",
                     "🔊 음량 부스트",
                     "👎 싫어요 (다음부터 제외)",
@@ -1379,10 +1457,11 @@ class AudioPlayerActivity : AppCompatActivity() {
                     when (which) {
                         0 -> toggleKeepScreenOn()
                         1 -> toggleBackgroundPlayback()
-                        2 -> showEqDialog()
-                        3 -> showLoudnessDialog()
-                        4 -> dislikeCurrent()
-                        5 -> {
+                        2 -> openBatterySettings()
+                        3 -> showEqDialog()
+                        4 -> showLoudnessDialog()
+                        5 -> dislikeCurrent()
+                        6 -> {
                             if (currentVideoId.startsWith("local:") || currentVideoId.isBlank()) {
                                 Toast.makeText(this, "로컬 파일은 영상 모드가 없습니다", Toast.LENGTH_SHORT).show()
                             } else {
@@ -1398,7 +1477,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                                 finish()
                             }
                         }
-                        6 -> showSpeedDialog()
+                        7 -> showSpeedDialog()
                     }
                 }
                 .show()
