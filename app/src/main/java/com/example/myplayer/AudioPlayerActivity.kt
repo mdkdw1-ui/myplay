@@ -61,6 +61,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var bufferingStartMs: Long = 0L
     private var bufferingWatchJob: kotlinx.coroutines.Job? = null
     private var extractInProgress: Boolean = false
+    private var playNextFailCount: Int = 0
+    private var lastPlayNextFailMs: Long = 0L
     private var lastMediaSetMs: Long = 0L
     private var idleRepeatCount: Int = 0
     private var lastIdleMs: Long = 0L
@@ -911,6 +913,31 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun playNextRelatedBg() {
+        // ★ 무한 재진입 방지 (60초 내 3회 실패 시 완전 정지)
+        val now = System.currentTimeMillis()
+        if (now - lastPlayNextFailMs > 60_000) {
+            playNextFailCount = 0
+        }
+        if (playNextFailCount >= 3) {
+            diag("playNext: 60초 내 3회 실패 → 완전 정지")
+            runOnUiThread {
+                try {
+                    mediaController?.stop()
+                    mediaController?.clearMediaItems()
+                } catch (_: Exception) {}
+                Toast.makeText(this@AudioPlayerActivity,
+                    "재생 실패 반복 → 정지. 다시 시도해주세요.",
+                    Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+
+        // ★ 현재 곡이 실패 목록에 있고, 큐도 비었으면 이전 곡 재생 금지
+        val queue = QueueManager.get(this)
+        if (queue.isEmpty() && currentVideoId in failedIds) {
+            diag("playNext: 현재 곡이 실패 목록에 있음, 이전 곡 재생 금지")
+        }
+
         // ★ ExoPlayer 큐에 다음 곡 남아있으면 처리하지 않음 (ExoPlayer가 자동 진행)
         val mc = mediaController
         diag("playNextRelatedBg: mc=${mc != null} next=${mc?.hasNextMediaItem()} " +
@@ -1051,11 +1078,21 @@ class AudioPlayerActivity : AppCompatActivity() {
 
             if (related.isEmpty()) {
                 loadingNext = false
-                diag("playNext: 모든 방법 실패")
+                playNextFailCount++  // ★ 실패 카운트 증가
+                lastPlayNextFailMs = System.currentTimeMillis()
+                diag("playNext: 모든 방법 실패 (failCount=$playNextFailCount) → 명시적 정지")
                 runOnUiThread {
                     Toast.makeText(this@AudioPlayerActivity,
                         "다음 곡 없음 (봇 차단 or 검색 실패)",
                         Toast.LENGTH_LONG).show()
+                    // ★ 미디어 컨트롤러 정지 + 큐 비우기 (이전 곡 재생 방지)
+                    try {
+                        mediaController?.stop()
+                        mediaController?.clearMediaItems()
+                        diag("playNext 실패: mediaController 정지")
+                    } catch (e: Exception) {
+                        diag("정지 실패: ${e.message}")
+                    }
                 }
                 return@launch
             }
@@ -1065,6 +1102,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             currentTitle = next.title
             currentChannel = next.channel
             currentThumb = next.thumbnail
+            playNextFailCount = 0  // ★ 성공 시 리셋
             runOnUiThread { updateUI() }
             loadAudio(next.videoId, isInitial = false)
         }
