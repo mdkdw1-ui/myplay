@@ -204,7 +204,19 @@ class AudioPlayerActivity : AppCompatActivity() {
             startUpdateLoop()
             attachEqualizer()
             if (currentVideoId.isNotEmpty() && currentVideoId !in failedIds) {
-                loadAudio(currentVideoId, isInitial = true)
+                // ★ 이미 ExoPlayer가 이 곡을 재생 중이면 loadAudio skip (ExoPlayer 큐 보존)
+                val mc = mediaController
+                val alreadyPlaying = mc != null &&
+                    mc.currentMediaItem?.mediaId == currentVideoId &&
+                    mc.mediaItemCount > 0 &&
+                    (mc.isPlaying || mc.playWhenReady)
+                if (alreadyPlaying) {
+                    diag("onCreate: 이미 재생 중 → loadAudio skip (큐 보존)")
+                    updateUI()
+                } else {
+                    diag("onCreate: loadAudio 호출")
+                    loadAudio(currentVideoId, isInitial = true)
+                }
             } else {
                 diag("onCreate skip failed: $currentVideoId")
             }
@@ -2003,15 +2015,18 @@ class AudioPlayerActivity : AppCompatActivity() {
         try { LoudnessManager.release() } catch (_: Exception) {}
 
         try {
-            val isPlaying = mediaController?.isPlaying == true
             val bgEnabled = pref?.getBoolean("keep_bg_playback", true) ?: true
-            if (!isPlaying || !bgEnabled) {
+            val isPlaying = mediaController?.isPlaying == true
+            val playWhenReady = mediaController?.playWhenReady == true
+
+            // ★ 백그라운드 재생 ON이면 무조건 release 안 함
+            if (bgEnabled) {
+                diag("onDestroy: 백그라운드 ON → MediaController 유지 (isPlaying=$isPlaying, playWhenReady=$playWhenReady)")
+                try { acquireWakeLock() } catch (_: Exception) {}
+            } else {
                 releaseWakeLock()
                 MediaController.releaseFuture(controllerFuture)
-                diag("onDestroy: MediaController release (bgEnabled=$bgEnabled)")
-            } else {
-                diag("onDestroy: 재생 중 → MediaController 유지 (백그라운드)")
-                try { acquireWakeLock() } catch (_: Exception) {}
+                diag("onDestroy: 백그라운드 OFF → release")
             }
         } catch (e: Exception) {
             try { MediaController.releaseFuture(controllerFuture) } catch (_: Exception) {}
