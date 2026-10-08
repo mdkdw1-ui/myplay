@@ -342,6 +342,8 @@ class AudioPlayerActivity : AppCompatActivity() {
                 // ★ 1순위: 큐의 다음 곡
                 val queue = QueueManager.get(this@AudioPlayerActivity)
                 val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+                diag("prefetch: queue=${queue.size} curIdx=$curIdx current=$currentVideoId")
+                diag("prefetch: queue=${queue.joinToString { it.videoId.take(11) }}")
                 val queueNext: HomeVideo? = if (curIdx >= 0 && curIdx < queue.size - 1) {
                     queue[curIdx + 1]
                 } else null
@@ -547,6 +549,12 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
+        // ★ 큐 위치 동기화 (prefetch/playNext가 정확한 curIdx 계산하도록)
+        try {
+            QueueManager.setCurrent(this, videoId)
+            diag("loadAudio setCurrent: $videoId")
+        } catch (_: Exception) {}
+
         // ★ YouTube 라이브/뉴스 필터 (로컬 제외)
         if (!videoId.startsWith("local:")) {
             val lower = currentTitle.lowercase()
@@ -1072,28 +1080,34 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
         }
 
-        // prefetch 캐시 우선 (큐 끝났을 때) — 현재 곡 제외
-        val prefetchEntry = prefetchedStreams.entries.firstOrNull { it.key != currentVideoId }
-        if (prefetchEntry != null) {
-            val (prefetchId, _) = prefetchEntry
-            diag("playNext: prefetch 캐시 히트 → $prefetchId")
-            // ★ 사용한 캐시 즉시 제거 (다음에 재사용 방지)
-            prefetchedStreams.remove(prefetchId)
-            bgScope.launch {
-                val related = try {
-                    kotlinx.coroutines.withTimeoutOrNull(3_000) {
-                        YouTubeSearch.search(prefetchId)
-                    } ?: emptyList()
-                } catch (_: Exception) { emptyList() }
-                val meta = related.firstOrNull { it.videoId == prefetchId }
-                currentVideoId = prefetchId
-                currentTitle = meta?.title ?: "다음 곡"
-                currentChannel = meta?.channel ?: ""
-                currentThumb = meta?.thumbnail ?: ""
-                runOnUiThread { updateUI() }
-                loadAudio(prefetchId, isInitial = false)
+        // ★★ 큐가 있으면 prefetch 캐시 사용 안 함 (순서 엄수)
+        val queue2 = QueueManager.get(this)
+        val curIdx2 = queue2.indexOfFirst { it.videoId == currentVideoId }
+        val hasNextInQueue = curIdx2 >= 0 && curIdx2 < queue2.size - 1
+
+        if (!hasNextInQueue) {
+            // 큐 끝났을 때만 prefetch 캐시 사용
+            val prefetchEntry = prefetchedStreams.entries.firstOrNull { it.key != currentVideoId }
+            if (prefetchEntry != null) {
+                val (prefetchId, _) = prefetchEntry
+                diag("playNext: prefetch 캐시 히트 → $prefetchId (큐 끝)")
+                prefetchedStreams.remove(prefetchId)
+                bgScope.launch {
+                    val related = try {
+                        kotlinx.coroutines.withTimeoutOrNull(3_000) {
+                            YouTubeSearch.search(prefetchId)
+                        } ?: emptyList()
+                    } catch (_: Exception) { emptyList() }
+                    val meta = related.firstOrNull { it.videoId == prefetchId }
+                    currentVideoId = prefetchId
+                    currentTitle = meta?.title ?: "다음 곡"
+                    currentChannel = meta?.channel ?: ""
+                    currentThumb = meta?.thumbnail ?: ""
+                    runOnUiThread { updateUI() }
+                    loadAudio(prefetchId, isInitial = false)
+                }
+                return
             }
-            return
         }
 
         if (!isPlayingFromHistory && historyIndex >= 0 && historyIndex < audioHistory.size - 1) {
