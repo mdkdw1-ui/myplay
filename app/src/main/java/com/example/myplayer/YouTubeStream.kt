@@ -116,6 +116,23 @@ object YouTubeStream {
             sb.append("v=${direct.videoUrl != null} ")
             sb.append("m=${direct.muxedUrl != null}\n")
 
+            // ★ 오디오 모드: audio만 있으면 즉시 반환 (NewPipe 시도 X)
+            if (direct.audioUrl != null && !hasVideo) {
+                sb.append("→ audio-only 즉시 반환 (video 없어도 OK)\n")
+                val __result = StreamResult(
+                    videoUrl = null,
+                    audioUrl = direct.audioUrl,
+                    muxedUrl = null,
+                    title = direct.title,
+                    channelName = direct.channel,
+                    description = "",
+                    debug = sb.toString(),
+                    audioUrlBest = direct.audioUrl
+                )
+                putCache(videoId, __result)
+                return@withContext __result
+            }
+
             if (hasVideo) {
                 // video 있음 → 즉시 반환
                 val __result = StreamResult(

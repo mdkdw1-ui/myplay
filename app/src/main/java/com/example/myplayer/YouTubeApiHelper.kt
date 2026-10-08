@@ -19,14 +19,31 @@ object YouTubeApiHelper {
         "https://invidious.nerdvpn.de",      // 독일
         "https://iv.melmac.space",
         "https://invidious.privacyredirect.com",
-        "https://yt.artemislena.eu"
+        "https://yt.artemislena.eu",
+        "https://invidious.reallyaweso.me",
+        "https://invidious.privacydev.net",
+        "https://vid.puffyan.us",
+        "https://invidious.snopyta.org",
+        "https://inv.riverside.rocks",
+        "https://invidious.kavin.rocks",
+        "https://invidious.silkky.cloud",
+        "https://yt.vern.cc",
+        "https://invidious.flokinet.to"
     )
 
     val PIPED = listOf(
         "https://pipedapi.reallyaweso.me",
         "https://api.piped.private.coffee",
         "https://pipedapi.kavin.rocks",
-        "https://pipedapi.adminforge.de"
+        "https://pipedapi.adminforge.de",
+        "https://pipedapi.leptons.xyz",
+        "https://pipedapi.drgns.space",
+        "https://api.piped.projectsegfau.lt",
+        "https://pipedapi.nosebs.ru",
+        "https://pipedapi.astartes.nl",
+        "https://piped-api.lunar.icu",
+        "https://pipedapi.ducks.party",
+        "https://pipedapi.orangenet.cc"
     )
 
     // ═══════════════════════════════════════════════
@@ -336,8 +353,8 @@ object YouTubeApiHelper {
     )
 
     suspend fun extractStream(videoId: String): StreamUrls = withContext(Dispatchers.IO) {
-        // ★ 첫 로딩 단축: Invidious는 1개 서버만 빠르게 시도
-        val quickInvidious = INVIDIOUS.take(1)
+        // ★ Invidious 5개 서버 시도 (다운된 서버 회피)
+        val quickInvidious = INVIDIOUS.take(5)
         for (inst in quickInvidious) {
             val obj = getJsonObject("$inst/api/v1/videos/$videoId") ?: continue
             try {
@@ -405,8 +422,8 @@ object YouTubeApiHelper {
             } catch (e: Exception) { }
         }
 
-        // ★ Piped도 1개만
-        val quickPiped = PIPED.take(1)
+        // ★ Piped 3개 서버 시도
+        val quickPiped = PIPED.take(3)
         for (inst in quickPiped) {
             val obj = getJsonObject("$inst/streams/$videoId") ?: continue
             try {
