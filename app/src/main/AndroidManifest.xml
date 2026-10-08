@@ -43,7 +43,12 @@
         <activity android:name=".TranscriptActivity" android:exported="false" android:label="자막" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".SmartPlaylistActivity" android:exported="false" android:label="스마트 플레이리스트" />
         <activity android:name=".AudioHomeActivity" android:exported="false" android:label="오디오 홈" />
-        <activity android:name=".AudioPlayerActivity" android:exported="false" android:label="오디오 모드" android:theme="@style/Theme.MyPlayer" />
+        <activity
+            android:name=".AudioPlayerActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:label="오디오 모드"
+            android:theme="@style/Theme.MyPlayer" />
         <activity android:name=".LyricsActivity" android:exported="false" android:label="가사" />
         <activity android:name=".LocalMediaActivity" android:exported="false" android:label="로컬 파일" />
         <activity android:name=".PlaylistDetailActivity" android:exported="false" android:label="플레이리스트" />
