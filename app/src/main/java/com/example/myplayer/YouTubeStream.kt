@@ -167,6 +167,11 @@ object YouTubeStream {
             val hasCookie = YouTubeCookieManager.hasCookie(ctx)
             val cookieLen = YouTubeCookieManager.load(ctx).length
             sb.append("cookie: has=$hasCookie len=$cookieLen\n")
+            try {
+                val ck = YouTubeCookieManager.load(ctx)
+                val names = ck.split("; ").map { it.substringBefore("=") }.joinToString(",")
+                sb.append("cookie names: $names\n")
+            } catch (_: Exception) {}
         } catch (_: Exception) {}
 
         try {
