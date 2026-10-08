@@ -637,9 +637,11 @@ class AudioPlayerActivity : AppCompatActivity() {
         // ★ YouTube 라이브/뉴스 필터 (로컬 제외)
         if (!videoId.startsWith("local:")) {
             val lower = currentTitle.lowercase()
-            val badTitle = listOf("라이브", "생방송", "live", "뉴스", "속보", "방송",
-                                  "개표", "선거", "중계").any { lower.contains(it) }
-                || Regex("\\btv\\b").containsMatchIn(lower)
+            // ★ 필터 최소화 (오탐 방지)
+            val badTitle = listOf("뉴스", "속보", "개표", "선거").any { lower.contains(it) }
+                || lower.startsWith("라이브")     // 제목이 "라이브"로 시작
+                || lower.startsWith("생방송")
+                || Regex("\\btv\\b").containsMatchIn(lower)   // TV 방송만
             if (badTitle) {
                 diag("loadAudio skip (라이브/뉴스): ${currentTitle.take(40)}")
                 runOnUiThread {
