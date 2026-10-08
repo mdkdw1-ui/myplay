@@ -204,15 +204,31 @@ class AudioPlayerActivity : AppCompatActivity() {
             startUpdateLoop()
             attachEqualizer()
             if (currentVideoId.isNotEmpty() && currentVideoId !in failedIds) {
-                // ★ 이미 ExoPlayer가 이 곡을 재생 중이면 loadAudio skip (ExoPlayer 큐 보존)
+                // ★ 다중 조건으로 이미 재생 중인지 확인
                 val mc = mediaController
-                val alreadyPlaying = mc != null &&
-                    mc.currentMediaItem?.mediaId == currentVideoId &&
-                    mc.mediaItemCount > 0 &&
-                    (mc.isPlaying || mc.playWhenReady)
+                val prefVideoId = pref?.getString("current_video_id", null)
+                val mcState = mc?.playbackState ?: -1
+                val isPlayingState = mcState == Player.STATE_READY ||
+                    mcState == Player.STATE_BUFFERING
+
+                val alreadyPlaying = mc != null && (
+                    // 조건 1: ExoPlayer가 같은 곡
+                    mc.currentMediaItem?.mediaId == currentVideoId ||
+                    // 조건 2: prefs에 같은 곡이고 재생 중
+                    (prefVideoId == currentVideoId && isPlayingState) ||
+                    // 조건 3: 재생 중인 아이템 있음
+                    (mc.mediaItemCount > 0 && (mc.isPlaying || mc.playWhenReady))
+                )
+
+                diag("onCreate check: mcState=$mcState prefVideoId=$prefVideoId " +
+                     "mcMediaId=${mc?.currentMediaItem?.mediaId} currentVideoId=$currentVideoId " +
+                     "alreadyPlaying=$alreadyPlaying")
+
                 if (alreadyPlaying) {
                     diag("onCreate: 이미 재생 중 → loadAudio skip (큐 보존)")
                     updateUI()
+                    // prefetch 재예약
+                    try { prefetchNext() } catch (_: Exception) {}
                 } else {
                     diag("onCreate: loadAudio 호출")
                     loadAudio(currentVideoId, isInitial = true)
