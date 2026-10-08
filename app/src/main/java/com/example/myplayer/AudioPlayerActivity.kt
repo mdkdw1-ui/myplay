@@ -514,6 +514,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 playNextRelatedBg()
                 return
             }
+            // ★ 큐에서 제거하지 않음 (순서 유지)
 
             if (curIdx < 0) {
                 val first = queue.firstOrNull { it.videoId !in failedIds }
@@ -1067,6 +1068,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 diag("playNext: 큐 다음 곡 없음 (모두 실패)")
                 // 폴백으로 진행 (아래 코드)
             } else {
+                // ★ 큐에서 제거하지 않음 (순서 유지)
                 val nextFromQueue = queue[nextIdx]
                 diag("playNext: 큐 다음 곡 → ${nextFromQueue.videoId} (${nextFromQueue.title.take(30)})")
                 currentVideoId = nextFromQueue.videoId
