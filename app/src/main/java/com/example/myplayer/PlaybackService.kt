@@ -414,6 +414,55 @@ class PlaybackService : MediaSessionService() {
         super.onDestroy()
     }
 
+    /** ★ video+audio 병합 재생 (MediaController로는 불가) */
+    fun playMergedVideoAudio(
+        videoUrl: String,
+        audioUrl: String,
+        title: String,
+        channel: String,
+        videoId: String
+    ): Boolean {
+        val player = exoPlayer ?: return false
+        return try {
+            val dataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                .setUserAgent("Mozilla/5.0")
+                .setAllowCrossProtocolRedirects(true)
+
+            val videoSource = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(
+                    MediaItem.Builder()
+                        .setUri(videoUrl)
+                        .setMediaId("${videoId}_video")
+                        .build()
+                )
+
+            val audioSource = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(
+                    MediaItem.Builder()
+                        .setUri(audioUrl)
+                        .setMediaId("${videoId}_audio")
+                        .build()
+                )
+
+            val mergedSource = androidx.media3.exoplayer.source.MergingMediaSource(videoSource, audioSource)
+
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                try {
+                    player.setMediaSource(mergedSource)
+                    player.prepare()
+                    player.playWhenReady = true
+                    Log.d("PlaybackService", "playMergedVideoAudio OK: $videoId")
+                } catch (e: Exception) {
+                    Log.e("PlaybackService", "setMediaSource err", e)
+                }
+            }
+            true
+        } catch (e: Exception) {
+            Log.e("PlaybackService", "playMergedVideoAudio err", e)
+            false
+        }
+    }
+
     companion object {
         var exoPlayer: ExoPlayer? = null
             private set

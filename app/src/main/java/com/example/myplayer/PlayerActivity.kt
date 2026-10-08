@@ -1333,8 +1333,34 @@ class PlayerActivity : AppCompatActivity() {
                 "  audio=${result.audioUrl?.take(80)}\n" +
                 "  debug=${result.debug.take(300)}")
 
-            // ★ 비디오 모드: muxed 또는 video 트랙 필수 (오디오만으로는 재생 금지)
+            // ★ muxed 없으면 video+audio 병합 재생
             val streamUrl = result.muxedUrl ?: result.videoUrl
+
+            // ★ video + audio 분리 → 병합 재생
+            if (result.muxedUrl.isNullOrBlank() &&
+                !result.videoUrl.isNullOrBlank() &&
+                !result.audioUrlBest.isNullOrBlank()) {
+                vdiag("video+audio 병합 재생 시도")
+                val ok = PlaybackService.playMergedVideoAudio(
+                    videoUrl = result.videoUrl!!,
+                    audioUrl = result.audioUrlBest!!,
+                    title = finalTitle,
+                    channel = finalChannel,
+                    videoId = videoId
+                )
+                vdiag("병합 재생 결과: $ok")
+                if (ok) {
+                    // 성공 시 처리
+                    subtitleTracks = result.subtitles
+                    currentQualities = result.qualities
+                    currentStreamUrl = result.videoUrl
+                    saveHistory(videoId, finalTitle, finalChannel, thumb, startPosMs)
+                    summaryCard.visibility = View.VISIBLE
+                    tvSummaryBadge.text = "AI 요약 · 탭해서 생성"
+                    tvSummary.text = "탭하면 자막을 요약합니다."
+                    return@launch
+                }
+            }
 
             if (streamUrl.isNullOrBlank()) {
                 vdiag("❌ 영상 트랙 없음! muxed=${result.muxedUrl} video=${result.videoUrl} audio=${result.audioUrl}")
