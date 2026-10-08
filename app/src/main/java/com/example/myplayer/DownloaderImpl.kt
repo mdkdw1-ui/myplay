@@ -55,23 +55,8 @@ class DownloaderImpl : Downloader() {
         }
 
         // ★ 봇 차단 회피: 실제 브라우저 UA 강제
-        connection.setRequestProperty(
-            "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-            "AppleWebKit/537.36 (KHTML, like Gecko) " +
-            "Chrome/120.0.0.0 Safari/537.36"
-        )
-        connection.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
-        connection.setRequestProperty("Accept", "*/*")
-
-        // ★ YouTube 로그인 쿠키 첨부 (있으면)
-        try {
-            val ctx = MyApp.instance.applicationContext
-            val cookie = YouTubeCookieManager.load(ctx)
-            if (cookie.isNotBlank()) {
-                connection.setRequestProperty("Cookie", cookie)
-            }
-        } catch (_: Exception) {}
+        // ★ 쿠키 + SAPISIDHASH + visitorData 완벽 적용
+        CookieUtil.apply(connection)
 
         if (dataToSend != null) {
             connection.doOutput = true
