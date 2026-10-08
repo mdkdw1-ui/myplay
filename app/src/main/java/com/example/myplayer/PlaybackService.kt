@@ -414,6 +414,11 @@ class PlaybackService : MediaSessionService() {
         super.onDestroy()
     }
 
+    companion object {
+        var exoPlayer: ExoPlayer? = null
+            private set
+        var nextTrackHandler: (() -> Unit)? = null
+
     /** ★ video+audio 병합 재생 (MediaController로는 불가) */
     fun playMergedVideoAudio(
         videoUrl: String,
@@ -463,9 +468,5 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    companion object {
-        var exoPlayer: ExoPlayer? = null
-            private set
-        var nextTrackHandler: (() -> Unit)? = null
     }
 }
