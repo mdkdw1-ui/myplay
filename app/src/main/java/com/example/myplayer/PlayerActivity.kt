@@ -299,6 +299,17 @@ class PlayerActivity : AppCompatActivity() {
         (findViewById<TextView>(R.id.tvChannel)).text = vChannel
         (findViewById<TextView>(R.id.tvDescription)).text = "불러오는 중..."
 
+        // ★ 제목 롱프레스 → 비디오 진단 로그
+        findViewById<TextView>(R.id.tvTitle)?.setOnLongClickListener {
+            showVideoDiagLog()
+            true
+        }
+        // ★ 채널 롱프레스도 동일
+        findViewById<TextView>(R.id.tvChannel)?.setOnLongClickListener {
+            showVideoDiagLog()
+            true
+        }
+
         val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
         controllerFuture.addListener({
@@ -1221,6 +1232,38 @@ class PlayerActivity : AppCompatActivity() {
             videoDiagLines.addLast(msg)
             while (videoDiagLines.size > 10) videoDiagLines.removeFirst()
         } catch (_: Exception) {}
+    }
+
+    private fun showVideoDiagLog() {
+        try {
+            val f = java.io.File(filesDir, "video_diag.log")
+            val content = if (f.exists()) f.readText() else "(로그 없음)"
+            val lines = content.lines().takeLast(100).joinToString("\n")
+
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("🎬 비디오 진단 로그 (마지막 100줄)")
+                .setMessage(lines)
+                .setPositiveButton("닫기", null)
+                .setNegativeButton("📋 복사") { _, _ ->
+                    try {
+                        val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                            as android.content.ClipboardManager
+                        cm.setPrimaryClip(
+                            android.content.ClipData.newPlainText("video_diag", content)
+                        )
+                        android.widget.Toast.makeText(this,
+                            "복사됨 (전체 로그)", android.widget.Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        android.widget.Toast.makeText(this,
+                            "복사 실패: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNeutralButton("🗑 지우기") { _, _ -> f.delete() }
+                .show()
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(this,
+                "로그 읽기 실패: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun extractAndPlay(
