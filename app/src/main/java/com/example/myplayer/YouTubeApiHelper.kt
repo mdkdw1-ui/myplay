@@ -53,8 +53,8 @@ object YouTubeApiHelper {
         try {
             val conn = URL(url).openConnection() as HttpURLConnection
             // ★ 첫 로딩 단축: 3초/5초로 축소
-            conn.connectTimeout = 3000
-            conn.readTimeout = 5000
+            conn.connectTimeout = 2000
+            conn.readTimeout = 3000
             conn.setRequestProperty("User-Agent", "Mozilla/5.0")
             conn.setRequestProperty("Accept", "application/json")
             CookieUtil.apply(conn)
@@ -377,7 +377,7 @@ object YouTubeApiHelper {
 
     suspend fun extractStream(videoId: String): StreamUrls = withContext(Dispatchers.IO) {
         // ★ Invidious 5개 서버 시도 (다운된 서버 회피)
-        val quickInvidious = INVIDIOUS.take(5)
+        val quickInvidious = INVIDIOUS.take(3)
         for (inst in quickInvidious) {
             val obj = getJsonObject("$inst/api/v1/videos/$videoId") ?: continue
             try {
@@ -453,7 +453,7 @@ object YouTubeApiHelper {
         }
 
         // ★ Piped 3개 서버 시도
-        val quickPiped = PIPED.take(3)
+        val quickPiped = PIPED.take(2)
         for (inst in quickPiped) {
             val obj = getJsonObject("$inst/streams/$videoId") ?: continue
             try {
