@@ -1207,13 +1207,37 @@ class PlayerActivity : AppCompatActivity() {
         (findViewById<TextView>(R.id.tvDescription)).text = "(URL 직접 재생)"
     }
 
+    private val videoDiagLines = java.util.ArrayDeque<String>()
+    private fun vdiag(msg: String) {
+        android.util.Log.d("PlayerActivity", msg)
+        try {
+            val f = java.io.File(filesDir, "video_diag.log")
+            if (f.exists() && f.length() > 500_000) f.writeText("")
+            val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US)
+                .format(java.util.Date())
+            f.appendText("[$ts] $msg\n")
+        } catch (_: Exception) {}
+        try {
+            videoDiagLines.addLast(msg)
+            while (videoDiagLines.size > 10) videoDiagLines.removeFirst()
+        } catch (_: Exception) {}
+    }
+
     private fun extractAndPlay(
         videoId: String, title: String, channel: String, thumb: String, startPosMs: Long = 0L
     ) {
-        resetZoom()  // ★ 새 영상 → 확대 초기화
+        vdiag("extractAndPlay: $videoId ($title)")
+        resetZoom()
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
+            vdiag("extract 시작: $videoId")
             val result = YouTubeStream.extract(videoId)
+            vdiag("extract 완료: $videoId")
+            vdiag("  muxed=${result.muxedUrl?.take(80)}")
+            vdiag("  video=${result.videoUrl?.take(80)}")
+            vdiag("  audioBest=${result.audioUrlBest?.take(80)}")
+            vdiag("  debug=${result.debug.take(300)}")
+            vdiag("  hasAny=${result.hasAny}")
             progress.visibility = View.GONE
 
             if (!result.hasAny) {
@@ -1270,9 +1294,8 @@ class PlayerActivity : AppCompatActivity() {
             val streamUrl = result.muxedUrl ?: result.videoUrl
 
             if (streamUrl.isNullOrBlank()) {
-                android.util.Log.e("PlayerActivity",
-                    "video 트랙 없음! muxed=${result.muxedUrl} " +
-                    "video=${result.videoUrl} audio=${result.audioUrl}")
+                vdiag("❌ 영상 트랙 없음! muxed=${result.muxedUrl} video=${result.videoUrl} audio=${result.audioUrl}")
+                vdiag("   debug: ${result.debug.take(500)}")
                 progress.visibility = View.GONE
                 AlertDialog.Builder(this@PlayerActivity)
                     .setTitle("영상 트랙 없음")
