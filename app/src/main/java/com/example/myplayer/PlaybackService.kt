@@ -183,7 +183,7 @@ class PlaybackService : MediaSessionService() {
             val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
             if (curIdx >= 0 && curIdx < queue.size - 1) {
                 val next = queue[curIdx + 1]
-                QueueManager.remove(this, next.videoId)
+                // ★ 큐에서 제거하지 않음 (순서 유지)
                 Log.d("PlaybackService", "queue next: ${next.videoId}")
                 return VideoItem(
                     next.videoId, next.title, next.channel, next.thumbnail
