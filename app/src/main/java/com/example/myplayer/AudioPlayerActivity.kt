@@ -332,30 +332,35 @@ class AudioPlayerActivity : AppCompatActivity() {
         prefetchJob?.cancel()
         prefetchJob = bgScope.launch {
             try {
-                // ★ extract 진행 중이면 prefetch skip (transition 싸움 방지)
                 if (extractInProgress) {
                     diag("prefetch: extract 진행 중 → skip")
                     return@launch
                 }
+
                 diag("prefetch: 즉시 시작")
 
                 // ★ 1순위: 큐의 다음 곡
                 val queue = QueueManager.get(this@AudioPlayerActivity)
                 val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
                 diag("prefetch: queue=${queue.size} curIdx=$curIdx current=$currentVideoId")
-                diag("prefetch: queue=${queue.joinToString { it.videoId.take(11) }}")
-                val queueNext: HomeVideo? = if (curIdx >= 0 && curIdx < queue.size - 1) {
-                    queue[curIdx + 1]
+
+                val next: HomeVideo? = if (curIdx >= 0 && curIdx < queue.size - 1) {
+                    // 실패 곡 건너뛰기
+                    var nextIdx = curIdx + 1
+                    while (nextIdx < queue.size && queue[nextIdx].videoId in failedIds) {
+                        nextIdx++
+                    }
+                    if (nextIdx < queue.size) {
+                        val q = queue[nextIdx]
+                        diag("prefetch: 큐 다음 곡 → ${q.videoId} (${q.title.take(30)})")
+                        q
+                    } else null
                 } else null
 
-                val next: HomeVideo? = if (queueNext != null) {
-                    diag("prefetch: 큐 다음 곡 → ${queueNext.videoId} (${queueNext.title.take(30)})")
-                    queueNext
-                } else {
-                    // ★ 2순위: radio + artist 병렬 (다양성 확보)
+                // ★ 2순위: 큐 끝 → 유튜브 radio/artist
+                val target: HomeVideo? = next ?: run {
                     diag("prefetch: 큐 끝 → 유튜브 병렬 검색")
                     val artistName = currentArtist.ifBlank { currentChannel }
-
                     val radioDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
                         try {
                             kotlinx.coroutines.withTimeoutOrNull(5_000) {
@@ -372,51 +377,91 @@ class AudioPlayerActivity : AppCompatActivity() {
                             } ?: emptyList()
                         } catch (_: Exception) { emptyList() }
                     }
-
-                    val radioList = radioDeferred.await().filter { it.videoId != currentVideoId && it.videoId !in failedIds }
-                    val artistList = artistDeferred.await().filter { it.videoId != currentVideoId && it.videoId !in failedIds }
-
-                    // ★ radio + artist 섞기 (radio 우선, artist 보충)
-                    // ★ 다양성: 같은 아티스트 반복 방지 (최근 5곡 제외)
-                    val recentArtistNames = audioHistory.takeLast(5)
-                        .map { it.channel }
-                        .filter { it.isNotBlank() }
-                        .toSet()
-
+                    val radioList = radioDeferred.await()
+                    val artistList = artistDeferred.await()
                     val combined = (radioList + artistList)
                         .distinctBy { it.videoId }
-                        .filter { it.videoId !in failedIds }
-                        .filter { it.videoId != currentVideoId }
-                        // 최근 곡 제외
-                        .filter { v -> audioHistory.none { it.videoId == v.videoId } }
-                        // 같은 아티스트 3연속 방지
-                        .sortedBy { v -> if (v.channel in recentArtistNames) 1 else 0 }
-
+                        .filter { it.videoId != currentVideoId && it.videoId !in failedIds }
                     combined.firstOrNull()?.let {
                         HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
                     }
                 }
 
-                if (next == null) {
+                if (target == null) {
                     diag("prefetch: 다음 곡 없음")
                     return@launch
                 }
 
-                // 이미 prefetch된 곡이면 skip
-                if (prefetchedStreams.containsKey(next.videoId)) {
+                if (prefetchedStreams.containsKey(target.videoId)) {
                     diag("prefetch: 이미 캐시됨 → skip")
+                    // ★ 이미 캐시면 ExoPlayer에 addMediaItem
+                    addToExoQueue(target, prefetchedStreams[target.videoId]!!)
                     return@launch
                 }
 
+                // ★ 스트림 추출
                 val result = kotlinx.coroutines.withTimeoutOrNull(15_000) {
-                    YouTubeStream.extractAudioOnly(next.videoId)
+                    YouTubeStream.extractAudioOnly(target.videoId)
                 } ?: return@launch
 
                 if (result.hasAny) {
-                    prefetchedStreams[next.videoId] = result
-                    diag("prefetch 완료: ${next.videoId} (${next.title.take(30)})")
+                    prefetchedStreams[target.videoId] = result
+                    diag("prefetch 완료: ${target.videoId} (${target.title.take(30)})")
+                    // ★ ExoPlayer 큐에 추가
+                    addToExoQueue(target, result)
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                diag("prefetch err: ${e.message}")
+            }
+        }
+    }
+
+    /** ★ ExoPlayer 큐에 다음 곡 추가 (순서 보장) */
+    private fun addToExoQueue(target: HomeVideo, result: YouTubeStream.StreamResult) {
+        try {
+            val url = result.audioUrlBest
+                ?: result.audioUrl
+                ?: result.muxedUrl
+                ?: result.videoUrl
+            if (url.isNullOrBlank()) {
+                diag("addToExoQueue: URL 없음 (${target.videoId})")
+                return
+            }
+
+            // ★ 이미 ExoPlayer 큐에 있으면 skip
+            val mc = mediaController ?: return
+            for (i in 0 until mc.mediaItemCount) {
+                if (mc.getMediaItemAt(i).mediaId == target.videoId) {
+                    diag("addToExoQueue: 이미 있음 (${target.videoId})")
+                    return
+                }
+            }
+
+            val artist = currentArtist.ifBlank { currentChannel }
+            val metadata = MediaMetadata.Builder()
+                .setTitle(target.title)
+                .setArtist(artist)
+                .setAlbumTitle(target.channel)
+                .setArtworkUri(android.net.Uri.parse(target.thumbnail))
+                .build()
+
+            val mediaItem = MediaItem.Builder()
+                .setUri(url)
+                .setMediaId(target.videoId)
+                .setMediaMetadata(metadata)
+                .build()
+
+            runOnUiThread {
+                try {
+                    val mc2 = mediaController ?: return@runOnUiThread
+                    mc2.addMediaItem(mediaItem)
+                    diag("ExoPlayer addMediaItem: ${target.videoId} (itemCount=${mc2.mediaItemCount})")
+                } catch (e: Exception) {
+                    diag("addMediaItem err: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            diag("addToExoQueue err: ${e.message}")
         }
     }
 
@@ -983,17 +1028,9 @@ class AudioPlayerActivity : AppCompatActivity() {
                 val newId = mediaItem?.mediaId ?: return
                 if (newId == currentVideoId) return
                 diag("transition to $newId reason=$reason")
-                // ★ extract 진행 중이면 transition 무시 (새 곡 설정 직전)
-                if (extractInProgress) {
-                    diag("transition 무시 (extract 진행 중)")
-                    return
-                }
-                // ★ loadAudio 진행 중이면 transition 무시
-                if (loadingNext) {
-                    diag("transition 무시 (loadingNext=true)")
-                    return
-                }
-                // ★ ExoPlayer 자동 진행 시 lastMediaSetMs 갱신 → playNext 중복 방지
+
+                // ★ ExoPlayer 자동 진행 (reason=3=MEDIA_ITEM_TRANSITION_REASON_AUTO)
+                //   → 이제 정상 흐름, 무시하지 말고 상태만 갱신
                 lastMediaSetMs = System.currentTimeMillis()
                 loadingNext = false
                 currentVideoId = newId
@@ -1024,6 +1061,14 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun playNextRelatedBg() {
+        // ★★ ExoPlayer 큐에 다음 곡 있으면 skip (자동 진행)
+        val mcCheck = mediaController
+        if (mcCheck != null && mcCheck.hasNextMediaItem()) {
+            diag("playNext: ExoPlayer 큐 있음 → skip (자동 진행)")
+            loadingNext = false
+            return
+        }
+
         val now = System.currentTimeMillis()
         if (now - lastPlayNextFailMs > 60_000) {
             playNextFailCount = 0
