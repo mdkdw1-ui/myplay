@@ -46,7 +46,7 @@
         <activity
             android:name=".AudioPlayerActivity"
             android:exported="false"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:label="오디오 모드"
             android:theme="@style/Theme.MyPlayer" />
         <activity android:name=".LyricsActivity" android:exported="false" android:label="가사" />
