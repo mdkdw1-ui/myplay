@@ -352,6 +352,29 @@ object YouTubeApiHelper {
         val source: String
     )
 
+    /** ★ itag → height 매핑 (Invidious가 height 안 줄 때) */
+    private fun itagToHeight(itag: Int): Int = when (itag) {
+        160, 394, 278 -> 144
+        133, 395, 242 -> 240
+        134, 396, 243 -> 360
+        135, 397, 244 -> 480
+        136, 398, 247 -> 720
+        137, 399, 248 -> 1080
+        264, 271 -> 1440
+        266, 313 -> 2160
+        138 -> 4320
+        17 -> 144
+        18 -> 360
+        22 -> 720
+        37 -> 1080
+        38 -> 3072
+        43 -> 360
+        44 -> 480
+        45 -> 720
+        46 -> 1080
+        else -> 0
+    }
+
     suspend fun extractStream(videoId: String): StreamUrls = withContext(Dispatchers.IO) {
         // ★ Invidious 5개 서버 시도 (다운된 서버 회피)
         val quickInvidious = INVIDIOUS.take(5)
@@ -389,8 +412,12 @@ object YouTubeApiHelper {
                         } else if (typeLower.startsWith("video/") ||
                                    typeLower.contains("video") ||
                                    typeLower.contains("mp4")) {
-                            val h = f.optInt("height",
-                                f.optInt("resolution", 0))
+                            // ★ height → resolution → itag 순서로 시도
+                            val itag = f.optString("itag", "").toIntOrNull() ?: 0
+                            val h = f.optInt("height", 0).takeIf { it > 0 }
+                                ?: f.optInt("resolution", 0).takeIf { it > 0 }
+                                ?: f.optString("resolution", "").replace("p", "").toIntOrNull()?.takeIf { it > 0 }
+                                ?: itagToHeight(itag)
                             if (h > videoHeight) {
                                 videoHeight = h
                                 videoUrl = u
@@ -407,7 +434,10 @@ object YouTubeApiHelper {
                         val f = fs.getJSONObject(i)
                         val u = f.optString("url", "")
                         if (u.isBlank()) continue
-                        val h = f.optInt("height", 0)
+                        val itag = f.optString("itag", "").toIntOrNull() ?: 0
+                        val h = f.optInt("height", 0).takeIf { it > 0 }
+                            ?: f.optInt("resolution", 0).takeIf { it > 0 }
+                            ?: itagToHeight(itag)
                         if (h >= bestMuxedH) {
                             bestMuxedH = h
                             muxed = u

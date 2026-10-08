@@ -211,13 +211,18 @@ class AudioPlayerActivity : AppCompatActivity() {
                 val isPlayingState = mcState == Player.STATE_READY ||
                     mcState == Player.STATE_BUFFERING
 
+                val isMediaItemCountOk = (mc?.mediaItemCount ?: 0) > 0
                 val alreadyPlaying = mc != null && (
                     // 조건 1: ExoPlayer가 같은 곡
                     mc.currentMediaItem?.mediaId == currentVideoId ||
-                    // 조건 2: prefs에 같은 곡이고 재생 중
+                    // 조건 2: prefs에 같은 곡이고 재생 상태
                     (prefVideoId == currentVideoId && isPlayingState) ||
                     // 조건 3: 재생 중인 아이템 있음
-                    (mc.mediaItemCount > 0 && (mc.isPlaying || mc.playWhenReady))
+                    (isMediaItemCountOk && (mc.isPlaying || mc.playWhenReady)) ||
+                    // ★ 조건 4: prefs에 같은 곡이고 ExoPlayer 큐에 아이템 있으면 skip
+                    (prefVideoId == currentVideoId && isMediaItemCountOk) ||
+                    // ★ 조건 5: prefs에 같은 곡이고 IDLE이면 곧 재생됨 → skip
+                    (prefVideoId == currentVideoId && mcState == Player.STATE_IDLE && isMediaItemCountOk)
                 )
 
                 diag("onCreate check: mcState=$mcState prefVideoId=$prefVideoId " +
