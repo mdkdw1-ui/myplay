@@ -1037,7 +1037,11 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                val newId = mediaItem?.mediaId ?: return
+                val newId = mediaItem?.mediaId
+                if (newId.isNullOrBlank()) {
+                    diag("transition 무시 (빈 mediaId)")
+                    return
+                }
                 if (newId == currentVideoId) return
                 diag("transition to $newId reason=$reason")
 
@@ -1517,6 +1521,38 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     private fun toggleAudioLiveSubtitle() {
         startActivity(Intent(this, LiveSubtitleActivity::class.java))
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        diag("onNewIntent 호출")
+
+        // 새 곡 정보
+        val newVideoId = intent.getStringExtra("VIDEO_ID") ?: return
+        val newTitle = intent.getStringExtra("VIDEO_TITLE") ?: ""
+        val newChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
+        val newThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
+
+        if (newVideoId == currentVideoId) {
+            diag("onNewIntent: 같은 곡 → skip")
+            return
+        }
+
+        diag("onNewIntent: 새 곡 → $newVideoId")
+        currentVideoId = newVideoId
+        currentTitle = newTitle
+        currentChannel = newChannel
+        currentThumb = newThumb
+
+        // FROM_PLAYLIST면 큐 유지, 아니면 큐 클리어
+        val fromPlaylist = intent.getBooleanExtra("FROM_PLAYLIST", false)
+        if (!fromPlaylist) {
+            QueueManager.clear(this)
+        }
+
+        updateUI()
+        loadAudio(newVideoId, isInitial = true)
     }
 
     override fun onResume() {
