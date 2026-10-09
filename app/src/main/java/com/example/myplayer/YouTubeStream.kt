@@ -3,6 +3,9 @@ package com.example.myplayer
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.StreamInfo
@@ -105,20 +108,20 @@ object YouTubeStream {
         val sb = StringBuilder()
         sb.append("parallel extract\n")
 
-        val result = kotlinx.coroutines.coroutineScope {
-            val invDeferred = kotlinx.coroutines.async(Dispatchers.IO) {
+        val result = coroutineScope {
+            val invDeferred = async(Dispatchers.IO) {
                 try {
-                    kotlinx.coroutines.withTimeoutOrNull(4000) { tryInvidious(videoId, sb) }
+                    withTimeoutOrNull(4000) { tryInvidious(videoId, sb) }
                 } catch (e: Exception) { null }
             }
-            val pipedDeferred = kotlinx.coroutines.async(Dispatchers.IO) {
+            val pipedDeferred = async(Dispatchers.IO) {
                 try {
-                    kotlinx.coroutines.withTimeoutOrNull(4000) { tryPiped(videoId, sb) }
+                    withTimeoutOrNull(4000) { tryPiped(videoId, sb) }
                 } catch (e: Exception) { null }
             }
-            val npDeferred = kotlinx.coroutines.async(Dispatchers.IO) {
+            val npDeferred = async(Dispatchers.IO) {
                 try {
-                    kotlinx.coroutines.withTimeoutOrNull(6000) { tryNewPipe(videoId, sb) }
+                    withTimeoutOrNull(6000) { tryNewPipe(videoId, sb) }
                 } catch (e: Exception) { null }
             }
 
@@ -142,7 +145,7 @@ object YouTubeStream {
     }
 
     private suspend fun tryInvidious(videoId: String, sb: StringBuilder): StreamResult? {
-        for (inst in INVIDIOUS.take(3)) {
+        for (inst in YouTubeApiHelper.INVIDIOUS.take(3)) {
             try {
                 val conn = java.net.URL("$inst/api/v1/videos/$videoId").openConnection() as java.net.HttpURLConnection
                 conn.connectTimeout = 2000
@@ -175,7 +178,7 @@ object YouTubeStream {
                             val itag = f.optString("itag", "").toIntOrNull() ?: 0
                             val h = f.optInt("height", 0).takeIf { it > 0 }
                                 ?: f.optInt("resolution", 0).takeIf { it > 0 }
-                                ?: itagToHeight(itag)
+                                ?: YouTubeApiHelper.itagToHeight(itag)
                             if (h > videoHeight) { videoHeight = h; videoUrl = u }
                         }
                     }
@@ -187,7 +190,7 @@ object YouTubeStream {
                         val u = f.optString("url", "")
                         if (u.isBlank()) continue
                         val itag = f.optString("itag", "").toIntOrNull() ?: 0
-                        val h = f.optInt("height", 0).takeIf { it > 0 } ?: itagToHeight(itag)
+                        val h = f.optInt("height", 0).takeIf { it > 0 } ?: YouTubeApiHelper.itagToHeight(itag)
                         if (h >= bestMuxedH) { bestMuxedH = h; muxed = u }
                     }
                 }
@@ -206,7 +209,7 @@ object YouTubeStream {
     }
 
     private suspend fun tryPiped(videoId: String, sb: StringBuilder): StreamResult? {
-        for (inst in PIPED.take(2)) {
+        for (inst in YouTubeApiHelper.PIPED.take(2)) {
             try {
                 val conn = java.net.URL("$inst/streams/$videoId").openConnection() as java.net.HttpURLConnection
                 conn.connectTimeout = 2000
