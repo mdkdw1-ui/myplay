@@ -125,14 +125,21 @@ object YouTubeStream {
                 } catch (e: Exception) { null }
             }
 
-            // 가장 먼저 video 포함 결과 대기
+            // ★ muxed 우선 (NewPipe itag=18 등)
             val inv = invDeferred.await()
             val piped = pipedDeferred.await()
             val np = npDeferred.await()
 
             val list = listOfNotNull(inv, piped, np)
-            list.firstOrNull { it.muxedUrl != null || it.videoUrl != null }
-                ?: list.firstOrNull { it.audioUrl != null || it.audioUrlBest != null }
+
+            // 1순위: muxed (병합 불필요)
+            val muxedResult = list.firstOrNull { it.muxedUrl != null }
+            // 2순위: video+audio
+            val videoAudio = list.firstOrNull { it.videoUrl != null && (it.audioUrl != null || it.audioUrlBest != null) }
+            // 3순위: audio only
+            val audioOnly = list.firstOrNull { it.audioUrl != null || it.audioUrlBest != null }
+
+            muxedResult ?: videoAudio ?: audioOnly
         }
 
         if (result != null && result.hasAny) {
