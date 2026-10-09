@@ -321,6 +321,9 @@ class PlayerActivity : AppCompatActivity() {
             true
         }
 
+        // ★ PlayerActivity 활성화 → PlaybackService 자동 다음곡 비활성화
+        PlaybackService.autoNextDisabled = true
+
         val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
         controllerFuture.addListener({
@@ -2675,6 +2678,8 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // ★ PlayerActivity 종료 → 자동 다음곡 재활성화
+        PlaybackService.autoNextDisabled = false
         sbCheckJob?.cancel()
         previewJob?.cancel()
         abJob?.cancel()

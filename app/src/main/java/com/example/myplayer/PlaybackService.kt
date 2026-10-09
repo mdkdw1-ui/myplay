@@ -64,6 +64,12 @@ class PlaybackService : MediaSessionService() {
                     return
                 }
 
+                // ★ PlayerActivity 활성이면 자동 다음곡 skip
+                if (autoNextDisabled) {
+                    Log.d("PlaybackService", "autoNextDisabled → skip (Activity 처리)")
+                    return
+                }
+
                 // 진짜 큐 소진 → resolveNext
                 Log.d("PlaybackService", "STATE_ENDED → resolveNext")
                 serviceScope.launch {
@@ -418,6 +424,8 @@ class PlaybackService : MediaSessionService() {
         var exoPlayer: ExoPlayer? = null
             private set
         var nextTrackHandler: (() -> Unit)? = null
+        // ★ PlayerActivity가 활성이면 자동 다음곡 비활성화
+        @Volatile var autoNextDisabled: Boolean = false
 
     /** ★ video+audio 병합 재생 (MediaController로는 불가) */
     fun playMergedVideoAudio(
