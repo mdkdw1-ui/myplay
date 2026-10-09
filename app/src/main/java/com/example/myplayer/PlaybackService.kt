@@ -564,6 +564,18 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    /** ★ Media3 자동 알림 억제 (커스텀 알림만 사용) */
+    override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+        // ★ super 호출 X → Media3 자동 알림 무시
+        try {
+            val notif = buildCustomNotification()
+            startForeground(1001, notif)
+            android.util.Log.d("PlaybackService", "onUpdateNotification → 커스텀 알림")
+        } catch (e: Exception) {
+            android.util.Log.e("PlaybackService", "onUpdateNotification err: ${e.message}", e)
+        }
+    }
+
     override fun onGetSession(
         controllerInfo: MediaSession.ControllerInfo
     ): MediaSession? = mediaSession
@@ -666,6 +678,30 @@ class StopServiceReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
         android.util.Log.d("StopServiceReceiver", "action=${intent.action}")
         try {
+            // ★ ExoPlayer 완전 정지 (재생 재개 방지)
+            try {
+                PlaybackService.exoPlayer?.pause()
+                PlaybackService.exoPlayer?.stop()
+                PlaybackService.exoPlayer?.clearMediaItems()
+            } catch (_: Exception) {}
+
+            // ★ prefs 초기화 (자동 재생 방지)
+            try {
+                context.getSharedPreferences("audio_prefs", android.content.Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("current_video_id", "")
+                    .putBoolean("auto_next", false)
+                    .apply()
+            } catch (_: Exception) {}
+
+            // ★ 알림 제거
+            try {
+                val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE)
+                    as android.app.NotificationManager
+                nm.cancel(1001)
+            } catch (_: Exception) {}
+
+            // ★ 서비스 정지
             context.stopService(android.content.Intent(context, PlaybackService::class.java))
         } catch (e: Exception) {
             android.util.Log.e("StopServiceReceiver", "stopService err", e)
