@@ -25,6 +25,18 @@ class MyApp : Application() {
                 try { YouTubeVisitorFetcher.ensure(applicationContext) } catch (_: Exception) {}
             }
         } catch (_: Exception) {}
+
+        // ★ 서버 헬스체크 (앱 시작 시)
+        try {
+            kotlinx.coroutines.GlobalScope.launch(
+                kotlinx.coroutines.Dispatchers.IO
+            ) {
+                try {
+                    ServerHealthChecker.ensureChecked(applicationContext)
+                    ServerHealthChecker.printStatus(applicationContext)
+                } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
     }
 
     companion object {

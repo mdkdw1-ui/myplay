@@ -229,6 +229,9 @@ class MainActivity : AppCompatActivity() {
         // ★ 구독 알림 스케줄
         scheduleSubscriptionWorker()
 
+        // ★ 서버 헬스체크 스케줄 (12시간 간격)
+        scheduleServerHealthWorker()
+
         // ★ #13: 이전 세션 복원 (마지막 오디오 재생)
         tryRestoreLastAudioSession()
     }
@@ -387,6 +390,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     
+    private fun scheduleServerHealthWorker() {
+        try {
+            val req = androidx.work.PeriodicWorkRequestBuilder<ServerHealthWorker>(
+                12, java.util.concurrent.TimeUnit.HOURS
+            ).build()
+            androidx.work.WorkManager.getInstance(applicationContext)
+                .enqueueUniquePeriodicWork(
+                    "server_health",
+                    androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                    req
+                )
+        } catch (e: Exception) { }
+    }
+
     private fun scheduleSubscriptionWorker() {
         try {
             val req = androidx.work.PeriodicWorkRequestBuilder<SubscriptionWorker>(

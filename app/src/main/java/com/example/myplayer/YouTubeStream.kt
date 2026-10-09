@@ -152,14 +152,20 @@ object YouTubeStream {
     }
 
     private suspend fun tryInvidious(videoId: String, sb: StringBuilder): StreamResult? {
-        // ★ 성공한 서버 우선 (SharedPreferences)
+        // ★ 헬스체크로 저장된 살아있는 서버만 사용
+        val aliveServers = try {
+            ServerHealthChecker.getAliveInvidious(MyApp.instance)
+        } catch (_: Exception) {
+            YouTubeApiHelper.INVIDIOUS
+        }
+        // ★ 성공 서버 최우선
         val prefs = MyApp.instance.getSharedPreferences("server_priority", android.content.Context.MODE_PRIVATE)
         val topServer = prefs.getString("invidious_top", null)
         val servers = mutableListOf<String>()
-        if (topServer != null && topServer in YouTubeApiHelper.INVIDIOUS) {
+        if (topServer != null && topServer in aliveServers) {
             servers.add(topServer)
         }
-        servers.addAll(YouTubeApiHelper.INVIDIOUS.filter { it != topServer }.take(4))
+        servers.addAll(aliveServers.filter { it != topServer })
 
         for (inst in servers) {
             try {
@@ -231,14 +237,21 @@ object YouTubeStream {
     }
 
     private suspend fun tryPiped(videoId: String, sb: StringBuilder): StreamResult? {
-        // ★ 성공한 Piped 우선
+        // ★ 헬스체크로 저장된 살아있는 Piped만
+        val aliveServers = try {
+            ServerHealthChecker.getAlivePiped(MyApp.instance)
+        } catch (_: Exception) {
+            YouTubeApiHelper.PIPED
+        }
+        if (aliveServers.isEmpty()) return null   // ★ 살아있는 것 없으면 스킵
+
         val prefs = MyApp.instance.getSharedPreferences("server_priority", android.content.Context.MODE_PRIVATE)
         val topServer = prefs.getString("piped_top", null)
         val servers = mutableListOf<String>()
-        if (topServer != null && topServer in YouTubeApiHelper.PIPED) {
+        if (topServer != null && topServer in aliveServers) {
             servers.add(topServer)
         }
-        servers.addAll(YouTubeApiHelper.PIPED.filter { it != topServer }.take(3))
+        servers.addAll(aliveServers.filter { it != topServer })
 
         for (inst in servers) {
             try {
