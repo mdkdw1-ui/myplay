@@ -455,6 +455,29 @@ class AudioPlayerActivity : AppCompatActivity() {
                     diag("prefetch 완료: ${target.videoId} (${target.title.take(30)})")
                     // ★ ExoPlayer 큐에 추가
                     addToExoQueue(target, result)
+
+                    // ★ 다음다음 곡도 미리 준비 (2곡 prefetch)
+                    try {
+                        val q = QueueManager.get(this@AudioPlayerActivity)
+                        val tIdx = q.indexOfFirst { it.videoId == target.videoId }
+                        if (tIdx >= 0 && tIdx < q.size - 1) {
+                            val next2 = q[tIdx + 1]
+                            if (!prefetchedStreams.containsKey(next2.videoId) &&
+                                next2.videoId !in failedIds) {
+                                bgScope.launch {
+                                    try {
+                                        val r2 = kotlinx.coroutines.withTimeoutOrNull(15_000) {
+                                            YouTubeStream.extractAudioOnly(next2.videoId)
+                                        }
+                                        if (r2 != null && r2.hasAny) {
+                                            prefetchedStreams[next2.videoId] = r2
+                                            diag("prefetch(2) 완료: ${next2.videoId}")
+                                        }
+                                    } catch (_: Exception) {}
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {}
                 }
             } catch (e: Exception) {
                 diag("prefetch err: ${e.message}")
@@ -641,11 +664,56 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
-        // ★ 큐 위치 동기화 (prefetch/playNext가 정확한 curIdx 계산하도록)
+        // ★ 큐 위치 동기화
         try {
             QueueManager.setCurrent(this, videoId)
             diag("loadAudio setCurrent: $videoId")
         } catch (_: Exception) {}
+
+        // ★★★ prefetch 캐시 히트 시 즉시 재생 (extract 스킵) ★★★
+        val cached = prefetchedStreams.remove(videoId)
+        if (cached != null && cached.hasAny) {
+            val cachedUrl = cached.audioUrlBest ?: cached.audioUrl
+                ?: cached.muxedUrl ?: cached.videoUrl
+            if (!cachedUrl.isNullOrBlank()) {
+                diag("loadAudio: ⚡ prefetch 캐시 히트! 즉시 재생")
+                val artist = currentArtist.ifBlank { currentChannel }
+                val metadata = MediaMetadata.Builder()
+                    .setTitle(currentTitle)
+                    .setArtist(artist)
+                    .setAlbumTitle(currentChannel)
+                    .setArtworkUri(android.net.Uri.parse(currentThumb))
+                    .build()
+                val mediaItem = MediaItem.Builder()
+                    .setUri(cachedUrl)
+                    .setMediaId(videoId)
+                    .setMediaMetadata(metadata)
+                    .build()
+                runOnUiThread {
+                    mediaController?.setMediaItem(mediaItem)
+                    mediaController?.prepare()
+                    mediaController?.playWhenReady = true
+                    try {
+                        val mc = mediaController
+                        if (mc != null) {
+                            mc.trackSelectionParameters = mc.trackSelectionParameters
+                                .buildUpon()
+                                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                                .build()
+                        }
+                    } catch (_: Exception) {}
+                }
+                pref?.edit()
+                    ?.putString("current_stream_url", cachedUrl)
+                    ?.putString("current_video_id", videoId)
+                    ?.apply()
+                addToHistory(videoId, currentTitle, currentChannel, currentThumb)
+                failedIds.remove(videoId)
+                // ★ 즉시 다음 prefetch 재개
+                bgScope.launch { delay(500); prefetchNext() }
+                return
+            }
+        }
 
         // ★ YouTube 라이브/뉴스 필터 (로컬 제외)
         if (!videoId.startsWith("local:")) {
@@ -801,15 +869,13 @@ class AudioPlayerActivity : AppCompatActivity() {
                 }
             }
 
-            // ★ extract 전에 ExoPlayer 완전히 정지 (transition 방지)
+            // ★ extract 전 stop만 (clear/delay 제거로 속도 개선)
             runOnUiThread {
                 try {
                     mediaController?.stop()
-                    mediaController?.clearMediaItems()
                     diag("extract 전 ExoPlayer 정지")
                 } catch (_: Exception) {}
             }
-            kotlinx.coroutines.delay(50)
 
             extractInProgress = true
             val prefetched = prefetchedStreams.remove(videoId)
@@ -891,6 +957,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 ?.putString("current_thumbnail", currentThumb)
                 ?.putString("current_artist", currentArtist)
                 ?.putString("current_subtitle_url", currentSubtitleUrl)
+                ?.putString("current_stream_url", url)   // ★ 재사용용
                 ?.apply()
 
             lastMediaSetMs = System.currentTimeMillis()
