@@ -118,7 +118,37 @@ class PlaybackService : MediaSessionService() {
 
         mediaSession = MediaSession.Builder(this, player)
             .setSessionActivity(sessionActivity)
+            .setCallback(object : MediaSession.Callback {
+                override fun onPostConnect(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo
+                ) {
+                    // 연결 시 자동 재생 방지
+                }
+                override fun onDisconnected(session: MediaSession) {
+                    android.util.Log.d("PlaybackService", "MediaSession disconnected")
+                }
+            })
             .build()
+
+        // ★ 알림에서 중단 버튼 → 완전 정지
+        player.addListener(object : Player.Listener {
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                // 사용자가 중단(pause)했고, 앱이 백그라운드면 → 서비스 정지
+                if (!playWhenReady &&
+                    reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) {
+                    android.util.Log.d("PlaybackService", "사용자 중단 요청 → 정지")
+                    try {
+                        player.stop()
+                        player.clearMediaItems()
+                        stopForeground(true)
+                        stopSelf()
+                    } catch (e: Exception) {
+                        android.util.Log.e("PlaybackService", "stop err", e)
+                    }
+                }
+            }
+        })
 
         // ★ Foreground Service 승격 (Doze 모드에서도 네트워크 유지)
         try {
@@ -399,11 +429,18 @@ class PlaybackService : MediaSessionService() {
 
     /** 앱 스와이프 시 재생 중이면 서비스 유지 */
     override fun onTaskRemoved(rootIntent: android.content.Intent?) {
-        val player = exoPlayer
-        if (player == null || !player.playWhenReady) {
-            stopSelf()
+        // ★ 앱 스와이프 시 완전 정지 (백그라운드 재생 유지 X)
+        android.util.Log.d("PlaybackService", "onTaskRemoved → 완전 정지")
+        try {
+            exoPlayer?.stop()
+            exoPlayer?.clearMediaItems()
+            exoPlayer?.release()
+            exoPlayer = null
+        } catch (e: Exception) {
+            android.util.Log.e("PlaybackService", "stop err", e)
         }
-        // 재생 중이면 stopSelf 안 함 → 백그라운드 유지
+        try { stopForeground(true) } catch (_: Exception) {}
+        stopSelf()
         super.onTaskRemoved(rootIntent)
     }
 
