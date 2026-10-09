@@ -167,10 +167,21 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
+            val stateName = when (playbackState) {
+                Player.STATE_IDLE -> "IDLE"
+                Player.STATE_BUFFERING -> "BUFFERING"
+                Player.STATE_READY -> "READY"
+                Player.STATE_ENDED -> "ENDED"
+                else -> "?"
+            }
+            val p = playerView.player
+            vdiag("state=$stateName pos=${p?.currentPosition} dur=${p?.duration} " +
+                  "err=${p?.playerError?.errorCodeName} " +
+                  "isPlaying=${p?.isPlaying} playWhenReady=${p?.playWhenReady}")
             if (playbackState == Player.STATE_ENDED) {
+                vdiag("★ ENDED → onVideoEnded() 호출")
                 onVideoEnded()
             }
-            // ★ STATE_READY (재생 준비 완료) → progress 숨김
             if (playbackState == Player.STATE_READY ||
                 playbackState == Player.STATE_IDLE) {
                 try { progress.visibility = View.GONE } catch (_: Exception) {}
