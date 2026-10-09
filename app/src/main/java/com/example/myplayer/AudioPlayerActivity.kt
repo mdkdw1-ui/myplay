@@ -123,6 +123,16 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         pref = getSharedPreferences("audio_prefs", MODE_PRIVATE)
 
+        // ★ 서비스가 명시적으로 정지된 상태면 Activity도 즉시 종료
+        if (pref?.getBoolean("service_stopped", false) == true) {
+            android.util.Log.d("AudioPlayer", "onCreate: service_stopped=true → 즉시 종료")
+            finish()
+            return
+        }
+
+        // ★ Activity가 다시 열렸으면 정지 플래그 해제
+        pref?.edit()?.putBoolean("service_stopped", false)?.apply()
+
         try {
             val keepOn = pref?.getBoolean("keep_screen_on_audio", true) ?: true
             if (keepOn) {
@@ -212,18 +222,11 @@ class AudioPlayerActivity : AppCompatActivity() {
                     mcState == Player.STATE_BUFFERING
 
                 val isMediaItemCountOk = (mc?.mediaItemCount ?: 0) > 0
-                val alreadyPlaying = mc != null && (
-                    // 조건 1: ExoPlayer가 같은 곡
-                    mc.currentMediaItem?.mediaId == currentVideoId ||
-                    // 조건 2: prefs에 같은 곡이고 재생 상태
-                    (prefVideoId == currentVideoId && isPlayingState) ||
-                    // 조건 3: 재생 중인 아이템 있음
-                    (isMediaItemCountOk && (mc.isPlaying || mc.playWhenReady)) ||
-                    // ★ 조건 4: prefs에 같은 곡이고 ExoPlayer 큐에 아이템 있으면 skip
-                    (prefVideoId == currentVideoId && isMediaItemCountOk) ||
-                    // ★ 조건 5: prefs에 같은 곡이고 IDLE이면 곧 재생됨 → skip
-                    (prefVideoId == currentVideoId && mcState == Player.STATE_IDLE && isMediaItemCountOk)
-                )
+                // ★ 단순화: mc의 현재 아이템이 같거나, prefs와 같고 재생 상태면 skip
+                val isSameTrack = mc?.currentMediaItem?.mediaId == currentVideoId
+                val isPrefSameAndReady = prefVideoId == currentVideoId && isPlayingState
+
+                val alreadyPlaying = mc != null && (isSameTrack || isPrefSameAndReady)
 
                 diag("onCreate check: mcState=$mcState prefVideoId=$prefVideoId " +
                      "mcMediaId=${mc?.currentMediaItem?.mediaId} currentVideoId=$currentVideoId " +
@@ -362,6 +365,12 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun prefetchNext() {
+        // ★ 서비스 정지 상태면 prefetch 금지
+        if (pref?.getBoolean("service_stopped", false) == true) {
+            diag("prefetch: service_stopped=true → skip")
+            return
+        }
+
         prefetchJob?.cancel()
         prefetchJob = bgScope.launch {
             try {
@@ -1582,6 +1591,14 @@ class AudioPlayerActivity : AppCompatActivity() {
         super.onResume()
         audioLiveActive = false
         updateAudioLiveSubButton()
+
+        // ★ 서비스가 정지된 상태면 재생 방지
+        if (pref?.getBoolean("service_stopped", false) == true) {
+            diag("onResume: service_stopped=true → 재생 방지")
+            finish()
+            return
+        }
+
         diag("onResume: 재생 상태 유지 (video 트랙 건드리지 않음)")
     }
 
@@ -2075,11 +2092,16 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         try {
             val bgEnabled = pref?.getBoolean("keep_bg_playback", true) ?: true
+            val serviceStopped = pref?.getBoolean("service_stopped", false) ?: false
             val isPlaying = mediaController?.isPlaying == true
             val playWhenReady = mediaController?.playWhenReady == true
 
-            // ★ 백그라운드 재생 ON이면 무조건 release 안 함
-            if (bgEnabled) {
+            // ★ 서비스 정지 상태면 MediaController도 release
+            if (serviceStopped) {
+                diag("onDestroy: service_stopped=true → MediaController release")
+                releaseWakeLock()
+                MediaController.releaseFuture(controllerFuture)
+            } else if (bgEnabled) {
                 diag("onDestroy: 백그라운드 ON → MediaController 유지 (isPlaying=$isPlaying, playWhenReady=$playWhenReady)")
                 try { acquireWakeLock() } catch (_: Exception) {}
             } else {
