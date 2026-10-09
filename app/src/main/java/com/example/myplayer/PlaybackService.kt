@@ -50,13 +50,7 @@ class PlaybackService : MediaSessionService() {
             if (playbackState == Player.STATE_ENDED) {
                 val p = exoPlayer
 
-                // ★ service_stopped면 아무 것도 안 함
-                val stopped = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
-                    .getBoolean("service_stopped", false)
-                if (stopped) {
-                    Log.d("PlaybackService", "STATE_ENDED but service_stopped → skip")
-                    return
-                }
+                // (완화됨) service_stopped 체크 제거 → 다음곡 자동 재생 허용
 
                 if (p != null && p.mediaItemCount > 1) {
                     Log.d("PlaybackService",
@@ -85,13 +79,15 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        // ★ 완전 종료 플래그 확인 (서비스 재생성 방지)
+        // ★ 완전 종료 플래그 감지 → 해제하고 계속 (로딩 저하 방지)
         val stopFlag = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
             .getBoolean("service_stopped", false)
         if (stopFlag) {
-            Log.d("PlaybackService", "service_stopped=true → 서비스 즉시 종료")
-            stopSelf()
-            return
+            Log.d("PlaybackService", "service_stopped=true 감지 → 플래그 해제 후 계속")
+            getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("service_stopped", false)
+                .apply()
         }
 
         val audioAttributes = AudioAttributes.Builder()
@@ -689,14 +685,14 @@ class StopServiceReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
         Log.d("StopServiceReceiver", "action=${intent.action}")
         try {
-            // 1. 완전 종료 플래그 (서비스 재생성 방지)
+            // 1. 완전 종료 플래그 (keep_bg_playback은 유지)
             try {
                 context.getSharedPreferences("audio_prefs", android.content.Context.MODE_PRIVATE)
                     .edit()
                     .putBoolean("service_stopped", true)
                     .putString("current_video_id", "")
                     .putBoolean("auto_next", false)
-                    .putBoolean("keep_bg_playback", false)
+                    // ★ keep_bg_playback은 사용자 설정이므로 건드리지 않음
                     .apply()
             } catch (_: Exception) {}
 

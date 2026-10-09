@@ -123,15 +123,12 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         pref = getSharedPreferences("audio_prefs", MODE_PRIVATE)
 
-        // ★ 서비스가 명시적으로 정지된 상태면 Activity도 즉시 종료
-        if (pref?.getBoolean("service_stopped", false) == true) {
-            android.util.Log.d("AudioPlayer", "onCreate: service_stopped=true → 즉시 종료")
-            finish()
-            return
+        // ★ 이전 종료 상태 감지 → 플래그 해제 후 계속 진행
+        val wasStopped = pref?.getBoolean("service_stopped", false) == true
+        if (wasStopped) {
+            android.util.Log.d("AudioPlayer", "onCreate: 이전 service_stopped=true → 해제")
+            pref?.edit()?.putBoolean("service_stopped", false)?.apply()
         }
-
-        // ★ Activity가 다시 열렸으면 정지 플래그 해제
-        pref?.edit()?.putBoolean("service_stopped", false)?.apply()
 
         try {
             val keepOn = pref?.getBoolean("keep_screen_on_audio", true) ?: true
@@ -1600,11 +1597,10 @@ class AudioPlayerActivity : AppCompatActivity() {
         audioLiveActive = false
         updateAudioLiveSubButton()
 
-        // ★ 서비스가 정지된 상태면 재생 방지
+        // ★ 서비스 정지 상태 감지 → 플래그 해제
         if (pref?.getBoolean("service_stopped", false) == true) {
-            diag("onResume: service_stopped=true → 재생 방지")
-            finish()
-            return
+            diag("onResume: service_stopped=true → 해제")
+            pref?.edit()?.putBoolean("service_stopped", false)?.apply()
         }
 
         diag("onResume: 재생 상태 유지 (video 트랙 건드리지 않음)")
