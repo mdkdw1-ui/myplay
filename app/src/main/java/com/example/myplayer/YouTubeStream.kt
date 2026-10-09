@@ -96,207 +96,197 @@ object YouTubeStream {
     }
 
     suspend fun extract(videoId: String): StreamResult = withContext(Dispatchers.IO) {
-        // ★ 캐시 확인 (5분 내 재생 이력)
+        // ★ 캐시 확인
         getCached(videoId)?.let {
             android.util.Log.d(TAG, "cache hit: $videoId")
             return@withContext it
         }
 
         val sb = StringBuilder()
+        sb.append("parallel extract\n")
 
-        // ★ 1차: Invidious/Piped 직접
-        // ★ video 트랙이 있으면 즉시 반환, 없으면 NewPipe 폴백 시도
-        var fallbackAudio: String? = null
-        var fallbackDebug = ""
-        try {
-            val direct = YouTubeApiHelper.extractStream(videoId)
-            val hasVideo = direct.muxedUrl != null || direct.videoUrl != null
-            sb.append("direct src=${direct.source} ")
-            sb.append("a=${direct.audioUrl != null} ")
-            sb.append("v=${direct.videoUrl != null} ")
-            sb.append("m=${direct.muxedUrl != null}\n")
-
-            // ★ 오디오 모드: audio만 있으면 즉시 반환 (NewPipe 시도 X)
-            if (direct.audioUrl != null && !hasVideo) {
-                sb.append("→ audio-only 즉시 반환 (video 없어도 OK)\n")
-                val __result = StreamResult(
-                    videoUrl = null,
-                    audioUrl = direct.audioUrl,
-                    muxedUrl = null,
-                    title = direct.title,
-                    channelName = direct.channel,
-                    description = "",
-                    debug = sb.toString(),
-                    audioUrlBest = direct.audioUrl
-                )
-                putCache(videoId, __result)
-                return@withContext __result
+        val result = kotlinx.coroutines.coroutineScope {
+            val invDeferred = kotlinx.coroutines.async(Dispatchers.IO) {
+                try {
+                    kotlinx.coroutines.withTimeoutOrNull(4000) { tryInvidious(videoId, sb) }
+                } catch (e: Exception) { null }
+            }
+            val pipedDeferred = kotlinx.coroutines.async(Dispatchers.IO) {
+                try {
+                    kotlinx.coroutines.withTimeoutOrNull(4000) { tryPiped(videoId, sb) }
+                } catch (e: Exception) { null }
+            }
+            val npDeferred = kotlinx.coroutines.async(Dispatchers.IO) {
+                try {
+                    kotlinx.coroutines.withTimeoutOrNull(6000) { tryNewPipe(videoId, sb) }
+                } catch (e: Exception) { null }
             }
 
-            if (hasVideo) {
-                // video 있음 → 즉시 반환
-                val __result = StreamResult(
-                    videoUrl = direct.videoUrl,
-                    audioUrl = direct.audioUrl,
-                    muxedUrl = direct.muxedUrl,
-                    title = direct.title,
-                    channelName = direct.channel,
-                    description = "",
-                    debug = sb.toString(),
-                    audioUrlBest = direct.audioUrl
-                )
-                putCache(videoId, __result)
-                return@withContext __result
-            }
+            // 가장 먼저 video 포함 결과 대기
+            val inv = invDeferred.await()
+            val piped = pipedDeferred.await()
+            val np = npDeferred.await()
 
-            // ★ video 없고 audio만 있으면 저장해두고 NewPipe 시도
-            if (direct.audioUrl != null) {
-                fallbackAudio = direct.audioUrl
-                fallbackDebug = "direct(audio only): ${direct.source}\n"
-                sb.append("→ video 없음, NewPipe 폴백 시도\n")
-            } else {
-                sb.append("direct fail (no streams)\n")
-            }
-        } catch (e: Exception) {
-            sb.append("direct err: ${e.message?.take(60)}\n")
+            val list = listOfNotNull(inv, piped, np)
+            list.firstOrNull { it.muxedUrl != null || it.videoUrl != null }
+                ?: list.firstOrNull { it.audioUrl != null || it.audioUrlBest != null }
         }
 
-        // ★ 2차: NewPipe (폴백)
-        try {
-            val ctx = MyApp.instance.applicationContext
-            val hasCookie = YouTubeCookieManager.hasCookie(ctx)
-            val cookieLen = YouTubeCookieManager.load(ctx).length
-            sb.append("cookie: has=$hasCookie len=$cookieLen\n")
+        if (result != null && result.hasAny) {
+            putCache(videoId, result)
+            return@withContext result
+        }
+
+        sb.append("모든 소스 실패\n")
+        StreamResult(null, null, null, "", "", "", sb.toString())
+    }
+
+    private suspend fun tryInvidious(videoId: String, sb: StringBuilder): StreamResult? {
+        for (inst in INVIDIOUS.take(3)) {
             try {
-                val ck = YouTubeCookieManager.load(ctx)
-                val names = ck.split("; ").map { it.substringBefore("=") }.joinToString(",")
-                sb.append("cookie names: $names\n")
+                val conn = java.net.URL("$inst/api/v1/videos/$videoId").openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 2000
+                conn.readTimeout = 3000
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                if (conn.responseCode !in 200..299) continue
+                val json = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                if (json.optBoolean("liveNow", false)) continue
+
+                val title = json.optString("title", "")
+                val author = json.optString("author", "")
+                var audioUrl: String? = null
+                var audioBitrate = 0
+                var videoUrl: String? = null
+                var videoHeight = 0
+                var muxed: String? = null
+                var bestMuxedH = 0
+
+                json.optJSONArray("adaptiveFormats")?.let { formats ->
+                    for (i in 0 until formats.length()) {
+                        val f = formats.getJSONObject(i)
+                        val type = f.optString("type", f.optString("encoding", ""))
+                        val u = f.optString("url", "")
+                        if (u.isBlank()) continue
+                        val t = type.lowercase()
+                        if (t.startsWith("audio/") || t.contains("audio")) {
+                            val br = f.optInt("bitrate", f.optInt("bitrateAvg", 0))
+                            if (br > audioBitrate) { audioBitrate = br; audioUrl = u }
+                        } else if (t.startsWith("video/") || t.contains("video") || t.contains("mp4")) {
+                            val itag = f.optString("itag", "").toIntOrNull() ?: 0
+                            val h = f.optInt("height", 0).takeIf { it > 0 }
+                                ?: f.optInt("resolution", 0).takeIf { it > 0 }
+                                ?: itagToHeight(itag)
+                            if (h > videoHeight) { videoHeight = h; videoUrl = u }
+                        }
+                    }
+                }
+
+                json.optJSONArray("formatStreams")?.let { fs ->
+                    for (i in 0 until fs.length()) {
+                        val f = fs.getJSONObject(i)
+                        val u = f.optString("url", "")
+                        if (u.isBlank()) continue
+                        val itag = f.optString("itag", "").toIntOrNull() ?: 0
+                        val h = f.optInt("height", 0).takeIf { it > 0 } ?: itagToHeight(itag)
+                        if (h >= bestMuxedH) { bestMuxedH = h; muxed = u }
+                    }
+                }
+
+                if (audioUrl != null || videoUrl != null || muxed != null) {
+                    sb.append("inv OK: a=${audioUrl != null} v=${videoUrl != null} m=${muxed != null}\n")
+                    return StreamResult(
+                        videoUrl = videoUrl, audioUrl = audioUrl, muxedUrl = muxed,
+                        title = title, channelName = author, description = "",
+                        debug = sb.toString(), audioUrlBest = audioUrl
+                    )
+                }
             } catch (_: Exception) {}
-        } catch (_: Exception) {}
+        }
+        return null
+    }
 
-        try {
-            try { NewPipe.init(DownloaderImpl()) } catch (_: Exception) {}
-
-            val url = "https://www.youtube.com/watch?v=$videoId"
-            var info: StreamInfo? = null
-            var lastErr: Exception? = null
-            // ★ 첫 로딩 속도: 재시도 1회만
+    private suspend fun tryPiped(videoId: String, sb: StringBuilder): StreamResult? {
+        for (inst in PIPED.take(2)) {
             try {
-                info = StreamInfo.getInfo(ServiceList.YouTube, url)
+                val conn = java.net.URL("$inst/streams/$videoId").openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 2000
+                conn.readTimeout = 3000
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                if (conn.responseCode !in 200..299) continue
+                val json = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+
+                val title = json.optString("title", "")
+                val author = json.optString("uploader", "")
+                var audioUrl: String? = null
+                var audioBitrate = 0
+                var videoUrl: String? = null
+                var videoHeight = 0
+                var muxed: String? = null
+                var bestMuxedH = 0
+
+                json.optJSONArray("audioStreams")?.let { aStreams ->
+                    for (i in 0 until aStreams.length()) {
+                        val f = aStreams.getJSONObject(i)
+                        val br = f.optInt("bitrate", 0)
+                        val u = f.optString("url", "")
+                        if (u.isNotBlank() && br > audioBitrate) { audioBitrate = br; audioUrl = u }
+                    }
+                }
+
+                json.optJSONArray("videoStreams")?.let { vStreams ->
+                    for (i in 0 until vStreams.length()) {
+                        val f = vStreams.getJSONObject(i)
+                        val h = f.optInt("height", 0)
+                        val u = f.optString("url", "")
+                        val onlyVideo = f.optBoolean("videoOnly", false)
+                        if (u.isBlank()) continue
+                        if (!onlyVideo && h >= bestMuxedH) { bestMuxedH = h; muxed = u }
+                        if (h > videoHeight) { videoHeight = h; videoUrl = u }
+                    }
+                }
+
+                if (audioUrl != null || videoUrl != null || muxed != null) {
+                    sb.append("piped OK: a=${audioUrl != null} v=${videoUrl != null} m=${muxed != null}\n")
+                    return StreamResult(
+                        videoUrl = videoUrl, audioUrl = audioUrl, muxedUrl = muxed,
+                        title = title, channelName = author, description = "",
+                        debug = sb.toString(), audioUrlBest = audioUrl
+                    )
+                }
+            } catch (_: Exception) {}
+        }
+        return null
+    }
+
+    private suspend fun tryNewPipe(videoId: String, sb: StringBuilder): StreamResult? {
+        return try {
+            try { NewPipe.init(DownloaderImpl()) } catch (_: Exception) {}
+            val url = "https://www.youtube.com/watch?v=$videoId"
+            val info = try {
+                StreamInfo.getInfo(ServiceList.YouTube, url)
             } catch (e: Exception) {
-                lastErr = e
-                sb.append("newpipe try FAIL: ${e.message?.take(60)}\n")
+                sb.append("np err: ${e.message?.take(50)}\n")
+                return null
             }
-
-            if (info == null) {
-                sb.append("newpipe FAIL final\n")
-                return@withContext StreamResult(null, null, null, "", "", "", sb.toString())
-            }
-
             val title = info.name ?: ""
             val channelName = try { info.uploaderName ?: "" } catch (_: Exception) { "" }
             val description = try { info.description?.content ?: "" } catch (_: Exception) { "" }
-
-            // ★ 진단: 스트림 개수
-            sb.append("np: videos=${info.videoStreams.size} audios=${info.audioStreams.size}\n")
-            for (v in info.videoStreams) {
-                sb.append("  v itag=${v.itagItem?.id} res=${v.resolution} ")
-                sb.append("only=${v.isVideoOnly} isUrl=${v.isUrl}\n")
-            }
-            for (a in info.audioStreams) {
-                sb.append("  a itag=${a.itagItem?.id} br=${a.averageBitrate} ")
-                sb.append("isUrl=${a.isUrl}\n")
-            }
-
             val bestAudio = try {
                 info.audioStreams.filter { it.isUrl }.maxByOrNull { it.averageBitrate }?.content
             } catch (_: Exception) { null }
             val muxed = info.videoStreams.firstOrNull { !it.isVideoOnly && it.isUrl }
-            // ★ video-only 폴백 (muxed 없을 때)
-            val videoOnly = try {
-                info.videoStreams.filter { it.isUrl }.maxByOrNull {
-                    (it.resolution?.replace("p", "")?.toIntOrNull() ?: 0)
-                }
-            } catch (_: Exception) { null }
-
-            val qualities = mutableListOf<VideoQuality>()
-            try {
-                for (stream in info.videoStreams) {
-                    if (!stream.isUrl) continue
-                    val height = try { stream.resolution } catch (_: Exception) { "" }
-                    val h = height.replace("p", "").toIntOrNull() ?: continue
-                    if (h < 144) continue
-                    qualities.add(VideoQuality("${h}p", h, stream.content, stream.isVideoOnly))
-                }
-            } catch (_: Exception) {}
-
-            val subs = mutableListOf<SubtitleTrack>()
-            try {
-                info.subtitles?.forEach { s ->
-                    val lang = s.languageTag ?: return@forEach
-                    val display = s.displayLanguageName ?: lang
-                    val u = s.content ?: return@forEach
-                    val auto = try { s.isAutoGenerated } catch (_: Exception) { false }
-                    subs.add(SubtitleTrack(lang, display, u, auto))
-                }
-            } catch (_: Exception) {}
-
             if (muxed != null) {
-                sb.append("→ muxed 반환\n")
-                val __result = StreamResult(
-                    videoUrl = null,
-                    audioUrl = null,
-                    muxedUrl = muxed.content,
-                    title = title, channelName = channelName,
-                    description = description, debug = sb.toString(),
-                    subtitles = subs, qualities = qualities,
-                    audioUrlBest = bestAudio
-                )
-                putCache(videoId, __result)
-                return@withContext __result
+                sb.append("np OK: muxed\n")
+                return StreamResult(null, null, muxed.content, title, channelName, description, sb.toString(), audioUrlBest = bestAudio)
             }
-            // ★ muxed 없으면 video-only + audio 조합
-            if (videoOnly != null) {
-                sb.append("→ video-only 반환 (오디오 병합 필요)\n")
-                val __result = StreamResult(
-                    videoUrl = videoOnly.content,
-                    audioUrl = bestAudio,
-                    muxedUrl = null,
-                    title = title, channelName = channelName,
-                    description = description, debug = sb.toString(),
-                    subtitles = subs, qualities = qualities,
-                    audioUrlBest = bestAudio
-                )
-                putCache(videoId, __result)
-                return@withContext __result
+            val videoOnly = info.videoStreams.filter { it.isUrl }.maxByOrNull {
+                (it.resolution?.replace("p", "")?.toIntOrNull() ?: 0)
             }
-            val audio = try {
-                info.audioStreams.filter { it.isUrl }.maxByOrNull { it.averageBitrate }
-            } catch (_: Exception) { null }
-            if (audio != null) {
-                return@withContext StreamResult(
-                    null, audio.content, null, title, channelName, description,
-                    sb.toString(), subs, qualities, bestAudio
-                )
+            if (videoOnly != null && bestAudio != null) {
+                sb.append("np OK: video+audio\n")
+                return StreamResult(videoOnly.content, bestAudio, null, title, channelName, description, sb.toString(), audioUrlBest = bestAudio)
             }
-        } catch (e: Exception) {
-            sb.append("newpipe outer err: ${e.message?.take(60)}\n")
-        }
-
-        // ★ NewPipe도 실패 → fallbackAudio가 있으면 오디오만이라도 반환
-        if (fallbackAudio != null) {
-            sb.append("→ NewPipe 실패, fallback: 오디오만 반환\n")
-            return@withContext StreamResult(
-                videoUrl = null,
-                audioUrl = fallbackAudio,
-                muxedUrl = null,
-                title = "",
-                channelName = "",
-                description = "",
-                debug = sb.toString() + fallbackDebug,
-                audioUrlBest = fallbackAudio
-            )
-        }
-        StreamResult(null, null, null, "", "", "", sb.toString())
+            null
+        } catch (e: Exception) { null }
     }
 }
