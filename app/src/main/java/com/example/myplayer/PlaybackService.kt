@@ -118,7 +118,8 @@ class PlaybackService : MediaSessionService() {
 
         mediaSession = MediaSession.Builder(this, player)
             .setSessionActivity(sessionActivity)
-            .setNotificationProvider(CustomNotificationProvider())
+
+
             .setCallback(object : MediaSession.Callback {
                 override fun onPostConnect(
                     session: MediaSession,
@@ -566,70 +567,17 @@ class PlaybackService : MediaSessionService() {
     }
 
 
-    private inner class CustomNotificationProvider : androidx.media3.session.MediaNotification.Provider {
 
-        override fun createNotification(
-            mediaSession: MediaSession,
-            customLayout: com.google.common.collect.ImmutableList<androidx.media3.session.CommandButton>,
-            actionFactory: androidx.media3.session.MediaNotification.ActionFactory,
-            onNotificationChangedCallback: androidx.media3.session.MediaNotification.Provider.Callback
-        ): androidx.media3.session.MediaNotification {
-            val channelId = "playback_channel"
-
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-                if (nm.getNotificationChannel(channelId) == null) {
-                    val ch = android.app.NotificationChannel(
-                        channelId, "재생 중", android.app.NotificationManager.IMPORTANCE_LOW
-                    ).apply {
-                        setShowBadge(false)
-                        enableVibration(false)
-                        enableLights(false)
-                    }
-                    nm.createNotificationChannel(ch)
-                }
-            }
-
-            val player = mediaSession.player
-            val title = player.mediaMetadata.title?.toString() ?: "MyPlayer"
-            val artist = player.mediaMetadata.artist?.toString() ?: "백그라운드 재생 중"
-            val isPlaying = player.isPlaying
-
-            val contentIntent = PendingIntent.getActivity(
-                this@PlaybackService, 0,
-                Intent(this@PlaybackService, AudioPlayerActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                },
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-
-            val deleteIntent = PendingIntent.getBroadcast(
-                this@PlaybackService, 100,
-                Intent(this@PlaybackService, StopServiceReceiver::class.java).apply {
-                    action = "STOP_SERVICE_FROM_NOTIFICATION"
-                },
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-
-            val builder = androidx.core.app.NotificationCompat.Builder(this@PlaybackService, channelId)
-                .setContentTitle(title)
-                .setContentText(artist)
-                .setSmallIcon(android.R.drawable.ic_media_play)
-                .setContentIntent(contentIntent)
-                .setDeleteIntent(deleteIntent)
-                .setOngoing(isPlaying)
-                .setSilent(true)
-                .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
-
-            val notification = builder.build()
-            return androidx.media3.session.MediaNotification(1001, notification)
+    /** ★ Media3 자동 알림 억제 → 커스텀 알림 */
+    override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+        // ★ super 호출 X → Media3 자동 알림 무시
+        try {
+            val notif = buildCustomNotification()
+            startForeground(1001, notif)
+            android.util.Log.d("PlaybackService", "onUpdateNotification → 커스텀 알림")
+        } catch (e: Exception) {
+            android.util.Log.e("PlaybackService", "onUpdateNotification err: ${e.message}", e)
         }
-
-        override fun handleCustomCommand(
-            session: MediaSession,
-            action: String,
-            extras: android.os.Bundle
-        ): Boolean = false
     }
 
     override fun onGetSession(
