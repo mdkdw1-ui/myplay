@@ -691,6 +691,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                     .build()
                 runOnUiThread {
                     mediaController?.setMediaItem(mediaItem)
+                    mediaController?.seekTo(0)   // ★ 새 곡은 처음부터
                     mediaController?.prepare()
                     mediaController?.playWhenReady = true
                     try {
