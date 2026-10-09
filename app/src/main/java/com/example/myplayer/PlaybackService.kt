@@ -570,6 +570,12 @@ class PlaybackService : MediaSessionService() {
 
     /** ★ Media3 자동 알림 억제 → 커스텀 알림 */
     override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+        android.util.Log.e("PlaybackService", "🔥 onUpdateNotification 호출됨!")
+        try {
+            java.io.File(filesDir, "notif_debug.log").appendText(
+                "[${System.currentTimeMillis()}] onUpdateNotification 호출\n"
+            )
+        } catch (_: Exception) {}
         // ★ super 호출 X → Media3 자동 알림 무시
         try {
             val notif = buildCustomNotification()
