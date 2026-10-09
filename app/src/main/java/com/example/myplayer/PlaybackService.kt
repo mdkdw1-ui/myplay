@@ -132,19 +132,10 @@ class PlaybackService : MediaSessionService() {
         // ★ 알림에서 중단 버튼 → 완전 정지
         player.addListener(object : Player.Listener {
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-                // 사용자가 중단(pause)했고, 앱이 백그라운드면 → 서비스 정지
-                if (!playWhenReady &&
-                    reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) {
-                    android.util.Log.d("PlaybackService", "사용자 중단 요청 → 정지")
-                    try {
-                        player.stop()
-                        player.clearMediaItems()
-                        stopForeground(true)
-                        stopSelf()
-                    } catch (e: Exception) {
-                        android.util.Log.e("PlaybackService", "stop err", e)
-                    }
-                }
+                // ★ pause는 pause일 뿐 → stop 트리거 X
+                //   (완전 정지는 알림 스와이프 or 앱 스와이프로만)
+                android.util.Log.d("PlaybackService",
+                    "onPlayWhenReadyChanged: playWhenReady=$playWhenReady reason=$reason")
             }
         })
 
