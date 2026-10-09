@@ -475,11 +475,16 @@ class PlaybackService : MediaSessionService() {
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(contentIntent)
             .setDeleteIntent(deleteIntent)
-            // ★ ongoing=false → 스와이프 가능
             .setOngoing(false)
             .setAutoCancel(false)
             .setSilent(true)
             .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+            // ★ 미디어 스타일 (아이콘 표시용)
+            .setStyle(
+                androidx.media.app.NotificationCompat.MediaStyle()
+                    .setShowActionsInCompactView(0, 1, 2)
+            )
 
         builder.addAction(
             android.R.drawable.ic_media_previous, "이전", prevIntent
