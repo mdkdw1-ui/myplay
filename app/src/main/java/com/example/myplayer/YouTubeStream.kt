@@ -152,11 +152,20 @@ object YouTubeStream {
     }
 
     private suspend fun tryInvidious(videoId: String, sb: StringBuilder): StreamResult? {
-        for (inst in YouTubeApiHelper.INVIDIOUS.take(3)) {
+        // ★ 성공한 서버 우선 (SharedPreferences)
+        val prefs = MyApp.instance.getSharedPreferences("server_priority", android.content.Context.MODE_PRIVATE)
+        val topServer = prefs.getString("invidious_top", null)
+        val servers = mutableListOf<String>()
+        if (topServer != null && topServer in YouTubeApiHelper.INVIDIOUS) {
+            servers.add(topServer)
+        }
+        servers.addAll(YouTubeApiHelper.INVIDIOUS.filter { it != topServer }.take(4))
+
+        for (inst in servers) {
             try {
                 val conn = java.net.URL("$inst/api/v1/videos/$videoId").openConnection() as java.net.HttpURLConnection
-                conn.connectTimeout = 2000
-                conn.readTimeout = 3000
+                conn.connectTimeout = 4000
+                conn.readTimeout = 8000
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0")
                 if (conn.responseCode !in 200..299) continue
                 val json = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
@@ -204,7 +213,12 @@ object YouTubeStream {
                 }
 
                 if (audioUrl != null || videoUrl != null || muxed != null) {
-                    sb.append("inv OK: a=${audioUrl != null} v=${videoUrl != null} m=${muxed != null}\n")
+                    // ★ 성공한 서버 저장
+                    try {
+                        MyApp.instance.getSharedPreferences("server_priority", android.content.Context.MODE_PRIVATE)
+                            .edit().putString("invidious_top", inst).apply()
+                    } catch (_: Exception) {}
+                    sb.append("inv OK($inst): a=${audioUrl != null} v=${videoUrl != null} m=${muxed != null}\n")
                     return StreamResult(
                         videoUrl = videoUrl, audioUrl = audioUrl, muxedUrl = muxed,
                         title = title, channelName = author, description = "",
@@ -217,11 +231,20 @@ object YouTubeStream {
     }
 
     private suspend fun tryPiped(videoId: String, sb: StringBuilder): StreamResult? {
-        for (inst in YouTubeApiHelper.PIPED.take(2)) {
+        // ★ 성공한 Piped 우선
+        val prefs = MyApp.instance.getSharedPreferences("server_priority", android.content.Context.MODE_PRIVATE)
+        val topServer = prefs.getString("piped_top", null)
+        val servers = mutableListOf<String>()
+        if (topServer != null && topServer in YouTubeApiHelper.PIPED) {
+            servers.add(topServer)
+        }
+        servers.addAll(YouTubeApiHelper.PIPED.filter { it != topServer }.take(3))
+
+        for (inst in servers) {
             try {
                 val conn = java.net.URL("$inst/streams/$videoId").openConnection() as java.net.HttpURLConnection
-                conn.connectTimeout = 2000
-                conn.readTimeout = 3000
+                conn.connectTimeout = 4000
+                conn.readTimeout = 8000
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0")
                 if (conn.responseCode !in 200..299) continue
                 val json = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
@@ -257,7 +280,12 @@ object YouTubeStream {
                 }
 
                 if (audioUrl != null || videoUrl != null || muxed != null) {
-                    sb.append("piped OK: a=${audioUrl != null} v=${videoUrl != null} m=${muxed != null}\n")
+                    // ★ 성공한 서버 저장
+                    try {
+                        MyApp.instance.getSharedPreferences("server_priority", android.content.Context.MODE_PRIVATE)
+                            .edit().putString("piped_top", inst).apply()
+                    } catch (_: Exception) {}
+                    sb.append("piped OK($inst): a=${audioUrl != null} v=${videoUrl != null} m=${muxed != null}\n")
                     return StreamResult(
                         videoUrl = videoUrl, audioUrl = audioUrl, muxedUrl = muxed,
                         title = title, channelName = author, description = "",
