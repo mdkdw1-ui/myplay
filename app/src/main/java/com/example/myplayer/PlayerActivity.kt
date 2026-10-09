@@ -224,6 +224,7 @@ class PlayerActivity : AppCompatActivity() {
         swAutoNext = findViewById(R.id.swAutoNext)
 
         autoNextEnabled = pref.getBoolean("auto_next", false)
+        vdiag("autoNext 초기화: enabled=$autoNextEnabled pref_name=subtitle_prefs")
         swAutoNext.isChecked = autoNextEnabled
         swAutoNext.setOnCheckedChangeListener { _, checked ->
             autoNextEnabled = checked
@@ -489,7 +490,12 @@ class PlayerActivity : AppCompatActivity() {
 
     // ========== ▶ 자동 다음 동영상 ==========
     private fun onVideoEnded() {
-        if (!autoNextEnabled) return
+        vdiag("onVideoEnded: autoNextEnabled=$autoNextEnabled")
+        if (!autoNextEnabled) {
+            vdiag("onVideoEnded: autoNext=false → return")
+            return
+        }
+        vdiag("onVideoEnded: autoNext=true → 카운트다운 시작")
         // 카운트다운 시작
         cancelAutoNext()
         autoNextOverlay.visibility = View.VISIBLE
@@ -527,10 +533,24 @@ class PlayerActivity : AppCompatActivity() {
         return true
     }
 
+    // ★ 최근 재생 곡 히스토리 (반복 방지)
+    private val recentVideoIds = ArrayDeque<String>()
+
+    private fun addRecent(videoId: String) {
+        recentVideoIds.remove(videoId)
+        recentVideoIds.addFirst(videoId)
+        while (recentVideoIds.size > 10) recentVideoIds.removeLast()
+    }
+
+    private fun isRecent(videoId: String): Boolean = videoId in recentVideoIds
+
     private fun playNextRelated() {
+        addRecent(currentVideoId)
+
         // ★ 큐에 다음 영상이 있으면 큐 우선
         val queue = QueueManager.get(this)
-        val nextInQueue = queue.firstOrNull { it.videoId != currentVideoId }
+        val nextInQueue = queue.firstOrNull { it.videoId != currentVideoId && !isRecent(it.videoId) }
+            ?: queue.firstOrNull { it.videoId != currentVideoId }
         if (nextInQueue != null) {
             QueueManager.remove(this, nextInQueue.videoId)
             currentVideoId = nextInQueue.videoId
