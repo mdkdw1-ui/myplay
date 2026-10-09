@@ -186,7 +186,8 @@ object YouTubeStream {
                             val h = f.optInt("height", 0).takeIf { it > 0 }
                                 ?: f.optInt("resolution", 0).takeIf { it > 0 }
                                 ?: YouTubeApiHelper.itagToHeight(itag)
-                            if (h > videoHeight) { videoHeight = h; videoUrl = u }
+                            // ★ 720p 이하 (화질/안정성 균형)
+                            if (h in 144..720 && h > videoHeight) { videoHeight = h; videoUrl = u }
                         }
                     }
                 }
