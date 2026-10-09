@@ -412,6 +412,55 @@ class PlaybackService : MediaSessionService() {
             .apply()
     }
 
+    /** ★ 커스텀 알림 (스와이프 시 서비스 정지) */
+    override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+        super.onUpdateNotification(session, startInForegroundRequired)
+
+        // ★ deleteIntent 추가 — 사용자가 알림 스와이프 시 정지
+        try {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            val channelId = "playback_channel"
+            val mgr = nm.getNotificationChannel(channelId)
+            if (mgr == null) {
+                val ch = android.app.NotificationChannel(
+                    channelId, "재생 중", android.app.NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    setShowBadge(false)
+                    enableVibration(false)
+                    enableLights(false)
+                }
+                nm.createNotificationChannel(ch)
+            }
+
+            val stopIntent = Intent(this, StopServiceReceiver::class.java).apply {
+                action = "STOP_SERVICE_FROM_NOTIFICATION"
+            }
+            val deletePending = PendingIntent.getBroadcast(
+                this, 100, stopIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+
+            // ★ Media3가 만든 알림에 deleteIntent 적용
+            val notif = android.app.Notification.Builder(this, channelId)
+                .setContentTitle(session.player.mediaMetadata.title ?: "MyPlayer")
+                .setContentText(session.player.mediaMetadata.artist ?: "백그라운드 재생 중")
+                .setSmallIcon(android.R.drawable.ic_media_play)
+                .setOngoing(true)
+                .setDeleteIntent(deletePending)
+                .setStyle(
+                    androidx.media3.session.MediaNotification.Provider // 컴파일 에러 방지용
+                        ?.let { null } // no-op
+                )
+                .build()
+
+            // ★ 커스텀 알림으로 덮어쓰기
+            nm.notify(1001, notif)
+            android.util.Log.d("PlaybackService", "커스텀 알림 적용 (deleteIntent)")
+        } catch (e: Exception) {
+            android.util.Log.e("PlaybackService", "onUpdateNotification err: ${e.message}", e)
+        }
+    }
+
     override fun onGetSession(
         controllerInfo: MediaSession.ControllerInfo
     ): MediaSession? = mediaSession
