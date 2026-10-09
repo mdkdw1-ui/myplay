@@ -86,6 +86,7 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="STOP_SERVICE_FROM_NOTIFICATION" />
+                <action android:name="ACTION_STOP" />
             </intent-filter>
         </receiver>
     </application>

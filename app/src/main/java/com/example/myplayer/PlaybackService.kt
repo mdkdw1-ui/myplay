@@ -31,7 +31,6 @@ class PlaybackService : MediaSessionService() {
     private val endListener = object : Player.Listener {
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            // ExoPlayer 자동 큐 진행 시 prefs + QueueManager 동기화
             val newId = mediaItem?.mediaId ?: return
             if (newId.startsWith("local:")) {
                 val prefs = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
@@ -51,26 +50,28 @@ class PlaybackService : MediaSessionService() {
             if (playbackState == Player.STATE_ENDED) {
                 val p = exoPlayer
 
-                // ★ 큐에 여러 곡이 있으면 ExoPlayer가 자동 진행 중이므로 skip
+                // ★ service_stopped면 아무 것도 안 함
+                val stopped = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
+                    .getBoolean("service_stopped", false)
+                if (stopped) {
+                    Log.d("PlaybackService", "STATE_ENDED but service_stopped → skip")
+                    return
+                }
+
                 if (p != null && p.mediaItemCount > 1) {
                     Log.d("PlaybackService",
                         "STATE_ENDED but mediaItemCount=${p.mediaItemCount} → skip")
                     return
                 }
-
-                // ★ 큐에 다음 곡이 남아있으면 skip
                 if (p != null && p.hasNextMediaItem()) {
                     Log.d("PlaybackService", "STATE_ENDED but hasNext → skip")
                     return
                 }
-
-                // ★ PlayerActivity 활성이면 자동 다음곡 skip
                 if (autoNextDisabled) {
                     Log.d("PlaybackService", "autoNextDisabled → skip (Activity 처리)")
                     return
                 }
 
-                // 진짜 큐 소진 → resolveNext
                 Log.d("PlaybackService", "STATE_ENDED → resolveNext")
                 serviceScope.launch {
                     val next = resolveNext()
@@ -84,21 +85,29 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
+        // ★ 완전 종료 플래그 확인 (서비스 재생성 방지)
+        val stopFlag = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
+            .getBoolean("service_stopped", false)
+        if (stopFlag) {
+            Log.d("PlaybackService", "service_stopped=true → 서비스 즉시 종료")
+            stopSelf()
+            return
+        }
+
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
 
-        // ★ 큰 파일 대응: 버퍼 대폭 증가 (5분 max)
         val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                60_000,     // minBufferMs (60초)
-                600_000,    // maxBufferMs (10분) ★
-                5_000,      // bufferForPlaybackMs
-                10_000      // bufferForPlaybackAfterRebufferMs
+                60_000,
+                600_000,
+                5_000,
+                10_000
             )
             .setPrioritizeTimeOverSizeThresholds(true)
-            .setTargetBufferBytes(200 * 1024 * 1024)   // 200MB ★
+            .setTargetBufferBytes(200 * 1024 * 1024)
             .build()
 
         val player = ExoPlayer.Builder(this)
@@ -118,8 +127,6 @@ class PlaybackService : MediaSessionService() {
 
         mediaSession = MediaSession.Builder(this, player)
             .setSessionActivity(sessionActivity)
-
-
             .setCallback(object : MediaSession.Callback {
                 override fun onPostConnect(
                     session: MediaSession,
@@ -127,24 +134,18 @@ class PlaybackService : MediaSessionService() {
                 ) {
                     // 연결 시 자동 재생 방지
                 }
-
             })
             .build()
 
-        // ★ 알림에서 중단 버튼 → 완전 정지
         player.addListener(object : Player.Listener {
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-                // ★ pause는 pause일 뿐 → stop 트리거 X
-                //   (완전 정지는 알림 스와이프 or 앱 스와이프로만)
-                android.util.Log.d("PlaybackService",
+                Log.d("PlaybackService",
                     "onPlayWhenReadyChanged: playWhenReady=$playWhenReady reason=$reason")
             }
         })
 
-        // ★ 커스텀 알림 리스너 등록
         player.addListener(notifListener)
 
-        // ★ Foreground Service 승격 (커스텀 알림)
         try {
             val pref = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
             val bgEnabled = pref.getBoolean("keep_bg_playback", true)
@@ -158,7 +159,6 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    /** 알림 생성 + startForeground */
     private fun startForegroundInternal() {
         val channelId = "playback_channel"
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -186,7 +186,7 @@ class PlaybackService : MediaSessionService() {
             .setContentText("백그라운드 재생 중")
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(pi)
-            .setOngoing(true)
+            .setOngoing(false)
             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
             .build()
 
@@ -198,9 +198,6 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    /**
-     * ★ 다음 곡 결정 — 로컬/YouTube 모두 지원
-     */
     private suspend fun resolveNext(): VideoItem? {
         if (resolvingNext) return null
         resolvingNext = true
@@ -208,19 +205,16 @@ class PlaybackService : MediaSessionService() {
             val prefs = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
             val currentVideoId = prefs.getString("current_video_id", "") ?: ""
 
-            // ===== 1) 큐 (로컬 + YouTube) =====
             val queue = QueueManager.get(this)
             val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
             if (curIdx >= 0 && curIdx < queue.size - 1) {
                 val next = queue[curIdx + 1]
-                // ★ 큐에서 제거하지 않음 (순서 유지)
                 Log.d("PlaybackService", "queue next: ${next.videoId}")
                 return VideoItem(
                     next.videoId, next.title, next.channel, next.thumbnail
                 )
             }
 
-            // ===== 2) 로컬 파일 → LocalMedia 스캔 다음 곡 =====
             if (currentVideoId.startsWith("local:")) {
                 val localId = currentVideoId.removePrefix("local:").toLongOrNull()
                 if (localId != null) {
@@ -241,7 +235,6 @@ class PlaybackService : MediaSessionService() {
                 return null
             }
 
-            // ===== 3) YouTube 관련곡 =====
             if (currentVideoId.isBlank()) return null
 
             val currentTitle = prefs.getString("current_title", "") ?: ""
@@ -250,7 +243,6 @@ class PlaybackService : MediaSessionService() {
             val sameArtist = prefs.getBoolean("same_artist_mode", false)
             val disliked = prefs.getStringSet("disliked_ids", emptySet()) ?: emptySet()
 
-            // ★ 3-소스 병렬 + 이력 폴백
             val relatedDeferred = serviceScope.async(Dispatchers.IO) {
                 try {
                     kotlinx.coroutines.withTimeoutOrNull(10_000) {
@@ -290,7 +282,6 @@ class PlaybackService : MediaSessionService() {
             }
             if (found != null) return found
 
-            // ★ artist 폴백
             if (currentArtist.isNotBlank()) {
                 val artistSongs = try {
                     kotlinx.coroutines.withTimeoutOrNull(8_000) {
@@ -302,7 +293,6 @@ class PlaybackService : MediaSessionService() {
                 }?.let { return it }
             }
 
-            // ★ 이력 폴백 (마지막 수단)
             try {
                 val history = HistoryDatabase.get(this@PlaybackService)
                     .historyDao().getAll().first()
@@ -327,13 +317,9 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    /**
-     * ★ 다음 곡 재생 — 로컬/YouTube 모두
-     */
     private suspend fun playNext(item: VideoItem) {
         val player = exoPlayer ?: return
         try {
-            // ===== 로컬 파일 =====
             if (item.videoId.startsWith("local:")) {
                 val localId = item.videoId.removePrefix("local:").toLongOrNull() ?: return
                 val isQ = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
@@ -364,7 +350,6 @@ class PlaybackService : MediaSessionService() {
                 return
             }
 
-            // ===== YouTube =====
             val result = YouTubeStream.extract(item.videoId)
             val url = result.audioUrlBest
                 ?: result.audioUrl
@@ -417,15 +402,9 @@ class PlaybackService : MediaSessionService() {
             .apply()
     }
 
-
-    // ═══════════════════════════════════════════════════════════════
-    // ★ 커스텀 알림 (Media3 자동 알림 무시)
-    // ═══════════════════════════════════════════════════════════════
-
     private fun buildCustomNotification(): android.app.Notification {
         val channelId = "playback_channel"
 
-        // 채널 생성
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             if (nm.getNotificationChannel(channelId) == null) {
@@ -445,7 +424,6 @@ class PlaybackService : MediaSessionService() {
         val artist = player?.mediaMetadata?.artist?.toString() ?: "백그라운드 재생 중"
         val isPlaying = player?.isPlaying == true
 
-        // ★ 알림 탭 → 앱 열기
         val contentIntent = PendingIntent.getActivity(
             this, 0,
             Intent(this, AudioPlayerActivity::class.java).apply {
@@ -454,7 +432,7 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // ★ 삭제 인텐트 (스와이프 시) → 서비스 정지
+        // ★ deleteIntent: 알림 스와이프 시 완전 종료
         val deleteIntent = PendingIntent.getBroadcast(
             this, 100,
             Intent(this, StopServiceReceiver::class.java).apply {
@@ -463,7 +441,6 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // ★ 이전 곡
         val prevIntent = PendingIntent.getBroadcast(
             this, 101,
             Intent(this, NotificationActionReceiver::class.java).apply {
@@ -472,7 +449,6 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // ★ 재생/일시정지
         val playPauseIntent = PendingIntent.getBroadcast(
             this, 102,
             Intent(this, NotificationActionReceiver::class.java).apply {
@@ -481,7 +457,6 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // ★ 다음 곡
         val nextIntent = PendingIntent.getBroadcast(
             this, 103,
             Intent(this, NotificationActionReceiver::class.java).apply {
@@ -490,11 +465,10 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // ★ 종료 버튼
         val stopIntent = PendingIntent.getBroadcast(
             this, 104,
             Intent(this, StopServiceReceiver::class.java).apply {
-                action = "ACTION_STOP"
+                action = "STOP_SERVICE_FROM_NOTIFICATION"
             },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -505,14 +479,12 @@ class PlaybackService : MediaSessionService() {
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(contentIntent)
             .setDeleteIntent(deleteIntent)
-            .setOngoing(isPlaying)
+            // ★ ongoing=false → 스와이프 가능
+            .setOngoing(false)
+            .setAutoCancel(false)
             .setSilent(true)
             .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
 
-        // 미디어 스타일 (Android 13+ 미디어 컨트롤 지원)
-
-
-        // 액션 버튼들
         builder.addAction(
             android.R.drawable.ic_media_previous, "이전", prevIntent
         )
@@ -532,25 +504,32 @@ class PlaybackService : MediaSessionService() {
         return builder.build()
     }
 
-    /** ★ 커스텀 알림으로 startForeground */
     private fun startForegroundWithCustomNotification() {
         try {
             val notif = buildCustomNotification()
             startForeground(1001, notif)
-            android.util.Log.d("PlaybackService", "startForeground 커스텀 알림 OK")
+            Log.d("PlaybackService", "startForeground 커스텀 알림 OK")
         } catch (e: Exception) {
-            android.util.Log.e("PlaybackService", "startForeground err", e)
+            Log.e("PlaybackService", "startForeground err", e)
         }
     }
 
     fun refreshNotification() {
         try {
+            // ★ service_stopped면 알림 재생성 금지
+            val stopped = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
+                .getBoolean("service_stopped", false)
+            if (stopped) {
+                Log.d("PlaybackService", "service_stopped → 알림 재생성 스킵")
+                return
+            }
+
             val notif = buildCustomNotification()
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             nm.notify(1001, notif)
-            android.util.Log.d("PlaybackService", "커스텀 알림 갱신")
+            Log.d("PlaybackService", "커스텀 알림 갱신")
         } catch (e: Exception) {
-            android.util.Log.e("PlaybackService", "알림 갱신 err", e)
+            Log.e("PlaybackService", "알림 갱신 err", e)
         }
     }
 
@@ -566,23 +545,28 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-
-
-    /** ★ Media3 자동 알림 억제 → 커스텀 알림 */
     override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
-        android.util.Log.e("PlaybackService", "🔥 onUpdateNotification 호출됨!")
+        Log.e("PlaybackService", "🔥 onUpdateNotification 호출됨!")
         try {
             java.io.File(filesDir, "notif_debug.log").appendText(
                 "[${System.currentTimeMillis()}] onUpdateNotification 호출\n"
             )
         } catch (_: Exception) {}
-        // ★ super 호출 X → Media3 자동 알림 무시
+
+        // ★ service_stopped면 알림 재생성 금지
+        val stopped = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
+            .getBoolean("service_stopped", false)
+        if (stopped) {
+            Log.d("PlaybackService", "service_stopped → onUpdateNotification 스킵")
+            return
+        }
+
         try {
             val notif = buildCustomNotification()
             startForeground(1001, notif)
-            android.util.Log.d("PlaybackService", "onUpdateNotification → 커스텀 알림")
+            Log.d("PlaybackService", "onUpdateNotification → 커스텀 알림")
         } catch (e: Exception) {
-            android.util.Log.e("PlaybackService", "onUpdateNotification err: ${e.message}", e)
+            Log.e("PlaybackService", "onUpdateNotification err: ${e.message}", e)
         }
     }
 
@@ -590,27 +574,48 @@ class PlaybackService : MediaSessionService() {
         controllerInfo: MediaSession.ControllerInfo
     ): MediaSession? = mediaSession
 
-    /** 앱 스와이프 시 재생 중이면 서비스 유지 */
     override fun onTaskRemoved(rootIntent: android.content.Intent?) {
-        // ★ 앱 스와이프 시 완전 정지 (백그라운드 재생 유지 X)
-        android.util.Log.d("PlaybackService", "onTaskRemoved → 완전 정지")
+        Log.d("PlaybackService", "onTaskRemoved → 완전 정지")
         try {
-            exoPlayer?.stop()
-            exoPlayer?.clearMediaItems()
-            exoPlayer?.release()
-            exoPlayer = null
+            // ★ 완전 종료 플래그
+            getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("service_stopped", true)
+                .putString("current_video_id", "")
+                .putBoolean("auto_next", false)
+                .apply()
+
+            QueueManager.clear(this)
+
+            try {
+                exoPlayer?.removeListener(endListener)
+                exoPlayer?.removeListener(notifListener)
+                exoPlayer?.stop()
+                exoPlayer?.clearMediaItems()
+                exoPlayer?.release()
+                exoPlayer = null
+            } catch (e: Exception) {
+                Log.e("PlaybackService", "stop err", e)
+            }
+
+            try {
+                val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                nm.cancel(1001)
+            } catch (_: Exception) {}
+
+            try { stopForeground(STOP_FOREGROUND_REMOVE) } catch (_: Exception) {}
+            stopSelf()
         } catch (e: Exception) {
-            android.util.Log.e("PlaybackService", "stop err", e)
+            Log.e("PlaybackService", "onTaskRemoved err", e)
         }
-        try { stopForeground(true) } catch (_: Exception) {}
-        stopSelf()
         super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
-        try { stopForeground(true) } catch (_: Exception) {}
+        try { stopForeground(STOP_FOREGROUND_REMOVE) } catch (_: Exception) {}
         mediaSession?.run {
             player.removeListener(endListener)
+            player.removeListener(notifListener)
             player.release()
             release()
         }
@@ -624,104 +629,111 @@ class PlaybackService : MediaSessionService() {
         var exoPlayer: ExoPlayer? = null
             private set
         var nextTrackHandler: (() -> Unit)? = null
-        // ★ PlayerActivity가 활성이면 자동 다음곡 비활성화
         @Volatile var autoNextDisabled: Boolean = false
 
-    /** ★ video+audio 병합 재생 (MediaController로는 불가) */
-    fun playMergedVideoAudio(
-        videoUrl: String,
-        audioUrl: String,
-        title: String,
-        channel: String,
-        videoId: String
-    ): Boolean {
-        val player = exoPlayer ?: return false
-        return try {
-            val dataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
-                .setUserAgent("Mozilla/5.0")
-                .setAllowCrossProtocolRedirects(true)
+        fun playMergedVideoAudio(
+            videoUrl: String,
+            audioUrl: String,
+            title: String,
+            channel: String,
+            videoId: String
+        ): Boolean {
+            val player = exoPlayer ?: return false
+            return try {
+                val dataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                    .setUserAgent("Mozilla/5.0")
+                    .setAllowCrossProtocolRedirects(true)
 
-            val videoSource = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(
-                    MediaItem.Builder()
-                        .setUri(videoUrl)
-                        .setMediaId("${videoId}_video")
-                        .build()
-                )
+                val videoSource = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(dataSourceFactory)
+                    .createMediaSource(
+                        MediaItem.Builder()
+                            .setUri(videoUrl)
+                            .setMediaId("${videoId}_video")
+                            .build()
+                    )
 
-            val audioSource = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(
-                    MediaItem.Builder()
-                        .setUri(audioUrl)
-                        .setMediaId("${videoId}_audio")
-                        .build()
-                )
+                val audioSource = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(dataSourceFactory)
+                    .createMediaSource(
+                        MediaItem.Builder()
+                            .setUri(audioUrl)
+                            .setMediaId("${videoId}_audio")
+                            .build()
+                    )
 
-            val mergedSource = androidx.media3.exoplayer.source.MergingMediaSource(videoSource, audioSource)
+                val mergedSource = androidx.media3.exoplayer.source.MergingMediaSource(videoSource, audioSource)
 
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                try {
-                    player.setMediaSource(mergedSource)
-                    player.prepare()
-                    player.playWhenReady = true
-                    Log.d("PlaybackService", "playMergedVideoAudio OK: $videoId")
-                } catch (e: Exception) {
-                    Log.e("PlaybackService", "setMediaSource err", e)
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    try {
+                        player.setMediaSource(mergedSource)
+                        player.prepare()
+                        player.playWhenReady = true
+                        Log.d("PlaybackService", "playMergedVideoAudio OK: $videoId")
+                    } catch (e: Exception) {
+                        Log.e("PlaybackService", "setMediaSource err", e)
+                    }
                 }
+                true
+            } catch (e: Exception) {
+                Log.e("PlaybackService", "playMergedVideoAudio err", e)
+                false
             }
-            true
-        } catch (e: Exception) {
-            Log.e("PlaybackService", "playMergedVideoAudio err", e)
-            false
         }
-    }
-
     }
 }
 
-
 // ═══════════════════════════════════════════════════════════════
-// ★ 알림 제어용 BroadcastReceiver (top-level)
+// ★ 알림 제어용 BroadcastReceiver
 // ═══════════════════════════════════════════════════════════════
 
 class StopServiceReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
-        android.util.Log.d("StopServiceReceiver", "action=${intent.action}")
+        Log.d("StopServiceReceiver", "action=${intent.action}")
         try {
-            // ★ ExoPlayer 완전 정지 (재생 재개 방지)
-            try {
-                PlaybackService.exoPlayer?.pause()
-                PlaybackService.exoPlayer?.stop()
-                PlaybackService.exoPlayer?.clearMediaItems()
-            } catch (_: Exception) {}
-
-            // ★ prefs 초기화 (자동 재생 방지)
+            // 1. 완전 종료 플래그 (서비스 재생성 방지)
             try {
                 context.getSharedPreferences("audio_prefs", android.content.Context.MODE_PRIVATE)
                     .edit()
+                    .putBoolean("service_stopped", true)
                     .putString("current_video_id", "")
                     .putBoolean("auto_next", false)
+                    .putBoolean("keep_bg_playback", false)
                     .apply()
             } catch (_: Exception) {}
 
-            // ★ 알림 제거
+            // 2. ExoPlayer 정지
+            try {
+                val player = PlaybackService.exoPlayer
+                player?.stop()
+                player?.clearMediaItems()
+                player?.playWhenReady = false
+            } catch (_: Exception) {}
+
+            // 3. 큐 초기화
+            try { QueueManager.clear(context) } catch (_: Exception) {}
+
+            // 4. 알림 제거
             try {
                 val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE)
                     as android.app.NotificationManager
                 nm.cancel(1001)
+                nm.cancelAll()
             } catch (_: Exception) {}
 
-            // ★ 서비스 정지
-            context.stopService(android.content.Intent(context, PlaybackService::class.java))
+            // 5. 서비스 정지
+            try {
+                context.stopService(android.content.Intent(context, PlaybackService::class.java))
+            } catch (_: Exception) {}
+
+            Log.d("StopServiceReceiver", "완전 종료 완료")
         } catch (e: Exception) {
-            android.util.Log.e("StopServiceReceiver", "stopService err", e)
+            Log.e("StopServiceReceiver", "stopService err", e)
         }
     }
 }
 
 class NotificationActionReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
-        android.util.Log.d("NotificationActionReceiver", "action=${intent.action}")
+        Log.d("NotificationActionReceiver", "action=${intent.action}")
         val player = PlaybackService.exoPlayer ?: return
         when (intent.action) {
             "ACTION_PREV" -> {
@@ -729,7 +741,13 @@ class NotificationActionReceiver : android.content.BroadcastReceiver() {
                 else player.seekTo(0)
             }
             "ACTION_PLAY_PAUSE" -> {
-                if (player.isPlaying) player.pause() else player.play()
+                if (player.isPlaying) {
+                    player.pause()
+                    // ★ pause 시 playWhenReady=false 확실히
+                    player.playWhenReady = false
+                } else {
+                    player.play()
+                }
             }
             "ACTION_NEXT" -> {
                 if (player.hasNextMediaItem()) player.seekToNextMediaItem()
