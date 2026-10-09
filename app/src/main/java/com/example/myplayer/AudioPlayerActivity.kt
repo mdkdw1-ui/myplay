@@ -130,6 +130,13 @@ class AudioPlayerActivity : AppCompatActivity() {
             pref?.edit()?.putBoolean("service_stopped", false)?.apply()
         }
 
+        // ★ keep_bg_playback 기본값 강제 (사용자가 명시적으로 OFF 안 했으면 true)
+        val userSetBg = pref?.contains("keep_bg_playback") ?: false
+        if (!userSetBg) {
+            pref?.edit()?.putBoolean("keep_bg_playback", true)?.apply()
+            android.util.Log.d("AudioPlayer", "onCreate: keep_bg_playback=true 기본값 설정")
+        }
+
         try {
             val keepOn = pref?.getBoolean("keep_screen_on_audio", true) ?: true
             if (keepOn) {
@@ -1114,6 +1121,25 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun playNextRelatedBg() {
+        // ★ service_stopped면 다음곡 로딩 금지
+        val serviceStopped = pref?.getBoolean("service_stopped", false) ?: false
+        if (serviceStopped) {
+            diag("playNext: service_stopped=true → skip")
+            loadingNext = false
+            return
+        }
+
+        // ★ pause 상태면 다음곡 로딩 금지
+        val mcCheck0 = mediaController
+        if (mcCheck0 != null &&
+            !mcCheck0.isPlaying &&
+            !mcCheck0.playWhenReady &&
+            mcCheck0.mediaItemCount == 0) {
+            diag("playNext: paused & no items → skip")
+            loadingNext = false
+            return
+        }
+
         // ★★ ExoPlayer 큐에 다음 곡 있으면 skip (자동 진행)
         val mcCheck = mediaController
         if (mcCheck != null && mcCheck.hasNextMediaItem()) {
@@ -1609,27 +1635,18 @@ class AudioPlayerActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
 
-        // ★ 백그라운드 재생 유지가 기본 (홈 버튼 눌러도 재생 유지)
-        val bgEnabled = pref?.getBoolean("keep_bg_playback", true) ?: true
+        // ★ 명시적 종료(알림 스와이프/종료 버튼)일 때만 pause
         val serviceStopped = pref?.getBoolean("service_stopped", false) ?: false
-
         if (serviceStopped) {
             diag("onStop: service_stopped=true → pause (명시적 종료)")
             try { mediaController?.pause() } catch (_: Exception) {}
             return
         }
 
-        if (!bgEnabled) {
-            diag("onStop: 백그라운드 재생 OFF → pause (사용자 설정)")
-            try { mediaController?.pause() } catch (_: Exception) {}
-            return
-        }
-
-        // ★ 홈 버튼 눌러도 재생 유지 (화면 꺼짐 여부 무관)
-        diag("onStop: 백그라운드 재생 ON → 재생 유지 (홈 버튼)")
+        // ★ 홈버튼/다른 앱 이동 → 재생 유지
+        diag("onStop: 홈버튼/백그라운드 → 재생 유지")
         try { acquireWakeLock() } catch (_: Exception) {}
 
-        // ★ 재생 중이면 playWhenReady 강제 유지
         try {
             val mc = mediaController
             if (mc != null && (mc.isPlaying || mc.playWhenReady)) {
@@ -1637,8 +1654,6 @@ class AudioPlayerActivity : AppCompatActivity() {
                 diag("onStop: playWhenReady=true 강제 유지")
             }
         } catch (_: Exception) {}
-
-        // ★ 백그라운드 작업 유지 (취소 안 함)
     }
     private fun updateAudioLiveSubButton() {
         try {

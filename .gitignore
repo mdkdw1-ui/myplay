@@ -33,3 +33,5 @@ release.p12
 # OCI 자동생성 로그 (민감정보)
 auto_create.log
 auto_create.sh
+__pycache__/
+*.pyc
