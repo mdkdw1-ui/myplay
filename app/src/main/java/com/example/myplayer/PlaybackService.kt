@@ -125,9 +125,7 @@ class PlaybackService : MediaSessionService() {
                 ) {
                     // 연결 시 자동 재생 방지
                 }
-                override fun onDisconnected(session: MediaSession) {
-                    android.util.Log.d("PlaybackService", "MediaSession disconnected")
-                }
+
             })
             .build()
 
