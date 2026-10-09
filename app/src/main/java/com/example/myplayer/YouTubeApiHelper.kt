@@ -353,7 +353,7 @@ object YouTubeApiHelper {
     )
 
     /** ★ itag → height 매핑 (Invidious가 height 안 줄 때) */
-    private fun itagToHeight(itag: Int): Int = when (itag) {
+    fun itagToHeight(itag: Int): Int = when (itag) {
         160, 394, 278 -> 144
         133, 395, 242 -> 240
         134, 396, 243 -> 360
