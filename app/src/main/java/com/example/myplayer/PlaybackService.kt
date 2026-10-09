@@ -508,10 +508,7 @@ class PlaybackService : MediaSessionService() {
             .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
 
         // 미디어 스타일 (Android 13+ 미디어 컨트롤 지원)
-        val mediaStyle = androidx.media.app.NotificationCompat.MediaStyle()
-            .setShowActionsInCompactView(0, 1, 2)  // prev, play/pause, next
 
-        builder.setStyle(mediaStyle)
 
         // 액션 버튼들
         builder.addAction(
@@ -531,6 +528,17 @@ class PlaybackService : MediaSessionService() {
         )
 
         return builder.build()
+    }
+
+    /** ★ 커스텀 알림으로 startForeground */
+    private fun startForegroundWithCustomNotification() {
+        try {
+            val notif = buildCustomNotification()
+            startForeground(1001, notif)
+            android.util.Log.d("PlaybackService", "startForeground 커스텀 알림 OK")
+        } catch (e: Exception) {
+            android.util.Log.e("PlaybackService", "startForeground err", e)
+        }
     }
 
     fun refreshNotification() {
