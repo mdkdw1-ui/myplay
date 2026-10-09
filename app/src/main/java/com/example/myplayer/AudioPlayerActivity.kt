@@ -850,7 +850,15 @@ class AudioPlayerActivity : AppCompatActivity() {
                 return@launch
             }
 
-            val useUrl = url ?: fallbackUrl!!
+            val useUrl = url ?: fallbackUrl ?: run {
+                diag("❌ useUrl 없음 - url=$url fallbackUrl=$fallbackUrl")
+                runOnUiThread {
+                    Toast.makeText(this@AudioPlayerActivity, "스트림 URL 없음", Toast.LENGTH_SHORT).show()
+                }
+                loadingNext = false
+                trySkipToNextInQueue(videoId)
+                return@launch
+            }
 
             currentSubtitleUrl = result.subtitles
                 .firstOrNull { it.languageCode.startsWith("ko") }?.url
