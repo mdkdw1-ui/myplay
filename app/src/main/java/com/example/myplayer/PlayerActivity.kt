@@ -224,7 +224,9 @@ class PlayerActivity : AppCompatActivity() {
         swAutoNext = findViewById(R.id.swAutoNext)
 
         autoNextEnabled = pref.getBoolean("auto_next", false)
-        vdiag("autoNext 초기화: enabled=$autoNextEnabled pref_name=subtitle_prefs")
+        val allPrefs = pref.all.entries.joinToString(", ") { "${it.key}=${it.value}" }
+        vdiag("autoNext 초기화: enabled=$autoNextEnabled")
+        vdiag("subtitle_prefs 내용: $allPrefs")
         swAutoNext.isChecked = autoNextEnabled
         swAutoNext.setOnCheckedChangeListener { _, checked ->
             autoNextEnabled = checked
@@ -539,7 +541,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun addRecent(videoId: String) {
         recentVideoIds.remove(videoId)
         recentVideoIds.addFirst(videoId)
-        while (recentVideoIds.size > 10) recentVideoIds.removeLast()
+        while (recentVideoIds.size > 30) recentVideoIds.removeLast()
     }
 
     private fun isRecent(videoId: String): Boolean = videoId in recentVideoIds
@@ -577,9 +579,20 @@ class PlayerActivity : AppCompatActivity() {
             }
             // ★ 음악 아닌 영상(말 많은 것) 필터
             val musicOnly = list.filter { isMusicLike(it) }
-            val next = (musicOnly.ifEmpty { list }).firstOrNull() ?: return@launch
+
+            // ★ 최근 재생 곡 제외 (반복 방지)
+            val recentSet = recentVideoIds.toSet()
+            val notRecent = musicOnly.filter { it.videoId !in recentSet && it.videoId != currentVideoId }
+            val fallback = musicOnly.filter { it.videoId != currentVideoId }
+
+            val next = notRecent.firstOrNull()
+                ?: fallback.firstOrNull()
+                ?: return@launch
+
+            vdiag("playNext: recent 제외 후 ${notRecent.size}개 (fallback ${fallback.size}개), pick=${next.videoId}")
 
             // ★ 같은 Activity에서 다음 영상 재생
+            addRecent(next.videoId)
             currentVideoId = next.videoId
             currentTitle = next.title
             currentChannel = next.channel
