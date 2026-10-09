@@ -72,5 +72,12 @@
         </service>        <activity android:name=".MyPlaylistsActivity" android:exported="false" android:label="내 플레이리스트" />
 
 
+            <receiver
+            android:name=".PlaybackService$StopServiceReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="STOP_SERVICE_FROM_NOTIFICATION" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
