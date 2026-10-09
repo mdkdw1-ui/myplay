@@ -14,28 +14,23 @@ object YouTubeApiHelper {
     private const val TAG = "YtApi"
 
     val INVIDIOUS = listOf(
-        "https://inv.nadeko.net",
-        "https://invidious.nerdvpn.de",
-        "https://invidious.f5.si",
+        "https://invidious.f5.si",              // ✅ 한국, 실제 작동
+        "https://invidious.nerdvpn.de",         // ⚠️ 시도
+        "https://yewtu.be",                     // ⚠️ 시도
         "https://invidious.privacyredirect.com",
-        "https://yewtu.be",
-        "https://vid.puffyan.us",
-        "https://invidious.reallyaweso.me",
-        "https://iv.melmac.space",
+        "https://invidious.jing.rocks",
+        "https://iv.datura.network",
         "https://invidious.einfachzocken.eu",
-        "https://iv.datura.network"
+        "https://iv.melmac.space",
+        "https://invidious.reallyaweso.me"
     )
 
     val PIPED = listOf(
-        "https://pipedapi.kavin.rocks",
+        "https://api.piped.private.coffee",     // ⚠️ 봇 차단 가능
         "https://pipedapi.adminforge.de",
-        "https://api.piped.private.coffee",
-        "https://pipedapi.reallyaweso.me",
+        "https://pipedapi.kavin.rocks",
         "https://pipedapi.drgns.space",
-        "https://pipedapi.ducks.party",
-        "https://pipedapi.leptons.xyz",
-        "https://pipedapi.nosebs.ru",
-        "https://api.piped.projectsegfau.lt"
+        "https://pipedapi.ducks.party"
     )
 
     // ═══════════════════════════════════════════════

@@ -164,8 +164,8 @@ object YouTubeStream {
         for (inst in servers) {
             try {
                 val conn = java.net.URL("$inst/api/v1/videos/$videoId").openConnection() as java.net.HttpURLConnection
-                conn.connectTimeout = 4000
-                conn.readTimeout = 8000
+                conn.connectTimeout = 2000
+                conn.readTimeout = 6000
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0")
                 if (conn.responseCode !in 200..299) continue
                 val json = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
@@ -243,8 +243,8 @@ object YouTubeStream {
         for (inst in servers) {
             try {
                 val conn = java.net.URL("$inst/streams/$videoId").openConnection() as java.net.HttpURLConnection
-                conn.connectTimeout = 4000
-                conn.readTimeout = 8000
+                conn.connectTimeout = 2000
+                conn.readTimeout = 6000
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0")
                 if (conn.responseCode !in 200..299) continue
                 val json = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
