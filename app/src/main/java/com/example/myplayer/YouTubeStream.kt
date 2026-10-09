@@ -34,7 +34,7 @@ object YouTubeStream {
         val timestamp: Long
     )
     private val streamCache = mutableMapOf<String, CachedStream>()
-    private const val CACHE_TTL_MS = 5 * 60 * 1000L  // 5분
+    private const val CACHE_TTL_MS = 30 * 60 * 1000L  // 30분
 
     private fun getCached(videoId: String): StreamResult? {
         val cached = streamCache[videoId] ?: return null
@@ -48,7 +48,7 @@ object YouTubeStream {
     private fun putCache(videoId: String, result: StreamResult) {
         streamCache[videoId] = CachedStream(result, System.currentTimeMillis())
         // 캐시 크기 제한 (최대 30개)
-        if (streamCache.size > 30) {
+        if (streamCache.size > 100) {
             val oldest = streamCache.minByOrNull { it.value.timestamp }
             oldest?.let { streamCache.remove(it.key) }
         }
@@ -121,7 +121,7 @@ object YouTubeStream {
             }
             val npDeferred = async(Dispatchers.IO) {
                 try {
-                    withTimeoutOrNull(6000) { tryNewPipe(videoId, sb) }
+                    withTimeoutOrNull(8000) { tryNewPipe(videoId, sb) }
                 } catch (e: Exception) { null }
             }
 

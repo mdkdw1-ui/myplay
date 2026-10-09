@@ -14,36 +14,28 @@ object YouTubeApiHelper {
     private const val TAG = "YtApi"
 
     val INVIDIOUS = listOf(
-        "https://invidious.f5.si",           // 한국
-        "https://inv.nadeko.net",            // 일본
-        "https://invidious.nerdvpn.de",      // 독일
-        "https://iv.melmac.space",
+        "https://inv.nadeko.net",
+        "https://invidious.nerdvpn.de",
+        "https://invidious.f5.si",
         "https://invidious.privacyredirect.com",
-        "https://yt.artemislena.eu",
-        "https://invidious.reallyaweso.me",
-        "https://invidious.privacydev.net",
+        "https://yewtu.be",
         "https://vid.puffyan.us",
-        "https://invidious.snopyta.org",
-        "https://inv.riverside.rocks",
-        "https://invidious.kavin.rocks",
-        "https://invidious.silkky.cloud",
-        "https://yt.vern.cc",
-        "https://invidious.flokinet.to"
+        "https://invidious.reallyaweso.me",
+        "https://iv.melmac.space",
+        "https://invidious.einfachzocken.eu",
+        "https://iv.datura.network"
     )
 
     val PIPED = listOf(
-        "https://pipedapi.reallyaweso.me",
-        "https://api.piped.private.coffee",
         "https://pipedapi.kavin.rocks",
         "https://pipedapi.adminforge.de",
-        "https://pipedapi.leptons.xyz",
+        "https://api.piped.private.coffee",
+        "https://pipedapi.reallyaweso.me",
         "https://pipedapi.drgns.space",
-        "https://api.piped.projectsegfau.lt",
-        "https://pipedapi.nosebs.ru",
-        "https://pipedapi.astartes.nl",
-        "https://piped-api.lunar.icu",
         "https://pipedapi.ducks.party",
-        "https://pipedapi.orangenet.cc"
+        "https://pipedapi.leptons.xyz",
+        "https://pipedapi.nosebs.ru",
+        "https://api.piped.projectsegfau.lt"
     )
 
     // ═══════════════════════════════════════════════
