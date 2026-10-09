@@ -1608,42 +1608,38 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        sbCheckJob?.cancel()
-        previewJob?.cancel()
-        abJob?.cancel()
-        cancelAutoNext()
-        val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-        // ★ 화면 꺼짐 다중 체크 (AOD/제조사 대응)
-        val screenOn = try {
-            @Suppress("DEPRECATION")
-            val interactive = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT_WATCH) {
-                pm.isInteractive
-            } else {
-                pm.isScreenOn
-            }
-            val isScreenOn = try { pm.isScreenOn } catch (_: Exception) { interactive }
-            val isInteractive = try { pm.isInteractive } catch (_: Exception) { interactive }
-            val displayOff = try {
-                val dm = getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
-                dm.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.state != android.view.Display.STATE_ON
-            } catch (_: Exception) { false }
-            diag("onStop screen check: interactive=$isInteractive, isScreenOn=$isScreenOn, displayOff=$displayOff")
-            isInteractive && isScreenOn && !displayOff
-        } catch (_: Exception) { true }
 
+        // ★ 백그라운드 재생 유지가 기본 (홈 버튼 눌러도 재생 유지)
         val bgEnabled = pref?.getBoolean("keep_bg_playback", true) ?: true
-        if (!bgEnabled) {
-            diag("onStop: 백그라운드 재생 OFF → pause")
-            try { mediaController?.pause() } catch (_: Exception) {}
-        } else if (!screenOn) {
-            diag("onStop: 화면 꺼짐 → 오디오 재생 유지")
-            try { acquireWakeLock() } catch (_: Exception) {}
-        } else {
-            diag("onStop: 오디오 모드 → 재생 유지")
-            try { acquireWakeLock() } catch (_: Exception) {}
-        }
-    }
+        val serviceStopped = pref?.getBoolean("service_stopped", false) ?: false
 
+        if (serviceStopped) {
+            diag("onStop: service_stopped=true → pause (명시적 종료)")
+            try { mediaController?.pause() } catch (_: Exception) {}
+            return
+        }
+
+        if (!bgEnabled) {
+            diag("onStop: 백그라운드 재생 OFF → pause (사용자 설정)")
+            try { mediaController?.pause() } catch (_: Exception) {}
+            return
+        }
+
+        // ★ 홈 버튼 눌러도 재생 유지 (화면 꺼짐 여부 무관)
+        diag("onStop: 백그라운드 재생 ON → 재생 유지 (홈 버튼)")
+        try { acquireWakeLock() } catch (_: Exception) {}
+
+        // ★ 재생 중이면 playWhenReady 강제 유지
+        try {
+            val mc = mediaController
+            if (mc != null && (mc.isPlaying || mc.playWhenReady)) {
+                mc.playWhenReady = true
+                diag("onStop: playWhenReady=true 강제 유지")
+            }
+        } catch (_: Exception) {}
+
+        // ★ 백그라운드 작업 유지 (취소 안 함)
+    }
     private fun updateAudioLiveSubButton() {
         try {
             if (audioLiveActive) {
