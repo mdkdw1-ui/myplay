@@ -73,7 +73,16 @@
 
 
             <receiver
-            android:name=".PlaybackService$StopServiceReceiver"
+            android:name=".NotificationActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="ACTION_PREV" />
+                <action android:name="ACTION_PLAY_PAUSE" />
+                <action android:name="ACTION_NEXT" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name=".StopServiceReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="STOP_SERVICE_FROM_NOTIFICATION" />

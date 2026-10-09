@@ -139,12 +139,15 @@ class PlaybackService : MediaSessionService() {
             }
         })
 
-        // ★ Foreground Service 승격 (Doze 모드에서도 네트워크 유지)
+        // ★ 커스텀 알림 리스너 등록
+        player.addListener(notifListener)
+
+        // ★ Foreground Service 승격 (커스텀 알림)
         try {
             val pref = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
             val bgEnabled = pref.getBoolean("keep_bg_playback", true)
             if (bgEnabled) {
-                startForegroundInternal()
+                startForegroundWithCustomNotification()
             } else {
                 Log.d("PlaybackService", "백그라운드 재생 OFF — Foreground 미승격")
             }
@@ -412,16 +415,18 @@ class PlaybackService : MediaSessionService() {
             .apply()
     }
 
-    /** ★ 커스텀 알림 (스와이프 시 서비스 정지) */
-    override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
-        super.onUpdateNotification(session, startInForegroundRequired)
 
-        // ★ deleteIntent 추가 — 사용자가 알림 스와이프 시 정지
-        try {
+    // ═══════════════════════════════════════════════════════════════
+    // ★ 커스텀 알림 (Media3 자동 알림 무시)
+    // ═══════════════════════════════════════════════════════════════
+
+    private fun buildCustomNotification(): android.app.Notification {
+        val channelId = "playback_channel"
+
+        // 채널 생성
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-            val channelId = "playback_channel"
-            val mgr = nm.getNotificationChannel(channelId)
-            if (mgr == null) {
+            if (nm.getNotificationChannel(channelId) == null) {
                 val ch = android.app.NotificationChannel(
                     channelId, "재생 중", android.app.NotificationManager.IMPORTANCE_LOW
                 ).apply {
@@ -431,33 +436,123 @@ class PlaybackService : MediaSessionService() {
                 }
                 nm.createNotificationChannel(ch)
             }
+        }
 
-            val stopIntent = Intent(this, StopServiceReceiver::class.java).apply {
+        val player = exoPlayer
+        val title = player?.mediaMetadata?.title?.toString() ?: "MyPlayer"
+        val artist = player?.mediaMetadata?.artist?.toString() ?: "백그라운드 재생 중"
+        val isPlaying = player?.isPlaying == true
+
+        // ★ 알림 탭 → 앱 열기
+        val contentIntent = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, AudioPlayerActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // ★ 삭제 인텐트 (스와이프 시) → 서비스 정지
+        val deleteIntent = PendingIntent.getBroadcast(
+            this, 100,
+            Intent(this, StopServiceReceiver::class.java).apply {
                 action = "STOP_SERVICE_FROM_NOTIFICATION"
-            }
-            val deletePending = PendingIntent.getBroadcast(
-                this, 100, stopIntent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
 
-            // ★ Media3가 만든 알림에 deleteIntent 적용
-            val notif = android.app.Notification.Builder(this, channelId)
-                .setContentTitle(session.player.mediaMetadata.title ?: "MyPlayer")
-                .setContentText(session.player.mediaMetadata.artist ?: "백그라운드 재생 중")
-                .setSmallIcon(android.R.drawable.ic_media_play)
-                .setOngoing(true)
-                .setDeleteIntent(deletePending)
-                .setStyle(
-                    androidx.media3.session.MediaNotification.Provider // 컴파일 에러 방지용
-                        ?.let { null } // no-op
-                )
-                .build()
+        // ★ 이전 곡
+        val prevIntent = PendingIntent.getBroadcast(
+            this, 101,
+            Intent(this, NotificationActionReceiver::class.java).apply {
+                action = "ACTION_PREV"
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
 
-            // ★ 커스텀 알림으로 덮어쓰기
+        // ★ 재생/일시정지
+        val playPauseIntent = PendingIntent.getBroadcast(
+            this, 102,
+            Intent(this, NotificationActionReceiver::class.java).apply {
+                action = "ACTION_PLAY_PAUSE"
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // ★ 다음 곡
+        val nextIntent = PendingIntent.getBroadcast(
+            this, 103,
+            Intent(this, NotificationActionReceiver::class.java).apply {
+                action = "ACTION_NEXT"
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // ★ 종료 버튼
+        val stopIntent = PendingIntent.getBroadcast(
+            this, 104,
+            Intent(this, StopServiceReceiver::class.java).apply {
+                action = "ACTION_STOP"
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val builder = androidx.core.app.NotificationCompat.Builder(this, channelId)
+            .setContentTitle(title)
+            .setContentText(artist)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentIntent(contentIntent)
+            .setDeleteIntent(deleteIntent)
+            .setOngoing(isPlaying)
+            .setSilent(true)
+            .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
+
+        // 미디어 스타일 (Android 13+ 미디어 컨트롤 지원)
+        val mediaStyle = androidx.media.app.NotificationCompat.MediaStyle()
+            .setShowActionsInCompactView(0, 1, 2)  // prev, play/pause, next
+
+        builder.setStyle(mediaStyle)
+
+        // 액션 버튼들
+        builder.addAction(
+            android.R.drawable.ic_media_previous, "이전", prevIntent
+        )
+        builder.addAction(
+            if (isPlaying) android.R.drawable.ic_media_pause
+            else android.R.drawable.ic_media_play,
+            if (isPlaying) "일시정지" else "재생",
+            playPauseIntent
+        )
+        builder.addAction(
+            android.R.drawable.ic_media_next, "다음", nextIntent
+        )
+        builder.addAction(
+            android.R.drawable.ic_menu_close_clear_cancel, "종료", stopIntent
+        )
+
+        return builder.build()
+    }
+
+    fun refreshNotification() {
+        try {
+            val notif = buildCustomNotification()
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             nm.notify(1001, notif)
-            android.util.Log.d("PlaybackService", "커스텀 알림 적용 (deleteIntent)")
+            android.util.Log.d("PlaybackService", "커스텀 알림 갱신")
         } catch (e: Exception) {
-            android.util.Log.e("PlaybackService", "onUpdateNotification err: ${e.message}", e)
+            android.util.Log.e("PlaybackService", "알림 갱신 err", e)
+        }
+    }
+
+    private val notifListener = object : Player.Listener {
+        override fun onMediaMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
+            refreshNotification()
+        }
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            refreshNotification()
+        }
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            refreshNotification()
         }
     }
 
@@ -551,5 +646,40 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// ★ 알림 제어용 BroadcastReceiver (top-level)
+// ═══════════════════════════════════════════════════════════════
+
+class StopServiceReceiver : android.content.BroadcastReceiver() {
+    override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+        android.util.Log.d("StopServiceReceiver", "action=${intent.action}")
+        try {
+            context.stopService(android.content.Intent(context, PlaybackService::class.java))
+        } catch (e: Exception) {
+            android.util.Log.e("StopServiceReceiver", "stopService err", e)
+        }
+    }
+}
+
+class NotificationActionReceiver : android.content.BroadcastReceiver() {
+    override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+        android.util.Log.d("NotificationActionReceiver", "action=${intent.action}")
+        val player = PlaybackService.exoPlayer ?: return
+        when (intent.action) {
+            "ACTION_PREV" -> {
+                if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem()
+                else player.seekTo(0)
+            }
+            "ACTION_PLAY_PAUSE" -> {
+                if (player.isPlaying) player.pause() else player.play()
+            }
+            "ACTION_NEXT" -> {
+                if (player.hasNextMediaItem()) player.seekToNextMediaItem()
+            }
+        }
     }
 }
