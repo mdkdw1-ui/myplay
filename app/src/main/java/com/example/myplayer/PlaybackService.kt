@@ -709,7 +709,6 @@ class StopServiceReceiver : android.content.BroadcastReceiver() {
             // ★ 2. ExoPlayer 정지
             try {
                 val player = PlaybackService.exoPlayer
-                player?.removeListener(null)
                 player?.stop()
                 player?.clearMediaItems()
                 player?.playWhenReady = false
