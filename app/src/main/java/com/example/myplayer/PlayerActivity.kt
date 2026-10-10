@@ -2121,6 +2121,9 @@ class PlayerActivity : AppCompatActivity() {
             ?: subtitleTracks.firstOrNull()?.url
             ?: ""
 
+        // ★ 현재 재생 위치 저장 (오디오 모드에서 이어서 재생)
+        val currentPos = mediaController?.currentPosition ?: 0L
+
         startActivity(Intent(this, AudioPlayerActivity::class.java).apply {
             putExtra("VIDEO_ID", currentVideoId)
             putExtra("VIDEO_TITLE", currentTitle)
@@ -2129,6 +2132,8 @@ class PlayerActivity : AppCompatActivity() {
             putExtra("FROM_PLAYLIST", false)
             putExtra("REUSE_STREAM_URL", currentStreamUrl ?: "")
             putExtra("REUSE_SUBTITLE_URL", subUrl)
+            putExtra("START_POS_MS", currentPos)   // ★ 재생 위치 전달
+            putExtra("AUTO_PLAY", true)             // ★ 자동 재생 플래그
         })
         finish()
     }
