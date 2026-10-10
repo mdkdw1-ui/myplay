@@ -78,6 +78,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this   // ★ 인스턴스 저장
 
         // ★ 완전 종료 플래그 감지 → 해제하고 계속 (로딩 저하 방지)
         val stopFlag = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
@@ -613,6 +614,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        instance = null   // ★ 참조 해제
         try { stopForeground(STOP_FOREGROUND_REMOVE) } catch (_: Exception) {}
         mediaSession?.run {
             player.removeListener(endListener)
@@ -631,6 +633,10 @@ class PlaybackService : MediaSessionService() {
             private set
         var nextTrackHandler: (() -> Unit)? = null
         @Volatile var autoNextDisabled: Boolean = false
+
+        // ★ 서비스 인스턴스 참조 (StopServiceReceiver에서 사용)
+        @Volatile var instance: PlaybackService? = null
+            private set
 
         fun playMergedVideoAudio(
             videoUrl: String,
@@ -690,42 +696,64 @@ class StopServiceReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
         Log.d("StopServiceReceiver", "action=${intent.action}")
         try {
-            // 1. 완전 종료 플래그 (keep_bg_playback은 유지)
+            // ★ 1. 완전 종료 플래그
             try {
                 context.getSharedPreferences("audio_prefs", android.content.Context.MODE_PRIVATE)
                     .edit()
                     .putBoolean("service_stopped", true)
                     .putString("current_video_id", "")
                     .putBoolean("auto_next", false)
-                    // ★ keep_bg_playback은 사용자 설정이므로 건드리지 않음
                     .apply()
             } catch (_: Exception) {}
 
-            // 2. ExoPlayer 정지
+            // ★ 2. ExoPlayer 정지
             try {
                 val player = PlaybackService.exoPlayer
+                player?.removeListener(null)
                 player?.stop()
                 player?.clearMediaItems()
                 player?.playWhenReady = false
+                player?.release()
             } catch (_: Exception) {}
 
-            // 3. 큐 초기화
+            // ★ 3. 큐 초기화
             try { QueueManager.clear(context) } catch (_: Exception) {}
 
-            // 4. 알림 제거
+            // ★ 4. Foreground Service 중지 + 알림 제거 (순서 중요!)
+            try {
+                val service = PlaybackService.instance
+                if (service != null) {
+                    // ★ stopForeground를 먼저 호출 (알림 자동 제거)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                        service.stopForeground(
+                            android.app.Service.STOP_FOREGROUND_REMOVE
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        service.stopForeground(true)
+                    }
+                    Log.d("StopServiceReceiver", "stopForeground(REMOVE) 완료")
+                }
+            } catch (e: Exception) {
+                Log.e("StopServiceReceiver", "stopForeground err: ${e.message}", e)
+            }
+
+            // ★ 5. NotificationManager로도 확실히 제거
             try {
                 val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE)
                     as android.app.NotificationManager
                 nm.cancel(1001)
                 nm.cancelAll()
+                Log.d("StopServiceReceiver", "알림 강제 취소 완료")
             } catch (_: Exception) {}
 
-            // 5. 서비스 정지
+            // ★ 6. 서비스 정지
             try {
                 context.stopService(android.content.Intent(context, PlaybackService::class.java))
+                Log.d("StopServiceReceiver", "stopService 호출")
             } catch (_: Exception) {}
 
-            Log.d("StopServiceReceiver", "완전 종료 완료")
+            Log.d("StopServiceReceiver", "✅ 완전 종료 완료")
         } catch (e: Exception) {
             Log.e("StopServiceReceiver", "stopService err", e)
         }

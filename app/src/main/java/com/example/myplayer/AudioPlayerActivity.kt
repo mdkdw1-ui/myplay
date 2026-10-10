@@ -832,14 +832,19 @@ class AudioPlayerActivity : AppCompatActivity() {
                     .setAlbumTitle(currentChannel)
                     .setArtworkUri(android.net.Uri.parse(currentThumb))
                     .build()
+                val startPos = intent.getLongExtra("START_POS_MS", 0L)
+
                 val mediaItem = MediaItem.Builder()
                     .setUri(reuseStreamUrl)
                     .setMediaId(videoId)
                     .setMediaMetadata(metadata)
                     .build()
                 runOnUiThread {
-                    mediaController?.setMediaItem(mediaItem)
+                    mediaController?.setMediaItem(mediaItem, startPos)  // ★ 위치 지정
                     mediaController?.prepare()
+                    mediaController?.playWhenReady = true
+                    // ★★★ 즉시 재생 강제
+                    mediaController?.play()
                     try {
                         val mc = mediaController
                         if (mc != null) {
@@ -852,12 +857,22 @@ class AudioPlayerActivity : AppCompatActivity() {
                     } catch (e: Exception) {
                         diag("track disable reuse err: ${e.message}")
                     }
-                    mediaController?.playWhenReady = true
                 }
                 addToHistory(videoId, currentTitle, currentChannel, currentThumb)
                 reuseStreamUrl = ""
                 reuseSubtitleUrl = ""
-                delay(500)
+
+                // ★ prepare 완료를 기다린 후 play 재확인 (안정성)
+                delay(300)
+                try {
+                    val mc = mediaController
+                    if (mc != null && !mc.isPlaying) {
+                        mc.play()
+                        diag("reuse: play() 재호출 (자동 재생 보장)")
+                    }
+                } catch (_: Exception) {}
+
+                delay(200)
                 attachEqualizer()
                 prefetchNext()
                 loadingNext = false
