@@ -2121,9 +2121,51 @@ class PlayerActivity : AppCompatActivity() {
             ?: subtitleTracks.firstOrNull()?.url
             ?: ""
 
-        // ★ 현재 재생 위치 저장 (오디오 모드에서 이어서 재생)
+        // ★ 현재 재생 위치 저장
         val currentPos = mediaController?.currentPosition ?: 0L
+        vdiag("🎵 switchToAudioMode: id=$currentVideoId, url=${currentStreamUrl?.take(50)}, pos=$currentPos")
 
+        // ★★★ 오디오 모드 전환 플래그 ON (onDestroy에서 release 방지)
+        switchingToAudio = true
+
+        // ★★★ PlaybackService에 직접 재생 명령 (Activity 전환 전에)
+        try {
+            val service = PlaybackService.instance
+            val player = PlaybackService.exoPlayer
+            val streamUrl = currentStreamUrl
+
+            if (service != null && player != null && !streamUrl.isNullOrBlank()) {
+                val existingId = player.currentMediaItem?.mediaId
+                if (existingId == currentVideoId) {
+                    // 같은 곡이면 재생 상태만 유지
+                    vdiag("🎵 이미 같은 곡 재생 중 → 유지 (pos=$currentPos)")
+                    player.seekTo(currentPos)
+                    player.playWhenReady = true
+                } else {
+                    vdiag("🎵 새 곡 로드: $currentVideoId")
+                    val mediaItem = MediaItem.Builder()
+                        .setUri(streamUrl)
+                        .setMediaId(currentVideoId)
+                        .setMediaMetadata(
+                            androidx.media3.common.MediaMetadata.Builder()
+                                .setTitle(currentTitle)
+                                .setArtist(currentChannel)
+                                .setArtworkUri(android.net.Uri.parse(currentThumb))
+                                .build()
+                        )
+                        .build()
+                    player.setMediaItem(mediaItem, currentPos)
+                    player.prepare()
+                    player.playWhenReady = true
+                }
+            } else {
+                vdiag("🎵 서비스/플레이어 없음 → Activity에서 처리")
+            }
+        } catch (e: Exception) {
+            vdiag("🎵 서비스 재생 명령 err: ${e.message}")
+        }
+
+        // ★ 오디오 모드 Activity 시작
         startActivity(Intent(this, AudioPlayerActivity::class.java).apply {
             putExtra("VIDEO_ID", currentVideoId)
             putExtra("VIDEO_TITLE", currentTitle)
@@ -2132,8 +2174,8 @@ class PlayerActivity : AppCompatActivity() {
             putExtra("FROM_PLAYLIST", false)
             putExtra("REUSE_STREAM_URL", currentStreamUrl ?: "")
             putExtra("REUSE_SUBTITLE_URL", subUrl)
-            putExtra("START_POS_MS", currentPos)   // ★ 재생 위치 전달
-            putExtra("AUTO_PLAY", true)             // ★ 자동 재생 플래그
+            putExtra("START_POS_MS", currentPos)
+            putExtra("AUTO_PLAY", true)
         })
         finish()
     }
@@ -2721,8 +2763,17 @@ class PlayerActivity : AppCompatActivity() {
         sbCheckJob?.cancel()
         previewJob?.cancel()
         abJob?.cancel()
-        mediaController?.removeListener(playerListener)
-        MediaController.releaseFuture(controllerFuture)
+
+        // ★★★ 오디오 모드 전환 시엔 MediaController 유지 (연결 유지)
+        if (switchingToAudio) {
+            vdiag("onDestroy: 오디오 모드 전환 중 → MediaController 유지")
+            // 리스너만 제거, release 안 함
+            try { mediaController?.removeListener(playerListener) } catch (_: Exception) {}
+        } else {
+            vdiag("onDestroy: 일반 종료 → MediaController release")
+            try { mediaController?.removeListener(playerListener) } catch (_: Exception) {}
+            MediaController.releaseFuture(controllerFuture)
+        }
     }
 
 
