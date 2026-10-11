@@ -210,18 +210,24 @@ object YouTubeApiHelper {
         null
     }
 
-    suspend fun channelVideos(channelId: String, page: Int = 1): ChannelVideosPage = withContext(Dispatchers.IO) {
-        // ★ 채널명이면 ID로 변환
+    suspend fun channelVideos(
+        channelId: String,
+        continuation: String? = null
+    ): ChannelVideosPage = withContext(Dispatchers.IO) {
         val realId = if (channelId.startsWith("UC") && channelId.length > 20) {
             channelId
         } else {
             resolveChannelId(channelId) ?: channelId
         }
-        Log.d(TAG, "channelVideos: input=$channelId realId=$realId page=$page")
+        Log.d(TAG, "channelVideos: realId=$realId cont=${continuation?.take(30)}")
 
-        // ★ Invidious (page 기반)
         for (inst in INVIDIOUS) {
-            val obj = getJsonObject("$inst/api/v1/channels/$realId/videos?page=$page") ?: continue
+            val url = if (continuation.isNullOrBlank()) {
+                "$inst/api/v1/channels/$realId/videos"
+            } else {
+                "$inst/api/v1/channels/$realId/videos?continuation=$continuation"
+            }
+            val obj = getJsonObject(url) ?: continue
             try {
                 val videos = obj.optJSONArray("videos") ?: continue
                 val out = mutableListOf<VideoItem>()
@@ -237,19 +243,21 @@ object YouTubeApiHelper {
                         uploadDate = ""
                     ))
                 }
+
+                val nextCont = obj.optString("continuation", "")
+                    .takeIf { it.isNotBlank() }
+                val nextToken = nextCont?.let { "inv:$realId|$it" }
+
                 if (out.isNotEmpty()) {
-                    // ★ 30개 이상이면 다음 페이지 있음 (Invidious는 ~60개씩)
-                    val hasMore = out.size >= 30
-                    // ★ "inv:채널ID:페이지" 형식으로 다음 페이지 정보 저장
-                    val nextToken = if (hasMore) "inv:$realId:${page + 1}" else null
-                    Log.d(TAG, "inv channel page=$page: ${out.size}개, next=$nextToken")
+                    Log.d(TAG, "inv channel: ${out.size}개, next=${nextToken?.take(60)}")
                     return@withContext ChannelVideosPage(out, nextToken)
                 }
-            } catch (e: Exception) { }
+            } catch (e: Exception) {
+                Log.e(TAG, "inv channel err: ${e.message}", e)
+            }
         }
 
-        // ★ Piped (page 1만, continuation 토큰 기반)
-        if (page == 1) {
+        if (continuation.isNullOrBlank()) {
             for (inst in PIPED) {
                 val obj = getJsonObject("$inst/channel/$realId") ?: continue
                 try {
@@ -272,7 +280,7 @@ object YouTubeApiHelper {
                     }
                     if (out.isNotEmpty()) {
                         val nextpage = obj.optString("nextpage", "").takeIf { it.isNotBlank() }
-                        Log.d(TAG, "piped channel: ${out.size}개, next=$nextpage")
+                        Log.d(TAG, "piped channel: ${out.size}개")
                         return@withContext ChannelVideosPage(out, nextpage)
                     }
                 } catch (e: Exception) { }
