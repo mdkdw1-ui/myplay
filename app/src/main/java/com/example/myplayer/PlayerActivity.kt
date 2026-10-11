@@ -2727,6 +2727,13 @@ class PlayerActivity : AppCompatActivity() {
         abJob?.cancel()
         savePosition()
         cancelAutoNext()
+
+        // ★★★ 오디오 모드 전환 시엔 pause 안 함 (자동 재생 유지) ★★★
+        if (switchingToAudio) {
+            vdiag("onStop: 오디오 모드 전환 중 → pause 안 함")
+            return
+        }
+
         if (!isInPictureInPictureMode) mediaController?.pause()
     }
 
