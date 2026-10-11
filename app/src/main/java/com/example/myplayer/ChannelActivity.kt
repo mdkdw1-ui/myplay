@@ -197,11 +197,14 @@ class ChannelActivity : AppCompatActivity() {
         val token = nextContinuation ?: return
         loadingMore = true
         lifecycleScope.launch {
+            android.util.Log.d("Channel", "loadMore: token=$token")
             val page = YouTubeChannel.fetchMore(token)
             nextContinuation = page.continuation
             adapter.append(page.videos)
             loadedVideos.addAll(page.videos)
             loadingMore = false
+            android.util.Log.d("Channel",
+                "loadMore 완료: +${page.videos.size}개, 총 ${loadedVideos.size}개, next=${page.continuation}")
         }
     }
 }

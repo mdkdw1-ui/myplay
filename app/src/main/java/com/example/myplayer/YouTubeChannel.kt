@@ -46,6 +46,18 @@ object YouTubeChannel {
         Pair(null, ChannelVideosPage(emptyList(), null))
     }
     suspend fun fetchMore(continuation: String): ChannelVideosPage = withContext(Dispatchers.IO) {
+        // ★ "inv:채널ID:페이지" 형식이면 Invidious로 처리
+        if (continuation.startsWith("inv:")) {
+            val parts = continuation.removePrefix("inv:").split(":")
+            if (parts.size >= 2) {
+                val channelId = parts[0]
+                val page = parts[1].toIntOrNull() ?: 1
+                Log.d(TAG, "fetchMore (Invidious): channelId=$channelId page=$page")
+                return@withContext YouTubeApiHelper.channelVideos(channelId, page)
+            }
+        }
+
+        // Piped nextpage 토큰 (기존 로직 유지 - 하지만 실질적으로 안 쓰임)
         val videos = mutableListOf<VideoItem>()
         var cont: String? = null
         try {
