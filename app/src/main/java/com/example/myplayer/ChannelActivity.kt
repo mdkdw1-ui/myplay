@@ -115,6 +115,8 @@ class ChannelActivity : AppCompatActivity() {
             adapter.submit(page.videos)
             loadedVideos.clear()
             loadedVideos.addAll(page.videos)
+            android.util.Log.d("Channel",
+                "초기 로드: ${page.videos.size}개, next=${page.continuation?.take(50)}")
         }
     }
 
@@ -197,14 +199,31 @@ class ChannelActivity : AppCompatActivity() {
         val token = nextContinuation ?: return
         loadingMore = true
         lifecycleScope.launch {
-            android.util.Log.d("Channel", "loadMore: token=$token")
+            android.util.Log.d("Channel", "loadMore: token=${token.take(60)}...")
             val page = YouTubeChannel.fetchMore(token)
             nextContinuation = page.continuation
-            adapter.append(page.videos)
-            loadedVideos.addAll(page.videos)
+
+            // ★ 중복 제거 (같은 영상 여러 번 로드 방지)
+            val existingIds = loadedVideos.map { it.videoId }.toSet()
+            val newVideos = page.videos.filter { it.videoId !in existingIds }
+
+            if (newVideos.isNotEmpty()) {
+                adapter.append(newVideos)
+                loadedVideos.addAll(newVideos)
+            }
+
             loadingMore = false
+
+            // ★★★ tvStatus 업데이트 (총 로드 개수 표시)
+            val tvStatus = findViewById<TextView>(R.id.tvStatus)
+            if (tvStatus != null) {
+                val hasMore = page.continuation != null
+                tvStatus.text = "${loadedVideos.size}개 (더: $hasMore)"
+            }
+
             android.util.Log.d("Channel",
-                "loadMore 완료: +${page.videos.size}개, 총 ${loadedVideos.size}개, next=${page.continuation}")
+                "loadMore 완료: 신규=${newVideos.size}개, 총=${loadedVideos.size}개, " +
+                "next=${page.continuation?.take(50)}")
         }
     }
 }
