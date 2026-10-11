@@ -132,6 +132,7 @@ class PlayerActivity : AppCompatActivity() {
     private var currentStreamUrl: String? = null
 
     private var currentVideoId: String = ""
+    private var switchingToAudio: Boolean = false   // ★ 오디오 모드 전환 플래그
     private var currentTitle: String = ""
     private var currentChannel: String = ""
     private var currentThumb: String = ""
