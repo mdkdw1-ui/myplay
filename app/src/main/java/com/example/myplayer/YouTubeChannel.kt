@@ -46,14 +46,17 @@ object YouTubeChannel {
         Pair(null, ChannelVideosPage(emptyList(), null))
     }
     suspend fun fetchMore(continuation: String): ChannelVideosPage = withContext(Dispatchers.IO) {
-        // ★ "inv:채널ID:페이지" 형식이면 Invidious로 처리
+        // ★ "inv:<채널ID>|<continuation토큰>" 형식이면 Invidious로 처리
         if (continuation.startsWith("inv:")) {
-            val parts = continuation.removePrefix("inv:").split(":")
-            if (parts.size >= 2) {
-                val channelId = parts[0]
-                val page = parts[1].toIntOrNull() ?: 1
-                Log.d(TAG, "fetchMore (Invidious): channelId=$channelId page=$page")
-                return@withContext YouTubeApiHelper.channelVideos(channelId, page)
+            val rest = continuation.removePrefix("inv:")
+            val idx = rest.indexOf('|')
+            if (idx > 0) {
+                val channelId = rest.substring(0, idx)
+                val contToken = rest.substring(idx + 1)
+                Log.d(TAG, "fetchMore (Invidious): channelId=$channelId, cont=${contToken.take(30)}")
+                return@withContext YouTubeApiHelper.channelVideos(channelId, contToken)
+            } else {
+                Log.w(TAG, "fetchMore: 잘못된 inv 토큰 (| 없음): $continuation")
             }
         }
 
