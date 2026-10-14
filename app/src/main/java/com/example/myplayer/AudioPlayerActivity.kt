@@ -166,8 +166,59 @@ class AudioPlayerActivity : AppCompatActivity() {
         currentChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
         currentThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
 
+        // ★ 구독 알림에서 진입 시 처리
+        val fromSubNotif = intent.getBooleanExtra("FROM_SUB_NOTIFICATION", false)
+        if (fromSubNotif) {
+            diag("onCreate: 구독 알림에서 진입")
+            // ★ 알림 전체 제거 (그룹)
+            try {
+                val nm = getSystemService(Context.NOTIFICATION_SERVICE)
+                    as android.app.NotificationManager
+                nm.cancel(7000)   // 그룹 요약
+                for (id in 7001..7010) nm.cancel(id)
+            } catch (_: Exception) {}
+
+            // ★ 옵션 2: QUEUE_JSON 처리 (순차 재생)
+            val queueJson = intent.getStringExtra("QUEUE_JSON") ?: ""
+            if (queueJson.isNotBlank() && queueJson != "[]") {
+                try {
+                    val arr = org.json.JSONArray(queueJson)
+                    QueueManager.clear(this)
+                    var added = 0
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        val videoId = o.optString("videoId", "")
+                        if (videoId.isBlank()) continue
+                        QueueManager.add(this,
+                            HomeVideo(
+                                videoId = videoId,
+                                title = o.optString("title", ""),
+                                channel = o.optString("channel", ""),
+                                thumbnail = o.optString("thumbnail", "")
+                            )
+                        )
+                        added++
+                    }
+                    // ★ 첫 곡 재생 예약
+                    if (added > 0) {
+                        val first = arr.getJSONObject(0)
+                        currentVideoId = first.optString("videoId", currentVideoId)
+                        currentTitle = first.optString("title", currentTitle)
+                        currentChannel = first.optString("channel", currentChannel)
+                        currentThumb = first.optString("thumbnail", currentThumb)
+                        diag("onCreate: 큐에 ${added}개 추가, 첫 곡: $currentVideoId")
+                    }
+                } catch (e: Exception) {
+                    diag("onCreate: QUEUE_JSON 파싱 err: ${e.message}")
+                }
+            } else {
+                // 단일 재생
+                QueueManager.clear(this)
+            }
+        }
+
         val fromPlaylist = intent.getBooleanExtra("FROM_PLAYLIST", false)
-        if (!fromPlaylist) QueueManager.clear(this)
+        if (!fromPlaylist && !fromSubNotif) QueueManager.clear(this)
 
         reuseStreamUrl = intent.getStringExtra("REUSE_STREAM_URL") ?: ""
         reuseSubtitleUrl = intent.getStringExtra("REUSE_SUBTITLE_URL") ?: ""
@@ -1673,6 +1724,38 @@ class AudioPlayerActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         diag("onNewIntent 호출")
+
+        // ★ 구독 알림에서 진입 시 자동 재생
+        val fromSubNotif = intent.getBooleanExtra("FROM_SUB_NOTIFICATION", false)
+        if (fromSubNotif) {
+            diag("onNewIntent: 구독 알림에서 진입 → 재생")
+            try {
+                val nm = getSystemService(Context.NOTIFICATION_SERVICE)
+                    as android.app.NotificationManager
+                nm.cancel(7000)
+                for (id in 7001..7010) nm.cancel(id)
+            } catch (_: Exception) {}
+
+            // ★ 옵션 2: QUEUE_JSON 처리
+            val queueJson = intent.getStringExtra("QUEUE_JSON") ?: ""
+            if (queueJson.isNotBlank() && queueJson != "[]") {
+                try {
+                    val arr = org.json.JSONArray(queueJson)
+                    QueueManager.clear(this)
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        QueueManager.add(this,
+                            HomeVideo(
+                                videoId = o.optString("videoId", ""),
+                                title = o.optString("title", ""),
+                                channel = o.optString("channel", ""),
+                                thumbnail = o.optString("thumbnail", "")
+                            )
+                        )
+                    }
+                } catch (_: Exception) {}
+            }
+        }
 
         // 새 곡 정보
         val newVideoId = intent.getStringExtra("VIDEO_ID") ?: return
