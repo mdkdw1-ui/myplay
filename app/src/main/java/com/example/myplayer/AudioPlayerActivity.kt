@@ -35,6 +35,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import java.net.HttpURLConnection
@@ -51,6 +52,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var wakeLock: PowerManager.WakeLock? = null
 
     private var currentVideoId: String = ""
+    private var pendingStartPos: Long = 0L   // ★ 이어듣기 시작 위치
     private var currentTitle: String = ""
     private var currentChannel: String = ""
     private var currentThumb: String = ""
@@ -565,7 +567,6 @@ class AudioPlayerActivity : AppCompatActivity() {
                 .setAlbumTitle(target.channel)
                 .setArtworkUri(android.net.Uri.parse(target.thumbnail))
                 .build()
-
             val mediaItem = MediaItem.Builder()
                 .setUri(url)
                 .setMediaId(target.videoId)
@@ -1044,9 +1045,12 @@ class AudioPlayerActivity : AppCompatActivity() {
                     diag("clear err: ${e.message}")
                 }
                 // ★ setMediaItems(단일)로 큐 확실히 리셋
-                mediaController?.setMediaItems(listOf(mediaItem), 0, startPosToUse)
-                if (startPosToUse > 0) {
-                    diag("loadAudio: 시작 위치 ${startPosToUse / 1000}초")
+                // ★ 이어듣기 시작 위치 (클래스 필드)
+                val startPos = if (pendingStartPos > 0) pendingStartPos else 0L
+                mediaController?.setMediaItems(listOf(mediaItem), 0, startPos)
+                if (startPos > 0) {
+                    diag("loadAudio: 시작 위치 ${startPos / 1000}초")
+                    pendingStartPos = 0L   // ★ 사용 후 리셋
                 }
                 mediaController?.prepare()
                 try {
@@ -2167,7 +2171,10 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     /** ★ 시작 위치를 지정해서 loadAudio */
     private fun loadAudioWithStartPos(videoId: String, startPosMs: Long) {
-        // intent에 START_POS_MS를 임시 설정
+        // ★ 클래스 필드에 저장 (스코프 무관)
+        pendingStartPos = startPosMs
+        diag("loadAudioWithStartPos: $videoId, pos=${startPosMs / 1000}초")
+        // intent에도 저장
         intent.putExtra("START_POS_MS", startPosMs)
         intent.putExtra("FORCE_START_POS", true)
         loadAudio(videoId, isInitial = true)
