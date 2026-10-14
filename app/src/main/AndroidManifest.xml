@@ -34,6 +34,7 @@
         <activity android:name=".RelatedActivity" android:exported="false" android:label="관련 영상" />
         <activity android:name=".ChannelActivity" android:exported="false" android:label="채널" />
         <activity android:name=".StatsActivity" android:exported="false" android:label="통계" />
+        <activity android:name=".LaterListActivity" android:exported="false" android:label="나중에" />
         <activity android:name=".DownloadsActivity" android:exported="false" android:label="다운로드" />
         <activity android:name=".SettingsActivity" android:exported="false" android:label="설정" />
         <activity android:name=".YouTubeLoginActivity" android:exported="false" android:label="YouTube 로그인" />
@@ -79,6 +80,7 @@
                 <action android:name="ACTION_PREV" />
                 <action android:name="ACTION_PLAY_PAUSE" />
                 <action android:name="ACTION_NEXT" />
+                <action android:name="ACTION_SAVE_LATER" />
             </intent-filter>
         </receiver>
         <receiver

@@ -762,6 +762,51 @@ class StopServiceReceiver : android.content.BroadcastReceiver() {
 class NotificationActionReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
         Log.d("NotificationActionReceiver", "action=${intent.action}")
+
+        // ★★★ ACTION_SAVE_LATER: 나중에 목록 저장 + 알림 제거 ★★★
+        if (intent.action == "ACTION_SAVE_LATER") {
+            val videoId = intent.getStringExtra("VIDEO_ID") ?: return
+            val title = intent.getStringExtra("VIDEO_TITLE") ?: ""
+            val channel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
+            val thumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
+            val notifId = intent.getIntExtra("NOTIF_ID", 7001)
+
+            try {
+                val prefs = context.getSharedPreferences(
+                    "sub_notif_later", android.content.Context.MODE_PRIVATE
+                )
+                val existing = prefs.getStringSet("items", mutableSetOf()) ?: mutableSetOf()
+                val newItems = existing.toMutableSet()
+
+                val entry = "$videoId|$title|$channel|$thumb|${System.currentTimeMillis()}"
+                newItems.add(entry)
+
+                // 최대 50개 유지
+                if (newItems.size > 50) {
+                    val sorted = newItems.sortedByDescending {
+                        it.substringAfterLast('|').toLongOrNull() ?: 0
+                    }
+                    newItems.clear()
+                    newItems.addAll(sorted.take(50))
+                }
+
+                prefs.edit().putStringSet("items", newItems).apply()
+
+                Log.d("NotificationActionReceiver",
+                    "나중에 저장: $videoId (${title.take(30)}), 총 ${newItems.size}개")
+
+                // 알림 제거
+                val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE)
+                    as android.app.NotificationManager
+                nm.cancel(notifId)
+                nm.cancel(7000)
+            } catch (e: Exception) {
+                Log.e("NotificationActionReceiver", "나중에 저장 err: ${e.message}", e)
+            }
+            return
+        }
+
+        // ★ 기존 액션 (재생 컨트롤)
         val player = PlaybackService.exoPlayer ?: return
         when (intent.action) {
             "ACTION_PREV" -> {
@@ -771,7 +816,6 @@ class NotificationActionReceiver : android.content.BroadcastReceiver() {
             "ACTION_PLAY_PAUSE" -> {
                 if (player.isPlaying) {
                     player.pause()
-                    // ★ pause 시 playWhenReady=false 확실히
                     player.playWhenReady = false
                 } else {
                     player.play()
