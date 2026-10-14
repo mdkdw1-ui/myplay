@@ -294,7 +294,8 @@ class AudioPlayerActivity : AppCompatActivity() {
                     try { prefetchNext() } catch (_: Exception) {}
                 } else {
                     diag("onCreate: loadAudio 호출")
-                    loadAudio(currentVideoId, isInitial = true)
+                    // ★★★ 이어듣기 다이얼로그 ★★★
+                    checkResumeAndPlayAudio(currentVideoId)
                 }
             } else {
                 diag("onCreate skip failed: $currentVideoId")
@@ -1043,7 +1044,10 @@ class AudioPlayerActivity : AppCompatActivity() {
                     diag("clear err: ${e.message}")
                 }
                 // ★ setMediaItems(단일)로 큐 확실히 리셋
-                mediaController?.setMediaItems(listOf(mediaItem), 0, 0L)
+                mediaController?.setMediaItems(listOf(mediaItem), 0, startPosToUse)
+                if (startPosToUse > 0) {
+                    diag("loadAudio: 시작 위치 ${startPosToUse / 1000}초")
+                }
                 mediaController?.prepare()
                 try {
                     val mc = mediaController
@@ -1796,6 +1800,8 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
 
         diag("onResume: 재생 상태 유지 (video 트랙 건드리지 않음)")
+        // ★ 자동 저장 시작 (매 10초)
+        startPositionAutoSave()
     }
 
     override fun onStop() {
@@ -2111,19 +2117,147 @@ class AudioPlayerActivity : AppCompatActivity() {
         // 카운트다운 없음 (오디오 모드)
     }
 
+    /** ★ 이어듣기 다이얼로그 */
+    private fun checkResumeAndPlayAudio(videoId: String) {
+        // 이미 재생 중이면 스킵
+        if (mediaController?.currentMediaItem?.mediaId == videoId &&
+            (mediaController?.isPlaying == true || mediaController?.playWhenReady == true)) {
+            diag("checkResume: 이미 재생 중 → 스킵")
+            loadAudio(videoId, isInitial = true)
+            return
+        }
+
+        bgScope.launch {
+            val saved = try {
+                withContext(Dispatchers.IO) {
+                    HistoryDatabase.get(applicationContext).historyDao().getById(videoId)
+                }
+            } catch (e: Exception) { null }
+
+            val savedPos = saved?.positionMs ?: 0L
+            val savedDur = saved?.durationMs ?: 0L
+            // ★ 3초 이상 + 끝까지 5초 이상 남음
+            val canResume = savedPos > 3000L && (savedDur == 0L || savedDur - savedPos > 5000L)
+
+            diag("checkResume: $videoId pos=${savedPos / 1000}초 dur=${savedDur / 1000}초 canResume=$canResume")
+
+            if (canResume) {
+                runOnUiThread {
+                    androidx.appcompat.app.AlertDialog.Builder(this@AudioPlayerActivity)
+                        .setTitle("🎵 이어 듣기")
+                        .setMessage("${formatTime(savedPos)}부터 이어 들을까요?")
+                        .setPositiveButton("이어 듣기") { _, _ ->
+                            diag("checkResume: 이어 듣기 선택 (${savedPos / 1000}초)")
+                            loadAudioWithStartPos(videoId, savedPos)
+                        }
+                        .setNegativeButton("처음부터") { _, _ ->
+                            diag("checkResume: 처음부터 선택")
+                            loadAudioWithStartPos(videoId, 0L)
+                        }
+                        .setCancelable(false)
+                        .show()
+                }
+            } else {
+                runOnUiThread {
+                    loadAudio(videoId, isInitial = true)
+                }
+            }
+        }
+    }
+
+    /** ★ 시작 위치를 지정해서 loadAudio */
+    private fun loadAudioWithStartPos(videoId: String, startPosMs: Long) {
+        // intent에 START_POS_MS를 임시 설정
+        intent.putExtra("START_POS_MS", startPosMs)
+        intent.putExtra("FORCE_START_POS", true)
+        loadAudio(videoId, isInitial = true)
+    }
+
+    private fun formatTime(ms: Long): String {
+        val sec = ms / 1000
+        val h = sec / 3600
+        val m = (sec % 3600) / 60
+        val s = sec % 60
+        return if (h > 0) String.format("%d:%02d:%02d", h, m, s)
+        else String.format("%d:%02d", m, s)
+    }
+
     private fun savePosition() {
         val mc = mediaController ?: return
         if (currentVideoId.isBlank()) return
+        // ★ 로컬 파일은 스킵
+        if (currentVideoId.startsWith("local:")) return
+
         val pos = mc.currentPosition
         val dur = mc.duration
-        if (pos <= 0) return
+        if (pos <= 3000) return   // ★ 3초 이상만 저장
         val durationMs = if (dur > 0) dur else 0L
         val appCtx = applicationContext
         val vid = currentVideoId
-        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+        val title = currentTitle
+        val channel = currentChannel
+        val thumb = currentThumb
+
+        bgScope.launch {
             try {
-                HistoryDatabase.get(appCtx).historyDao().updatePosition(vid, pos, durationMs)
-            } catch (e: Exception) { }
+                val dao = HistoryDatabase.get(appCtx).historyDao()
+                val existing = dao.getById(vid)
+                if (existing == null) {
+                    // ★ 없으면 insert (히스토리에 없으면 새로 생성)
+                    dao.insert(
+                        HistoryEntity(
+                            videoId = vid, title = title, channel = channel,
+                            thumbnail = thumb, watchedAt = System.currentTimeMillis(),
+                            positionMs = pos, durationMs = durationMs
+                        )
+                    )
+                } else {
+                    // ★ 있으면 위치만 갱신
+                    dao.updatePosition(vid, pos, durationMs)
+                }
+                diag("위치 저장: ${pos / 1000}초 / ${durationMs / 1000}초")
+            } catch (e: Exception) {
+                diag("위치 저장 err: ${e.message}")
+            }
+        }
+    }
+
+    /** ★ 매 10초 자동 저장 */
+    private fun startPositionAutoSave() {
+        bgScope.launch {
+            while (isActive) {
+                delay(10_000)   // 10초
+                try {
+                    val mc = mediaController ?: continue
+                    val pos = mc.currentPosition
+                    val dur = mc.duration
+                    if (pos > 3000 && currentVideoId.isNotBlank() &&
+                        !currentVideoId.startsWith("local:")) {
+                        val durationMs = if (dur > 0) dur else 0L
+                        val vid = currentVideoId
+                        val title = currentTitle
+                        val channel = currentChannel
+                        val thumb = currentThumb
+                        withContext(Dispatchers.IO) {
+                            try {
+                                val dao = HistoryDatabase.get(applicationContext).historyDao()
+                                val existing = dao.getById(vid)
+                                if (existing == null) {
+                                    dao.insert(
+                                        HistoryEntity(
+                                            videoId = vid, title = title, channel = channel,
+                                            thumbnail = thumb, watchedAt = System.currentTimeMillis(),
+                                            positionMs = pos, durationMs = durationMs
+                                        )
+                                    )
+                                } else {
+                                    dao.updatePosition(vid, pos, durationMs)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
         }
     }
 
