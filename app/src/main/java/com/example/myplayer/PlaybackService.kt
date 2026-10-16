@@ -795,11 +795,12 @@ class NotificationActionReceiver : android.content.BroadcastReceiver() {
                 Log.d("NotificationActionReceiver",
                     "나중에 저장: $videoId (${title.take(30)}), 총 ${newItems.size}개")
 
-                // 알림 제거
+                // ★ 개별 알림만 제거 (그룹 요약은 유지)
+                // ★ nm.cancel(7000) 호출 시 그룹 전체가 제거되므로 절대 호출 X
                 val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE)
                     as android.app.NotificationManager
                 nm.cancel(notifId)
-                nm.cancel(7000)
+                Log.d("NotificationActionReceiver", "알림 $notifId 만 제거 (그룹 유지)")
             } catch (e: Exception) {
                 Log.e("NotificationActionReceiver", "나중에 저장 err: ${e.message}", e)
             }
