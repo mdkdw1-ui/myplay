@@ -145,6 +145,8 @@ class SubscriptionWorker(
             )
 
             nm.notify(notifId, builder.build())
+            android.util.Log.d("SubscriptionWorker",
+                "알림 $notifId: $chName, ${items.size}개 영상")
             notifId++
         }
 
@@ -159,6 +161,8 @@ class SubscriptionWorker(
         actionIdx: Int = 0
     ): android.app.PendingIntent {
         val intent = android.content.Intent(ctx, AudioPlayerActivity::class.java).apply {
+            // ★★★ 고유 data URI (Intent 식별자로 사용) ★★★
+            data = android.net.Uri.parse("myplayer://play/$actionIdx/${video.videoId}")
             flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
                     android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
                     android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -175,7 +179,7 @@ class SubscriptionWorker(
             8000 + actionIdx + video.videoId.hashCode().and(0xFFF),
             intent,
             android.app.PendingIntent.FLAG_IMMUTABLE or
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                android.app.PendingIntent.FLAG_CANCEL_CURRENT   // ★ UPDATE → CANCEL
         )
     }
 
@@ -204,6 +208,8 @@ class SubscriptionWorker(
         val first = videos.firstOrNull()?.second
 
         val intent = android.content.Intent(ctx, AudioPlayerActivity::class.java).apply {
+            // ★★★ 고유 data URI (타임스탬프로 매번 다름) ★★★
+            data = android.net.Uri.parse("myplayer://play_all/${System.currentTimeMillis()}")
             flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
                     android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
                     android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -211,17 +217,17 @@ class SubscriptionWorker(
             putExtra("VIDEO_TITLE", first?.title ?: "")
             putExtra("VIDEO_CHANNEL", first?.channel ?: "")
             putExtra("VIDEO_THUMB", first?.thumbnail ?: "")
-            putExtra("FROM_PLAYLIST", true)             // ★ 큐 유지
+            putExtra("FROM_PLAYLIST", true)
             putExtra("FROM_SUB_NOTIFICATION", true)
             putExtra("PLAY_MODE", "queue")
-            putExtra("QUEUE_JSON", queueJson)           // ★ 큐 데이터
+            putExtra("QUEUE_JSON", queueJson)
         }
         return android.app.PendingIntent.getActivity(
             ctx,
             9001,
             intent,
             android.app.PendingIntent.FLAG_IMMUTABLE or
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                android.app.PendingIntent.FLAG_CANCEL_CURRENT   // ★ CANCEL
         )
     }
 
@@ -233,6 +239,9 @@ class SubscriptionWorker(
     ): android.app.PendingIntent {
         val intent = android.content.Intent(ctx, NotificationActionReceiver::class.java).apply {
             action = "ACTION_SAVE_LATER"
+            // ★★★ 핵심: 고유 data URI (Intent 식별자) ★★★
+            // extras만 다르면 Android는 같은 Intent로 인식 → 하나 누르면 다 처리됨
+            data = android.net.Uri.parse("myplayer://later/$notifId/${video.videoId}")
             putExtra("NOTIF_ID", notifId)
             putExtra("VIDEO_ID", video.videoId)
             putExtra("VIDEO_TITLE", video.title)
@@ -244,7 +253,7 @@ class SubscriptionWorker(
             10000 + notifId,
             intent,
             android.app.PendingIntent.FLAG_IMMUTABLE or
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                android.app.PendingIntent.FLAG_CANCEL_CURRENT   // ★ UPDATE → CANCEL
         )
     }
 }
