@@ -742,7 +742,7 @@ class StopServiceReceiver : android.content.BroadcastReceiver() {
                 val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE)
                     as android.app.NotificationManager
                 nm.cancel(1001)
-                nm.cancelAll()
+                // ❌ nm.cancelAll() 제거 — 구독 알림 보존
                 Log.d("StopServiceReceiver", "알림 강제 취소 완료")
             } catch (_: Exception) {}
 
