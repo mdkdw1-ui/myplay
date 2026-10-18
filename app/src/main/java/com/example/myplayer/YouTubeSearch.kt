@@ -71,8 +71,8 @@ object YouTubeSearch {
         }
     }
     suspend fun searchPage(query: String, filter: SearchFilter? = null): SearchPage = withContext(Dispatchers.IO) {
-        val videos = YouTubeApiHelper.searchVideos(query)
-        SearchPage(videos, null)
+        val page = YouTubeApiHelper.searchVideosPage(query, null)
+        SearchPage(page.videos, page.continuation)
     }
 
     /**
@@ -109,8 +109,9 @@ object YouTubeSearch {
         }
     }
 
-    suspend fun searchMore(continuation: String): SearchPage = withContext(Dispatchers.IO) {
-        SearchPage(emptyList(), null)
+    suspend fun searchMore(query: String, continuation: String): SearchPage = withContext(Dispatchers.IO) {
+        val page = YouTubeApiHelper.searchVideosPage(query, continuation)
+        SearchPage(page.videos, page.continuation)
     }
 
     private fun post(urlStr: String, bodyStr: String): String? {
