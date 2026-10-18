@@ -224,10 +224,13 @@ class SearchActivity : AppCompatActivity() {
         val token = nextContinuation ?: return
         loadingMore = true
         lifecycleScope.launch {
-            val page = YouTubeSearch.searchMore(token)
+            android.util.Log.d("Search", "loadMore: q=$lastQuery, token=${token.take(50)}")
+            val page = YouTubeSearch.searchMore(lastQuery, token)
             nextContinuation = page.continuation
             adapter.append(page.videos)
             loadingMore = false
+            android.util.Log.d("Search",
+                "loadMore 완료: +${page.videos.size}개, next=${page.continuation?.take(40)}")
         }
     }
 

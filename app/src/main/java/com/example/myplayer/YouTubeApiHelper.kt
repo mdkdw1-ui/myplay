@@ -69,10 +69,97 @@ object YouTubeApiHelper {
     // ═══════════════════════════════════════════════
     // 검색
     // ═══════════════════════════════════════════════
-    suspend fun searchVideos(query: String): List<VideoItem> = withContext(Dispatchers.IO) {
+    data class SearchResultPage(
+        val videos: List<VideoItem>,
+        val continuation: String?
+    )
+
+    /** 하위 호환용 (첫 페이지만) */
+    suspend fun searchVideos(query: String): List<VideoItem> =
+        searchVideosPage(query, null).videos
+
+    /** 페이지네이션 지원 검색 */
+    suspend fun searchVideosPage(
+        query: String,
+        continuation: String? = null
+    ): SearchResultPage = withContext(Dispatchers.IO) {
         val q = URLEncoder.encode(query, "UTF-8")
 
-        // ★ Piped 먼저 (더 빠름)
+        // ────────────────────────────────────
+        // 이어받기 (continuation 기반)
+        // ────────────────────────────────────
+        if (!continuation.isNullOrBlank()) {
+            // Piped nextpage
+            if (continuation.startsWith("piped:")) {
+                val nextpage = continuation.removePrefix("piped:")
+                for (inst in PIPED) {
+                    val url = "$inst/nextpage/search?q=$q&filter=videos&nextpage=${URLEncoder.encode(nextpage, "UTF-8")}"
+                    val obj = getJsonObject(url) ?: continue
+                    try {
+                        val items = obj.optJSONArray("items") ?: continue
+                        val out = mutableListOf<VideoItem>()
+                        for (i in 0 until items.length()) {
+                            val v = items.optJSONObject(i) ?: continue
+                            val u = v.optString("url", "")
+                            val id = u.substringAfter("/watch?v=", "").substringBefore("&")
+                            if (id.isBlank()) continue
+                            out.add(VideoItem(
+                                videoId = id,
+                                title = v.optString("title", ""),
+                                channel = v.optString("uploaderName", ""),
+                                thumbnail = v.optString("thumbnail", ""),
+                                duration = fmtSec(v.optInt("duration", 0)),
+                                viewCount = "",
+                                uploadDate = v.optString("uploadedDate", "")
+                            ))
+                        }
+                        val next = obj.optString("nextpage", "").takeIf { it.isNotBlank() }
+                            ?.let { "piped:$it" }
+                        if (out.isNotEmpty()) {
+                            Log.d(TAG, "piped search more: ${out.size}개")
+                            return@withContext SearchResultPage(out, next)
+                        }
+                    } catch (e: Exception) { }
+                }
+            }
+
+            // Invidious page
+            if (continuation.startsWith("inv:")) {
+                val page = continuation.removePrefix("inv:").toIntOrNull() ?: 2
+                for (inst in INVIDIOUS) {
+                    val arr = getJsonArray("$inst/api/v1/search?q=$q&type=video&page=$page") ?: continue
+                    try {
+                        val out = mutableListOf<VideoItem>()
+                        for (i in 0 until arr.length()) {
+                            val v = arr.optJSONObject(i) ?: continue
+                            val id = v.optString("videoId", "")
+                            if (id.isBlank()) continue
+                            out.add(VideoItem(
+                                videoId = id,
+                                title = v.optString("title", ""),
+                                channel = v.optString("author", ""),
+                                thumbnail = v.optString("videoThumbnails", ""),
+                                duration = fmtSec(v.optInt("lengthSeconds", 0)),
+                                viewCount = fmtViews(v.optLong("viewCount", 0)),
+                                uploadDate = ""
+                            ))
+                        }
+                        val next = if (out.size >= 15) "inv:${page + 1}" else null
+                        if (out.isNotEmpty()) {
+                            Log.d(TAG, "inv search page=$page: ${out.size}개, next=$next")
+                            return@withContext SearchResultPage(out, next)
+                        }
+                    } catch (e: Exception) { }
+                }
+            }
+            return@withContext SearchResultPage(emptyList(), null)
+        }
+
+        // ────────────────────────────────────
+        // 첫 페이지
+        // ────────────────────────────────────
+
+        // Piped 우선
         for (inst in PIPED) {
             val obj = getJsonObject("$inst/search?q=$q&filter=videos") ?: continue
             try {
@@ -80,8 +167,8 @@ object YouTubeApiHelper {
                 val out = mutableListOf<VideoItem>()
                 for (i in 0 until items.length()) {
                     val v = items.optJSONObject(i) ?: continue
-                    val url = v.optString("url", "")
-                    val id = url.substringAfter("/watch?v=", "").substringBefore("&")
+                    val u = v.optString("url", "")
+                    val id = u.substringAfter("/watch?v=", "").substringBefore("&")
                     if (id.isBlank()) continue
                     out.add(VideoItem(
                         videoId = id,
@@ -93,9 +180,11 @@ object YouTubeApiHelper {
                         uploadDate = v.optString("uploadedDate", "")
                     ))
                 }
+                val next = obj.optString("nextpage", "").takeIf { it.isNotBlank() }
+                    ?.let { "piped:$it" }
                 if (out.isNotEmpty()) {
-                    Log.d(TAG, "piped search: ${out.size}개")
-                    return@withContext out
+                    Log.d(TAG, "piped search: ${out.size}개, next=${next?.take(40)}")
+                    return@withContext SearchResultPage(out, next)
                 }
             } catch (e: Exception) { }
         }
@@ -119,14 +208,15 @@ object YouTubeApiHelper {
                         uploadDate = ""
                     ))
                 }
+                val next = if (out.size >= 15) "inv:2" else null
                 if (out.isNotEmpty()) {
-                    Log.d(TAG, "inv search: ${out.size}개")
-                    return@withContext out
+                    Log.d(TAG, "inv search: ${out.size}개, next=$next")
+                    return@withContext SearchResultPage(out, next)
                 }
             } catch (e: Exception) { }
         }
 
-        emptyList()
+        SearchResultPage(emptyList(), null)
     }
 
     
