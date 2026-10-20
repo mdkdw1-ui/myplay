@@ -503,18 +503,34 @@ class AudioPlayerActivity : AppCompatActivity() {
                         .distinctBy { it.videoId }
                         .filter { it.videoId != currentVideoId && it.videoId !in failedIds }
 
-                    // ★★ nextPreviewList 10곡 갱신
+                    // ★★ nextPreviewList에 추가 (기존 큐 항목은 유지, 중복 제거)
                     synchronized(nextPreviewList) {
-                        nextPreviewList.clear()
+                        // 큐에 있는 곡은 nextPreviewList에서 제거 (중복 방지)
+                        val queueIds = QueueManager.get(this@AudioPlayerActivity)
+                            .map { it.videoId }.toSet()
+                        nextPreviewList.removeAll { it.videoId in queueIds }
+
                         combined.take(10).forEach { v ->
-                            nextPreviewList.add(HomeVideo(v.videoId, v.title, v.channel, v.thumbnail))
+                            val hv = HomeVideo(v.videoId, v.title, v.channel, v.thumbnail)
+                            nextPreviewList.removeAll { it.videoId == hv.videoId }
+                            nextPreviewList.add(hv)
                         }
-                        diag("nextPreviewList 갱신: ${nextPreviewList.size}곡")
+                        while (nextPreviewList.size > 20) {
+                            nextPreviewList.removeAt(nextPreviewList.size - 1)
+                        }
+                        diag("nextPreviewList 보강: ${nextPreviewList.size}곡")
                     }
 
-                    combined.firstOrNull()?.let {
-                        HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
-                    }
+                    // ★ 라디오에서 선택된 곡을 큐에 추가 (순서 고정)
+                    val firstPick = combined.firstOrNull()
+                    if (firstPick != null && next == null) {
+                        val hv = HomeVideo(firstPick.videoId, firstPick.title, firstPick.channel, firstPick.thumbnail)
+                        try {
+                            QueueManager.add(this@AudioPlayerActivity, hv)
+                            diag("라디오 픽을 큐에 추가: ${hv.videoId}")
+                        } catch (_: Exception) {}
+                        hv
+                    } else null
                 }
 
                 if (target == null) {
@@ -716,6 +732,19 @@ class AudioPlayerActivity : AppCompatActivity() {
         try {
             QueueManager.setCurrent(this, videoId)
             diag("loadAudio setCurrent: $videoId")
+        } catch (_: Exception) {}
+
+        // ★★★ 현재 곡이 큐에 없으면 추가 (순서 고정)
+        try {
+            if (!videoId.startsWith("local:")) {
+                val queue = QueueManager.get(this)
+                val exists = queue.any { it.videoId == videoId }
+                if (!exists && currentTitle.isNotBlank()) {
+                    QueueManager.add(this,
+                        HomeVideo(videoId, currentTitle, currentChannel, currentThumb))
+                    diag("loadAudio: 현재 곡을 큐에 추가 $videoId")
+                }
+            }
         } catch (_: Exception) {}
 
         // ★★★ prefetch 캐시 히트 시 즉시 재생 (extract 스킵) ★★★
@@ -2208,18 +2237,25 @@ class AudioPlayerActivity : AppCompatActivity() {
             val queue = QueueManager.get(this)
             val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
 
-            val next: List<HomeVideo> = if (curIdx >= 0 && curIdx < queue.size - 1) {
-                // ★ 큐에서 현재 다음 10곡
-                queue.drop(curIdx + 1).take(10)
-            } else {
-                // ★★ 큐 없음 → nextPreviewList 사용 (prefetch 기반)
+            val result = mutableListOf<HomeVideo>()
+
+            // ★ 1순위: 큐에서 현재 다음 곡들 (순서 유지)
+            if (curIdx >= 0 && curIdx < queue.size - 1) {
+                queue.drop(curIdx + 1).take(10).forEach { result.add(it) }
+            }
+
+            // ★ 2순위: 부족분은 nextPreviewList(prefetch/radio)로 채움
+            if (result.size < 10) {
                 synchronized(nextPreviewList) {
                     nextPreviewList
                         .filter { it.videoId != currentVideoId }
-                        .take(10)
-                        .toList()
+                        .filter { v -> result.none { it.videoId == v.videoId } }
+                        .take(10 - result.size)
+                        .forEach { result.add(it) }
                 }
             }
+
+            val next: List<HomeVideo> = result
 
             runOnUiThread {
                 adapter.submit(next)
@@ -2306,18 +2342,17 @@ class AudioPlayerActivity : AppCompatActivity() {
                 items.add(HomeVideo(currentVideoId, currentTitle, currentChannel, currentThumb))
             }
 
-            // QueueManager
+            // ★ 큐 순서 우선 (현재 다음부터 끝까지)
             val queue = QueueManager.get(this)
             val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
-            if (curIdx >= 0) {
-                // 큐에서 현재 다음 곡들
+            if (curIdx >= 0 && curIdx < queue.size - 1) {
                 queue.drop(curIdx + 1).forEach { items.add(it) }
             } else {
-                // 큐 없으면 전체 큐 추가
+                // 현재 곡이 큐에 없으면 전체 큐
                 queue.filter { it.videoId != currentVideoId }.forEach { items.add(it) }
             }
 
-            // nextPreviewList (prefetch 캐시)
+            // ★ 부족분은 nextPreviewList로 채움
             synchronized(nextPreviewList) {
                 nextPreviewList
                     .filter { it.videoId != currentVideoId }
