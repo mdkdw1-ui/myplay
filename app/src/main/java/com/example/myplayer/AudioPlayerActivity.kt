@@ -191,6 +191,18 @@ class AudioPlayerActivity : AppCompatActivity() {
         currentChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
         currentThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
 
+        // ★★ Activity 재생성 시 local/YouTube 상태 복원
+        if (currentVideoId.isBlank()) {
+            val savedId = pref?.getString("current_video_id", null) ?: ""
+            if (savedId.isNotBlank()) {
+                currentVideoId = savedId
+                currentTitle = pref?.getString("current_title", "") ?: ""
+                currentChannel = pref?.getString("current_channel", "") ?: ""
+                currentThumb = pref?.getString("current_thumbnail", "") ?: ""
+                diag("onCreate: prefs 복원 ${savedId.take(30)}")
+            }
+        }
+
         // ★ 구독 알림에서 진입 시 처리
         val fromSubNotif = intent.getBooleanExtra("FROM_SUB_NOTIFICATION", false)
         if (fromSubNotif) {
@@ -683,6 +695,15 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     private fun trySkipToNextInQueue(failedVideoId: String) {
         try {
+            // ★ local 실패 시 YouTube 검색 금지 (playNextLocal로)
+            if (failedVideoId.startsWith("local:")) {
+                diag("trySkip: local 실패 → playNextLocal (YouTube 검색 X)")
+                failedIds.add(failedVideoId)
+                loadingNext = false
+                bgScope.launch { delay(300); playNextLocal() }
+                return
+            }
+
             failedIds.add(failedVideoId)
             diag("failedIds += $failedVideoId (총 ${failedIds.size}개)")
 
@@ -817,7 +838,16 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
 
         if (videoId.startsWith("local:download:")) {
-            val fileUri = intent.getStringExtra("FILE_URI")
+            // ★ prefs에서 URI 복원 (Activity 재생성 시 대비)
+            var fileUri = intent.getStringExtra("FILE_URI")
+            if (fileUri.isNullOrBlank()) {
+                fileUri = pref?.getString("local_uri_$videoId", null)
+                diag("loadAudio local:download: prefs 복원 시도 uri=$fileUri")
+            }
+            // ★ 이번에 받은 URI prefs에 저장
+            if (!fileUri.isNullOrBlank()) {
+                pref?.edit()?.putString("local_uri_$videoId", fileUri)?.apply()
+            }
             diag("loadAudio local:download fileUri=$fileUri")
             if (!fileUri.isNullOrBlank()) {
                 bgScope.launch {

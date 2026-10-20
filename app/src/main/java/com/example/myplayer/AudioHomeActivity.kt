@@ -26,6 +26,7 @@ class AudioHomeActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_audio_home)
+        BottomNavHelper.setup(this, BottomNavHelper.TAB_AUDIO)
 
         val container = findViewById<android.widget.LinearLayout>(R.id.container)
         val progress = findViewById<View>(R.id.progress)
