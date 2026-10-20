@@ -218,10 +218,12 @@ class LocalMediaActivity : AppCompatActivity() {
         QueueManager.setCurrent(this, "local:${media.id}")
 
         startActivity(Intent(this, AudioPlayerActivity::class.java).apply {
+            putExtra("VIDEO_ID", "local:${media.id}")
             putExtra("LOCAL_URI", media.uri.toString())
             putExtra("VIDEO_TITLE", media.title)
             putExtra("VIDEO_CHANNEL", media.artist)
             putExtra("FROM_PLAYLIST", true)
+            putExtra("LOCAL_MODE", true)
         })
     }
 

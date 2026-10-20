@@ -364,6 +364,7 @@ class MainActivity : AppCompatActivity() {
                     putExtra("VIDEO_TITLE", item.title)
                     putExtra("VIDEO_CHANNEL", item.channel)
                     putExtra("FROM_PLAYLIST", true)
+                    putExtra("LOCAL_MODE", true)
                 })
             } else {
                 startActivity(android.content.Intent(this, PlayerActivity::class.java).apply {

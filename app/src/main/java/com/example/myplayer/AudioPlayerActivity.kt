@@ -53,6 +53,9 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     private var currentVideoId: String = ""
     private var pendingStartPos: Long = 0L
+    private val isLocalMode: Boolean
+        get() = intent.getBooleanExtra("LOCAL_MODE", false)
+            || currentVideoId.startsWith("local:")
     private val nextPreviewList = mutableListOf<HomeVideo>()   // ★ 다음 곡 미리보기용   // ★ 이어듣기 시작 위치
     private var currentTitle: String = ""
     private var currentChannel: String = ""
@@ -458,6 +461,12 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun prefetchNext() {
+        // ★★★ local 모드 → YouTube 검색 안 함
+        if (isLocalMode) {
+            diag("prefetch: local 모드 → skip")
+            return
+        }
+
         // ★ 서비스 정지 상태면 prefetch 금지
         if (pref?.getBoolean("service_stopped", false) == true) {
             diag("prefetch: service_stopped=true → skip")
@@ -696,8 +705,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private fun trySkipToNextInQueue(failedVideoId: String) {
         try {
             // ★ local 실패 시 YouTube 검색 금지 (playNextLocal로)
-            if (failedVideoId.startsWith("local:")) {
-                diag("trySkip: local 실패 → playNextLocal (YouTube 검색 X)")
+            if (failedVideoId.startsWith("local:") || isLocalMode) {
+                diag("trySkip: local → playNextLocal (YouTube X)")
                 failedIds.add(failedVideoId)
                 loadingNext = false
                 bgScope.launch { delay(300); playNextLocal() }
@@ -838,30 +847,16 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
 
         if (videoId.startsWith("local:download:")) {
-            // ★ prefs에서 URI 복원 (Activity 재생성 시 대비)
+            val ytId = videoId.removePrefix("local:download:")
             var fileUri = intent.getStringExtra("FILE_URI")
             if (fileUri.isNullOrBlank()) {
                 fileUri = pref?.getString("local_uri_$videoId", null)
-                diag("loadAudio local:download: prefs 복원 시도 uri=$fileUri")
+                diag("local:download: prefs 복원 uri=$fileUri")
             }
-            // ★ 이번에 받은 URI prefs에 저장
             if (!fileUri.isNullOrBlank()) {
                 pref?.edit()?.putString("local_uri_$videoId", fileUri)?.apply()
-            }
-            diag("loadAudio local:download fileUri=$fileUri")
-            if (!fileUri.isNullOrBlank()) {
-                bgScope.launch {
-                    try {
-                        val p = android.net.Uri.parse(fileUri).path
-                        if (p != null) {
-                            val f = java.io.File(p)
-                            diag("local file exists=${f.exists()} size=${f.length() / 1024 / 1024}MB")
-                        }
-                    } catch (_: Exception) {}
-                }
-
+                diag("local:download 재생 시작 (mediaId=$videoId)")
                 try {
-                    // ★ mediaId 설정 (빈 ID 방지)
                     val mi = MediaItem.Builder()
                         .setUri(fileUri)
                         .setMediaId(videoId)
@@ -869,12 +864,43 @@ class AudioPlayerActivity : AppCompatActivity() {
                     mediaController?.setMediaItem(mi)
                     mediaController?.prepare()
                     mediaController?.playWhenReady = true
-                    diag("local:download 재생 시작 (mediaId=$videoId)")
                 } catch (e: Exception) {
                     diag("local:download err: ${e.message}")
                 }
-            } else {
-                diag("local:download fileUri null!")
+                return
+            }
+
+            diag("local:download: URI 없음 → DB 조회 ($ytId)")
+            bgScope.launch {
+                val download = withContext(Dispatchers.IO) {
+                    try {
+                        HistoryDatabase.get(applicationContext).downloadDao().getById(ytId)
+                    } catch (e: Exception) { null }
+                }
+                if (download != null) {
+                    val file = java.io.File(download.filePath)
+                    if (file.exists()) {
+                        val uri = android.net.Uri.fromFile(file).toString()
+                        pref?.edit()?.putString("local_uri_$videoId", uri)?.apply()
+                        diag("local:download: DB 복원 성공 → $uri")
+                        runOnUiThread {
+                            try {
+                                val mi = MediaItem.Builder()
+                                    .setUri(uri)
+                                    .setMediaId(videoId)
+                                    .build()
+                                mediaController?.setMediaItem(mi)
+                                mediaController?.prepare()
+                                mediaController?.playWhenReady = true
+                            } catch (e: Exception) {
+                                diag("local:download err: ${e.message}")
+                            }
+                        }
+                        return@launch
+                    }
+                }
+                diag("local:download: 파일 없음 → playNextLocal")
+                playNextLocal()
             }
             return
         }
@@ -939,6 +965,13 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
             return
         }
+        // ★★★ local 모드인데 YouTube ID → 재생 X
+        if (isLocalMode) {
+            diag("loadAudio: local 모드인데 YouTube ID ($videoId) → playNextLocal")
+            bgScope.launch { delay(300); playNextLocal() }
+            return
+        }
+
         bgScope.launch {
             diag("loadAudio($videoId) 시작")
             if (isInitial && reuseStreamUrl.isNotBlank() && videoId == currentVideoId) {
@@ -1380,6 +1413,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                                     putExtra("VIDEO_TITLE", next.title)
                                     putExtra("VIDEO_CHANNEL", next.channel)
                                     putExtra("FROM_PLAYLIST", true)
+                                    putExtra("LOCAL_MODE", true)
                                 })
                                 finish()
                             }
@@ -1421,7 +1455,12 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun playNextRelatedBg() {
-        // ★★★ 로컬 재생 중이면 유튜브 검색 안 함
+        // ★★★ local 모드 → playNextLocal only (YouTube 폴백 완전 차단)
+        if (isLocalMode) {
+            diag("playNext: local 모드 → playNextLocal (YouTube X)")
+            playNextLocal()
+            return
+        }
         if (currentVideoId.startsWith("local:")) {
             diag("playNext: local 파일 → playNextLocal")
             playNextLocal()
