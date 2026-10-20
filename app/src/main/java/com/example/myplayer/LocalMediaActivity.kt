@@ -59,6 +59,7 @@ class LocalMediaActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_local_media)
+        BottomNavHelper.setup(this, BottomNavHelper.TAB_LOCAL)
 
         val tabs = findViewById<TabLayout>(R.id.tabs)
         val recycler = findViewById<RecyclerView>(R.id.recycler)

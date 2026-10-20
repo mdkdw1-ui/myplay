@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_video"
+        android:icon="@android:drawable/ic_media_play"
+        android:title="동영상" />
+    <item
+        android:id="@+id/nav_audio"
+        android:icon="@android:drawable/ic_media_play"
+        android:title="음악" />
+    <item
+        android:id="@+id/nav_local"
+        android:icon="@android:drawable/ic_media_play"
+        android:title="로컬" />
+</menu>
