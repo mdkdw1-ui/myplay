@@ -61,13 +61,7 @@ class SearchActivity : AppCompatActivity() {
                 PlaylistPickerHelper.showSaveDialog(this, lifecycleScope, videos)
             },
             onClick = { item ->
-                val intent = Intent(this, PlayerActivity::class.java).apply {
-                    putExtra("VIDEO_ID", item.videoId)
-                    putExtra("VIDEO_TITLE", item.title)
-                    putExtra("VIDEO_CHANNEL", item.channel)
-                    putExtra("VIDEO_THUMB", item.thumbnail)
-                }
-                startActivity(intent)
+                PlayModeChooser.show(this, item)
             }
         )
         recycler.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 2)
@@ -78,13 +72,7 @@ class SearchActivity : AppCompatActivity() {
             RecyclerTouchListener(
                 this, recycler,
                 onItemClick = { _, item ->
-                    val intent = Intent(this, PlayerActivity::class.java).apply {
-                        putExtra("VIDEO_ID", item.videoId)
-                        putExtra("VIDEO_TITLE", item.title)
-                        putExtra("VIDEO_CHANNEL", item.channel)
-                        putExtra("VIDEO_THUMB", item.thumbnail)
-                    }
-                    startActivity(intent)
+                    PlayModeChooser.show(this, item)
                 },
                 onItemLongPress = { _, _, _ ->
                     // ★ 다중선택은 SearchAdapter가 처리 → 여기선 미리보기 비활성화

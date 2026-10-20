@@ -643,12 +643,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openPlayer(v: HomeVideo) {
-        startActivity(Intent(this, PlayerActivity::class.java).apply {
-            putExtra("VIDEO_ID", v.videoId)
-            putExtra("VIDEO_TITLE", v.title)
-            putExtra("VIDEO_CHANNEL", v.channel)
-            putExtra("VIDEO_THUMB", v.thumbnail)
-        })
+        PlayModeChooser.showHomeVideo(this, v)
     }
 
     // ★ 채널 페이지로 이동
