@@ -104,8 +104,14 @@ class LyricsActivity : AppCompatActivity() {
         syncJob?.cancel()
         syncJob = lifecycleScope.launch {
             val recycler = findViewById<RecyclerView>(R.id.recycler)
+            android.util.Log.d("LyricsActivity", "동기화 시작 (가사 ${lyricLines.size}줄)")
             while (isActive) {
-                val pos = mediaController?.currentPosition ?: 0L
+                val mc = mediaController
+                if (mc == null) {
+                    delay(500)
+                    continue
+                }
+                val pos = mc.currentPosition
                 if (lyricLines.isNotEmpty()) {
                     val idx = lyricLines.indexOfLast { it.startMs <= pos }
                     if (idx >= 0 && idx != lastIndex) {
@@ -113,9 +119,10 @@ class LyricsActivity : AppCompatActivity() {
                         adapter.setCurrentIndex(idx)
                         (recycler.layoutManager as? LinearLayoutManager)
                             ?.scrollToPositionWithOffset(idx, recycler.height / 3)
+                        android.util.Log.d("LyricsActivity", "가사 이동: idx=$idx, pos=${pos}ms")
                     }
                 }
-                delay(500)
+                delay(300) // 0.3초마다 확인하여 부드럽게
             }
         }
     }
