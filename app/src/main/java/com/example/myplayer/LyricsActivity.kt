@@ -28,10 +28,21 @@ class LyricsActivity : AppCompatActivity() {
     private var syncJob: Job? = null
     private var lyricLines: List<LyricLine> = emptyList()
     private var lastIndex = -1
+    private var offsetMs: Long = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_lyrics)
+
+        // ★ 싱크 조절 버튼
+        findViewById<View>(R.id.btnOffsetMinus)?.setOnClickListener {
+            offsetMs -= 500
+            Toast.makeText(this, "싱크: ${offsetMs / 1000.0}초", Toast.LENGTH_SHORT).show()
+        }
+        findViewById<View>(R.id.btnOffsetPlus)?.setOnClickListener {
+            offsetMs += 500
+            Toast.makeText(this, "싱크: ${offsetMs / 1000.0}초", Toast.LENGTH_SHORT).show()
+        }
 
         val videoId = intent.getStringExtra("VIDEO_ID") ?: ""
         val title = intent.getStringExtra("VIDEO_TITLE") ?: ""
@@ -111,7 +122,7 @@ class LyricsActivity : AppCompatActivity() {
                     delay(500)
                     continue
                 }
-                val pos = mc.currentPosition
+                val pos = mc.currentPosition + offsetMs // ★ 오프셋 적용
                 if (lyricLines.isNotEmpty()) {
                     val idx = lyricLines.indexOfLast { it.startMs <= pos }
                     if (idx >= 0 && idx != lastIndex) {
