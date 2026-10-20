@@ -195,16 +195,20 @@ class AudioPlayerActivity : AppCompatActivity() {
         currentChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
         currentThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
 
-        // ★★ Activity 재생성 시 local/YouTube 상태 복원
-        if (currentVideoId.isBlank()) {
+        // ★★ Activity 재생성 시 상태 복원 (로컬/YouTube 구분)
+        val fromLocalIntent = intent.getBooleanExtra("LOCAL_MODE", false)
+        if (currentVideoId.isBlank() && !fromLocalIntent) {
             val savedId = pref?.getString("current_video_id", null) ?: ""
-            if (savedId.isNotBlank()) {
+            // ★ 저장된 곡이 local:이면 복원 X (로컬은 Intent로만)
+            if (savedId.isNotBlank() && !savedId.startsWith("local:")) {
                 currentVideoId = savedId
                 currentTitle = pref?.getString("current_title", "") ?: ""
                 currentChannel = pref?.getString("current_channel", "") ?: ""
                 currentThumb = pref?.getString("current_thumbnail", "") ?: ""
-                diag("onCreate: prefs 복원 ${savedId.take(30)}")
+                diag("onCreate: YouTube 상태 복원 ${savedId.take(30)}")
             }
+        } else if (fromLocalIntent) {
+            diag("onCreate: LOCAL_MODE → prefs 복원 건너뜀")
         }
 
         // ★ 구독 알림에서 진입 시 처리
@@ -1983,6 +1987,8 @@ class AudioPlayerActivity : AppCompatActivity() {
         val newTitle = intent.getStringExtra("VIDEO_TITLE") ?: ""
         val newChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
         val newThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
+        val newLocalMode = intent.getBooleanExtra("LOCAL_MODE", false)
+        diag("onNewIntent: newVideoId=$newVideoId localMode=$newLocalMode")
 
         if (newVideoId == currentVideoId) {
             diag("onNewIntent: 같은 곡 → skip")
