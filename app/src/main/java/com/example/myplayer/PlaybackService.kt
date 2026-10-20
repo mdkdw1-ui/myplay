@@ -213,7 +213,11 @@ class PlaybackService : MediaSessionService() {
             }
 
             if (currentVideoId.startsWith("local:")) {
-                val localId = currentVideoId.removePrefix("local:").toLongOrNull()
+                // ★ local:download:prefix 처리
+                val localId = currentVideoId
+                    .removePrefix("local:download:")
+                    .removePrefix("local:")
+                    .toLongOrNull()
                 if (localId != null) {
                     val local = LocalMediaScanner.scan(this)
                     val idx = local.indexOfFirst { it.id == localId }
@@ -227,8 +231,9 @@ class PlaybackService : MediaSessionService() {
                             ""
                         )
                     }
-                    Log.d("PlaybackService", "local 끝 (마지막 곡)")
                 }
+                // ★ local:download는 서비스에서 처리 불가 (Activity가 담당)
+                Log.d("PlaybackService", "local 끝 → null")
                 return null
             }
 

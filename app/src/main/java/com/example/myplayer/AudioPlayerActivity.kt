@@ -126,6 +126,9 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         pref = getSharedPreferences("audio_prefs", MODE_PRIVATE)
 
+        // ★★★ Activity가 다음 곡 관리 (PlaybackService 경쟁 방지)
+        PlaybackService.autoNextDisabled = true
+
         // ★ 이전 종료 상태 감지 → 플래그 해제 후 계속 진행
         val wasStopped = pref?.getBoolean("service_stopped", false) == true
         if (wasStopped) {
@@ -828,11 +831,15 @@ class AudioPlayerActivity : AppCompatActivity() {
                 }
 
                 try {
-                    val mi = MediaItem.fromUri(fileUri)
+                    // ★ mediaId 설정 (빈 ID 방지)
+                    val mi = MediaItem.Builder()
+                        .setUri(fileUri)
+                        .setMediaId(videoId)
+                        .build()
                     mediaController?.setMediaItem(mi)
                     mediaController?.prepare()
                     mediaController?.playWhenReady = true
-                    diag("local:download 재생 시작")
+                    diag("local:download 재생 시작 (mediaId=$videoId)")
                 } catch (e: Exception) {
                     diag("local:download err: ${e.message}")
                 }
@@ -887,7 +894,11 @@ class AudioPlayerActivity : AppCompatActivity() {
                     }
                     val uri = intent.getStringExtra("LOCAL_URI")
                     if (uri != null) {
-                        val mi = MediaItem.fromUri(uri)
+                        // ★ mediaId 설정
+                        val mi = MediaItem.Builder()
+                            .setUri(uri)
+                            .setMediaId(videoId)
+                            .build()
                         runOnUiThread {
                             mediaController?.setMediaItem(mi)
                             mediaController?.prepare()
@@ -1289,7 +1300,104 @@ class AudioPlayerActivity : AppCompatActivity() {
         })
     }
 
+    /** ★ 로컬 파일 다음 곡 (YouTube 검색 없이) */
+    private fun playNextLocal() {
+        bgScope.launch {
+            try {
+                loadingNext = true
+
+                // 1. QueueManager에서 다음 local 항목
+                val queue = QueueManager.get(this@AudioPlayerActivity)
+                val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+                if (curIdx >= 0 && curIdx < queue.size - 1) {
+                    for (i in (curIdx + 1) until queue.size) {
+                        val item = queue[i]
+                        if (item.videoId.startsWith("local:")) {
+                            diag("playNextLocal: 큐 다음 → ${item.videoId}")
+                            QueueManager.setCurrent(this@AudioPlayerActivity, item.videoId)
+                            currentVideoId = item.videoId
+                            currentTitle = item.title
+                            currentChannel = item.channel
+                            currentThumb = item.thumbnail
+                            runOnUiThread { updateUI() }
+                            loadAudio(item.videoId, isInitial = false)
+                            return@launch
+                        }
+                    }
+                }
+
+                // 2. local:download → 다음 다운로드
+                if (currentVideoId.startsWith("local:download:")) {
+                    val curYtId = currentVideoId.removePrefix("local:download:")
+                    val dao = HistoryDatabase.get(this@AudioPlayerActivity).downloadDao()
+                    val downloads = withContext(Dispatchers.IO) { dao.getAllOnce() }
+                    val dIdx = downloads.indexOfFirst { it.videoId == curYtId }
+                    if (dIdx >= 0 && dIdx < downloads.size - 1) {
+                        val next = downloads[dIdx + 1]
+                        val nextId = "local:download:${next.videoId}"
+                        val file = java.io.File(next.filePath)
+                        if (file.exists()) {
+                            diag("playNextLocal: 다음 다운로드 → $nextId")
+                            currentVideoId = nextId
+                            currentTitle = next.title
+                            currentChannel = next.channel
+                            currentThumb = next.thumbnail
+                            // 새 Activity 인스턴스로 재시작 (FILE_URI 필요)
+                            runOnUiThread {
+                                startActivity(Intent(this@AudioPlayerActivity, AudioPlayerActivity::class.java).apply {
+                                    putExtra("VIDEO_ID", nextId)
+                                    putExtra("FILE_URI", android.net.Uri.fromFile(file).toString())
+                                    putExtra("VIDEO_TITLE", next.title)
+                                    putExtra("VIDEO_CHANNEL", next.channel)
+                                    putExtra("FROM_PLAYLIST", true)
+                                })
+                                finish()
+                            }
+                            return@launch
+                        }
+                    }
+                }
+
+                // 3. MediaStore 다음 곡
+                val localId = currentVideoId
+                    .removePrefix("local:download:")
+                    .removePrefix("local:")
+                    .toLongOrNull()
+                if (localId != null) {
+                    val all = LocalMediaScanner.scan(this@AudioPlayerActivity)
+                    val idx = all.indexOfFirst { it.id == localId }
+                    if (idx >= 0 && idx < all.size - 1) {
+                        val next = all[idx + 1]
+                        val nextId = "local:${next.id}"
+                        QueueManager.addLocal(this@AudioPlayerActivity, next)
+                        diag("playNextLocal: 스캔 다음 → $nextId (${next.title})")
+                        currentVideoId = nextId
+                        currentTitle = next.title
+                        currentChannel = next.artist
+                        currentThumb = ""
+                        runOnUiThread { updateUI() }
+                        loadAudio(nextId, isInitial = false)
+                        return@launch
+                    }
+                }
+
+                diag("playNextLocal: 다음 로컬 곡 없음")
+                loadingNext = false
+            } catch (e: Exception) {
+                diag("playNextLocal err: ${e.message}")
+                loadingNext = false
+            }
+        }
+    }
+
     private fun playNextRelatedBg() {
+        // ★★★ 로컬 재생 중이면 유튜브 검색 안 함
+        if (currentVideoId.startsWith("local:")) {
+            diag("playNext: local 파일 → playNextLocal")
+            playNextLocal()
+            return
+        }
+
         // ★ service_stopped면 다음곡 로딩 금지
         val serviceStopped = pref?.getBoolean("service_stopped", false) ?: false
         if (serviceStopped) {
@@ -2624,6 +2732,8 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // ★★★ 서비스로 다음 곡 관리 복귀
+        PlaybackService.autoNextDisabled = false
         PlaybackService.nextTrackHandler = null
         stopAnimation()
         updateJob?.cancel()
