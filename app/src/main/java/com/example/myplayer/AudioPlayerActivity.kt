@@ -197,19 +197,31 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         // ★★ Activity 재생성 시 상태 복원 (로컬/YouTube 구분)
         val fromLocalIntent = intent.getBooleanExtra("LOCAL_MODE", false)
-        if (currentVideoId.isBlank() && !fromLocalIntent) {
-            val savedId = pref?.getString("current_video_id", null) ?: ""
-            // ★ 저장된 곡이 local:이면 복원 X (로컬은 Intent로만)
-            if (savedId.isNotBlank() && !savedId.startsWith("local:")) {
-                currentVideoId = savedId
-                currentTitle = pref?.getString("current_title", "") ?: ""
-                currentChannel = pref?.getString("current_channel", "") ?: ""
-                currentThumb = pref?.getString("current_thumbnail", "") ?: ""
-                diag("onCreate: YouTube 상태 복원 ${savedId.take(30)}")
+        val savedId = pref?.getString("current_video_id", null) ?: ""
+
+        // 케이스 A: Intent에 곡 정보가 없음 → prefs에서 복원
+        if (currentVideoId.isBlank()) {
+            if (fromLocalIntent) {
+                // 로컬 모드: prefs에서 로컬 곡만 복원
+                if (savedId.startsWith("local:")) {
+                    currentVideoId = savedId
+                    currentTitle = pref?.getString("current_title", "") ?: ""
+                    currentChannel = pref?.getString("current_channel", "") ?: ""
+                    currentThumb = pref?.getString("current_thumbnail", "") ?: ""
+                    diag("onCreate: 로컬 상태 복원 ${savedId.take(30)}")
+                }
+            } else {
+                // 일반 모드: YouTube 곡만 복원
+                if (savedId.isNotBlank() && !savedId.startsWith("local:")) {
+                    currentVideoId = savedId
+                    currentTitle = pref?.getString("current_title", "") ?: ""
+                    currentChannel = pref?.getString("current_channel", "") ?: ""
+                    currentThumb = pref?.getString("current_thumbnail", "") ?: ""
+                    diag("onCreate: YouTube 상태 복원 ${savedId.take(30)}")
+                }
             }
-        } else if (fromLocalIntent) {
-            diag("onCreate: LOCAL_MODE → prefs 복원 건너뜀")
         }
+        // 케이스 B: intent가 YouTube 곡인데 prefs는 로컬 → intent 우선 (사용자가 명시적으로 선택)
 
         // ★ 구독 알림에서 진입 시 처리
         val fromSubNotif = intent.getBooleanExtra("FROM_SUB_NOTIFICATION", false)
@@ -1296,14 +1308,11 @@ class AudioPlayerActivity : AppCompatActivity() {
                     }
                 }
 
+                // ★★★ STATE_ENDED는 Service가 처리 (Activity 중복 방지)
+                // Activity가 살아있으면 UI만 갱신, 다음 곡 로드는 Service 담당
                 if (playbackState == Player.STATE_ENDED) {
-                    if (!loadingNext) {
-                        loadingNext = true
-                        bgScope.launch {
-                            delay(300)
-                            playNextRelatedBg()
-                        }
-                    }
+                    diag("STATE_ENDED: Service가 다음 곡 처리 (Activity 스킵)")
+                    // Activity의 playNextRelatedBg 호출 제거
                 }
             }
 

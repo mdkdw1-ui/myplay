@@ -50,23 +50,13 @@ class PlaybackService : MediaSessionService() {
             if (playbackState == Player.STATE_ENDED) {
                 val p = exoPlayer
 
-                // (완화됨) service_stopped 체크 제거 → 다음곡 자동 재생 허용
-
-                if (p != null && p.mediaItemCount > 1) {
-                    Log.d("PlaybackService",
-                        "STATE_ENDED but mediaItemCount=${p.mediaItemCount} → skip")
-                    return
-                }
+                // ★★★ autoNextDisabled 무시 → Service가 항상 다음 곡 처리 (근본 해결)
                 if (p != null && p.hasNextMediaItem()) {
-                    Log.d("PlaybackService", "STATE_ENDED but hasNext → skip")
-                    return
-                }
-                if (autoNextDisabled) {
-                    Log.d("PlaybackService", "autoNextDisabled → skip (Activity 처리)")
+                    Log.d("PlaybackService", "STATE_ENDED but hasNext → skip (자동 진행)")
                     return
                 }
 
-                Log.d("PlaybackService", "STATE_ENDED → resolveNext")
+                Log.d("PlaybackService", "STATE_ENDED → resolveNext (autoNextDisabled 무시)")
                 serviceScope.launch {
                     val next = resolveNext()
                     if (next != null) playNext(next)
