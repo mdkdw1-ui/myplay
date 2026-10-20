@@ -163,6 +163,22 @@ class AudioPlayerActivity : AppCompatActivity() {
         btnRepeat = findViewById(R.id.btnRepeat)
         btnLiveSub = findViewById(R.id.btnLiveSub)
 
+        // ★ 다음 곡 미리보기 리스트 초기화 (onCreate)
+        try {
+            val nextRv = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvNextSongs)
+            if (nextRv != null) {
+                nextRv.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(
+                    this, androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL, false
+                )
+                nextRv.adapter = NextSongsAdapter()
+                startNextSongsUpdate()
+                android.util.Log.d("AudioPlayer", "다음 곡 리스트 초기화 완료")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AudioPlayer", "다음 곡 리스트 초기화 err: ${e.message}", e)
+        }
+
+
         currentVideoId = intent.getStringExtra("VIDEO_ID") ?: ""
         currentTitle = intent.getStringExtra("VIDEO_TITLE") ?: ""
         currentChannel = intent.getStringExtra("VIDEO_CHANNEL") ?: ""
@@ -507,8 +523,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 if (result.hasAny) {
                     prefetchedStreams[target.videoId] = result
                     diag("prefetch 완료: ${target.videoId} (${target.title.take(30)})")
-                    // ★ ExoPlayer 큐에 추가
-                    addToExoQueue(target, result)
+                    // ★ addToExoQueue 제거 — 캐시에만 저장 (자동 재생 방지)
 
                     // ★ 다음다음 곡도 미리 준비 (2곡 prefetch)
                     try {
@@ -938,11 +953,14 @@ class AudioPlayerActivity : AppCompatActivity() {
                 }
             }
 
-            // ★ extract 전 stop만 (clear/delay 제거로 속도 개선)
+            // ★ extract 전 stop + clear + playWhenReady=false (자동재생 방지)
             runOnUiThread {
                 try {
-                    mediaController?.stop()
-                    diag("extract 전 ExoPlayer 정지")
+                    val mc = mediaController
+                    mc?.playWhenReady = false    // ★ 먼저 재생 중지
+                    mc?.stop()
+                    mc?.clearMediaItems()         // ★ 큐 완전 비우기
+                    diag("extract 전 ExoPlayer 정지+clear")
                 } catch (_: Exception) {}
             }
 
@@ -2187,6 +2205,95 @@ class AudioPlayerActivity : AppCompatActivity() {
         val s = sec % 60
         return if (h > 0) String.format("%d:%02d:%02d", h, m, s)
         else String.format("%d:%02d", m, s)
+    }
+
+    /** ★ 다음 곡 리스트 매 2초마다 갱신 */
+    private fun startNextSongsUpdate() {
+        bgScope.launch {
+            while (isActive) {
+                try {
+                    updateNextSongs()
+                } catch (_: Exception) {}
+                delay(2000)
+            }
+        }
+    }
+
+    /** ★ 다음 곡 리스트 갱신 */
+    private fun updateNextSongs() {
+        try {
+            val rv = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvNextSongs) ?: return
+            val adapter = rv.adapter as? NextSongsAdapter ?: return
+
+            val queue = QueueManager.get(this)
+            val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+
+            val next: List<HomeVideo> = if (curIdx >= 0 && curIdx < queue.size - 1) {
+                // ★ 큐에서 현재 다음 10곡
+                queue.drop(curIdx + 1).take(10)
+            } else {
+                // ★ 큐 끝 → prefetch 캐시 + 유튜브 폴백은 표시 안 함
+                // prefetchedStreams의 다음 곡들만 표시 (제목 필요해서 스킵)
+                emptyList()
+            }
+
+            runOnUiThread {
+                adapter.submit(next)
+            }
+        } catch (_: Exception) {}
+    }
+
+    /** ★ 다음 곡 어댑터 */
+    inner class NextSongsAdapter : androidx.recyclerview.widget.RecyclerView.Adapter<NextSongsAdapter.VH>() {
+        private val items = mutableListOf<HomeVideo>()
+
+        fun submit(list: List<HomeVideo>) {
+            items.clear()
+            items.addAll(list)
+            notifyDataSetChanged()
+        }
+
+        override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): VH {
+            val v = android.view.LayoutInflater.from(parent.context)
+                .inflate(R.layout.item_next_song, parent, false)
+            return VH(v)
+        }
+
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val item = items[position]
+            holder.title.text = item.title
+            holder.channel.text = item.channel
+            if (item.thumbnail.isNotBlank()) {
+                com.bumptech.glide.Glide.with(holder.thumb)
+                    .load(item.thumbnail)
+                    .into(holder.thumb)
+            }
+            // ★ 탭하면 해당 곡으로 이동
+            holder.itemView.setOnClickListener {
+                try {
+                    val queue = QueueManager.get(this@AudioPlayerActivity)
+                    val idx = queue.indexOfFirst { it.videoId == item.videoId }
+                    if (idx >= 0) {
+                        // 큐에서 그 곡부터 재생
+                        QueueManager.moveToTop(this@AudioPlayerActivity, item.videoId)
+                        currentVideoId = item.videoId
+                        currentTitle = item.title
+                        currentChannel = item.channel
+                        currentThumb = item.thumbnail
+                        updateUI()
+                        loadAudio(item.videoId, isInitial = false)
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        override fun getItemCount() = items.size
+
+        inner class VH(v: android.view.View) : androidx.recyclerview.widget.RecyclerView.ViewHolder(v) {
+            val thumb: android.widget.ImageView = v.findViewById(R.id.thumb)
+            val title: android.widget.TextView = v.findViewById(R.id.title)
+            val channel: android.widget.TextView = v.findViewById(R.id.channel)
+        }
     }
 
     private fun savePosition() {
