@@ -174,6 +174,9 @@ class AudioPlayerActivity : AppCompatActivity() {
                 nextRv.adapter = NextSongsAdapter()
                 startNextSongsUpdate()
                 android.util.Log.d("AudioPlayer", "다음 곡 리스트 초기화 완료")
+
+                // ★ 스와이프 제스처 설정
+                setupSwipeGestures()
             }
         } catch (e: Exception) {
             android.util.Log.e("AudioPlayer", "다음 곡 리스트 초기화 err: ${e.message}", e)
@@ -499,6 +502,16 @@ class AudioPlayerActivity : AppCompatActivity() {
                     val combined = (radioList + artistList)
                         .distinctBy { it.videoId }
                         .filter { it.videoId != currentVideoId && it.videoId !in failedIds }
+
+                    // ★★ nextPreviewList 10곡 갱신
+                    synchronized(nextPreviewList) {
+                        nextPreviewList.clear()
+                        combined.take(10).forEach { v ->
+                            nextPreviewList.add(HomeVideo(v.videoId, v.title, v.channel, v.thumbnail))
+                        }
+                        diag("nextPreviewList 갱신: ${nextPreviewList.size}곡")
+                    }
+
                     combined.firstOrNull()?.let {
                         HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
                     }
@@ -2265,6 +2278,98 @@ class AudioPlayerActivity : AppCompatActivity() {
             val title: android.widget.TextView = v.findViewById(R.id.title)
             val channel: android.widget.TextView = v.findViewById(R.id.channel)
         }
+    }
+
+    /** ★ 스와이프/재생목록에서 곡 선택 시 이동 */
+    fun jumpToSong(video: HomeVideo) {
+        if (video.videoId == currentVideoId) {
+            diag("jumpToSong: 같은 곡 → skip")
+            return
+        }
+        diag("jumpToSong: ${video.videoId} (${video.title.take(30)})")
+        currentVideoId = video.videoId
+        currentTitle = video.title
+        currentChannel = video.channel
+        currentThumb = video.thumbnail
+        updateUI()
+        loadAudio(video.videoId, isInitial = false)
+    }
+
+    /** ★ 재생목록 BottomSheet 표시 */
+    private fun showPlaylistSheet() {
+        try {
+            diag("showPlaylistSheet: 재생목록 표시")
+            val items = mutableListOf<HomeVideo>()
+
+            // 현재 곡
+            if (currentVideoId.isNotBlank()) {
+                items.add(HomeVideo(currentVideoId, currentTitle, currentChannel, currentThumb))
+            }
+
+            // QueueManager
+            val queue = QueueManager.get(this)
+            val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+            if (curIdx >= 0) {
+                // 큐에서 현재 다음 곡들
+                queue.drop(curIdx + 1).forEach { items.add(it) }
+            } else {
+                // 큐 없으면 전체 큐 추가
+                queue.filter { it.videoId != currentVideoId }.forEach { items.add(it) }
+            }
+
+            // nextPreviewList (prefetch 캐시)
+            synchronized(nextPreviewList) {
+                nextPreviewList
+                    .filter { it.videoId != currentVideoId }
+                    .filter { v -> items.none { it.videoId == v.videoId } }
+                    .forEach { items.add(it) }
+            }
+
+            diag("showPlaylistSheet: 총 ${items.size}곡")
+            PlaylistBottomSheet.newInstance(currentVideoId, currentTitle, items)
+                .show(supportFragmentManager, "playlist_sheet")
+        } catch (e: Exception) {
+            diag("showPlaylistSheet err: ${e.message}")
+        }
+    }
+
+    /** ★ 스와이프 제스처 설정 */
+    private fun setupSwipeGestures() {
+        val detector = android.view.GestureDetector(this, object : android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(e1: android.view.MotionEvent?, e2: android.view.MotionEvent, vx: Float, vy: Float): Boolean {
+                if (e1 == null) return false
+                val dy = e2.y - e1.y
+                val dx = e2.x - e1.x
+                val absDy = Math.abs(dy)
+                val absDx = Math.abs(dx)
+                if (absDy > 100 && absDy > absDx * 1.5f) {
+                    if (dy < 0) {
+                        diag("Swipe UP → 재생목록")
+                    } else {
+                        diag("Swipe DOWN → 재생목록")
+                    }
+                    showPlaylistSheet()
+                    return true
+                }
+                return false
+            }
+        })
+
+        // 앨범 아트에 스와이프
+        try {
+            ivArt.setOnTouchListener { _, event ->
+                detector.onTouchEvent(event)
+                false
+            }
+        } catch (_: Exception) {}
+
+        // "다음 곡" 영역에도 스와이프
+        try {
+            findViewById<android.view.View>(R.id.rvNextSongs)?.setOnTouchListener { _, event ->
+                detector.onTouchEvent(event)
+                false
+            }
+        } catch (_: Exception) {}
     }
 
     private fun savePosition() {
