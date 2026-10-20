@@ -52,7 +52,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var wakeLock: PowerManager.WakeLock? = null
 
     private var currentVideoId: String = ""
-    private var pendingStartPos: Long = 0L   // ★ 이어듣기 시작 위치
+    private var pendingStartPos: Long = 0L
+    private val nextPreviewList = mutableListOf<HomeVideo>()   // ★ 다음 곡 미리보기용   // ★ 이어듣기 시작 위치
     private var currentTitle: String = ""
     private var currentChannel: String = ""
     private var currentThumb: String = ""
@@ -523,7 +524,16 @@ class AudioPlayerActivity : AppCompatActivity() {
                 if (result.hasAny) {
                     prefetchedStreams[target.videoId] = result
                     diag("prefetch 완료: ${target.videoId} (${target.title.take(30)})")
-                    // ★ addToExoQueue 제거 — 캐시에만 저장 (자동 재생 방지)
+                    // ★ addToExoQueue 완전 제거 (조기 재생 방지)
+                    // ★★ nextPreviewList 갱신 (다음 곡 미리보기용)
+                    synchronized(nextPreviewList) {
+                        nextPreviewList.removeAll { it.videoId == target.videoId }
+                        nextPreviewList.add(0, target)
+                        while (nextPreviewList.size > 10) {
+                            nextPreviewList.removeAt(nextPreviewList.size - 1)
+                        }
+                        diag("nextPreviewList +: ${target.title.take(30)} (총 ${nextPreviewList.size})")
+                    }
 
                     // ★ 다음다음 곡도 미리 준비 (2곡 prefetch)
                     try {
@@ -554,52 +564,9 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** ★ ExoPlayer 큐에 다음 곡 추가 (순서 보장) */
+    /** ★ 비활성화: ExoPlayer 큐에 미리 추가하지 않음 (조기 재생 방지) */
     private fun addToExoQueue(target: HomeVideo, result: YouTubeStream.StreamResult) {
-        try {
-            val url = result.audioUrlBest
-                ?: result.audioUrl
-                ?: result.muxedUrl
-                ?: result.videoUrl
-            if (url.isNullOrBlank()) {
-                diag("addToExoQueue: URL 없음 (${target.videoId})")
-                return
-            }
-
-            // ★ 이미 ExoPlayer 큐에 있으면 skip
-            val mc = mediaController ?: return
-            for (i in 0 until mc.mediaItemCount) {
-                if (mc.getMediaItemAt(i).mediaId == target.videoId) {
-                    diag("addToExoQueue: 이미 있음 (${target.videoId})")
-                    return
-                }
-            }
-
-            val artist = currentArtist.ifBlank { currentChannel }
-            val metadata = MediaMetadata.Builder()
-                .setTitle(target.title)
-                .setArtist(artist)
-                .setAlbumTitle(target.channel)
-                .setArtworkUri(android.net.Uri.parse(target.thumbnail))
-                .build()
-            val mediaItem = MediaItem.Builder()
-                .setUri(url)
-                .setMediaId(target.videoId)
-                .setMediaMetadata(metadata)
-                .build()
-
-            runOnUiThread {
-                try {
-                    val mc2 = mediaController ?: return@runOnUiThread
-                    mc2.addMediaItem(mediaItem)
-                    diag("ExoPlayer addMediaItem: ${target.videoId} (itemCount=${mc2.mediaItemCount})")
-                } catch (e: Exception) {
-                    diag("addMediaItem err: ${e.message}")
-                }
-            }
-        } catch (e: Exception) {
-            diag("addToExoQueue err: ${e.message}")
-        }
+        diag("addToExoQueue: skip — ${target.videoId} (조기 재생 방지)")
     }
 
     private fun attachEqualizer() {
@@ -2232,9 +2199,13 @@ class AudioPlayerActivity : AppCompatActivity() {
                 // ★ 큐에서 현재 다음 10곡
                 queue.drop(curIdx + 1).take(10)
             } else {
-                // ★ 큐 끝 → prefetch 캐시 + 유튜브 폴백은 표시 안 함
-                // prefetchedStreams의 다음 곡들만 표시 (제목 필요해서 스킵)
-                emptyList()
+                // ★★ 큐 없음 → nextPreviewList 사용 (prefetch 기반)
+                synchronized(nextPreviewList) {
+                    nextPreviewList
+                        .filter { it.videoId != currentVideoId }
+                        .take(10)
+                        .toList()
+                }
             }
 
             runOnUiThread {
