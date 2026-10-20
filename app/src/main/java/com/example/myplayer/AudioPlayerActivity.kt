@@ -56,7 +56,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private val isLocalMode: Boolean
         get() = intent.getBooleanExtra("LOCAL_MODE", false)
             || currentVideoId.startsWith("local:")
-    private val nextPreviewList = mutableListOf<HomeVideo>()   // ★ 다음 곡 미리보기용   // ★ 이어듣기 시작 위치
+    private val nextPreviewList = mutableListOf<HomeVideo>()
+    private var audioSwipeDetector: android.view.GestureDetector? = null   // ★ 다음 곡 미리보기용   // ★ 이어듣기 시작 위치
     private var currentTitle: String = ""
     private var currentChannel: String = ""
     private var currentThumb: String = ""
@@ -341,6 +342,14 @@ class AudioPlayerActivity : AppCompatActivity() {
                 diag("onCreate skip failed: $currentVideoId")
             }
         }, MoreExecutors.directExecutor())
+
+        // ★ Bottom handle → 재생목록
+        try {
+            findViewById<android.view.View>(R.id.bottomHandle)?.setOnClickListener {
+                diag("bottomHandle 클릭")
+                showPlaylistSheet()
+            }
+        } catch (_: Exception) {}
 
         // ★ 배터리 최적화 제외 요청 (첫 실행 시)
         try { checkBatteryOptimization() } catch (_: Exception) {}
@@ -1226,9 +1235,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                     Player.STATE_ENDED -> "ENDED"
                     else -> "?"
                 }
-                runOnUiThread {
-                    tvTitle.text = "[$stateName] $currentTitle"
-                }
+                diag("state=$stateName (title prefix 제거)")
                 val mc = mediaController
                 diag("state=$stateName idx=${mc?.currentMediaItemIndex}/${mc?.mediaItemCount} " +
                      "next=${mc?.hasNextMediaItem()} cur=$currentVideoId")
@@ -1791,15 +1798,17 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun openLyrics() {
-        if (currentSubtitleUrl.isBlank()) {
-            Toast.makeText(this, "이 곡은 자막/가사가 없습니다", Toast.LENGTH_LONG).show()
+        if (currentVideoId.isBlank()) {
+            Toast.makeText(this, "곡 정보가 없습니다", Toast.LENGTH_SHORT).show()
             return
         }
+        val artist = currentArtist.ifBlank { currentChannel }
+        diag("openLyrics: $currentVideoId, artist=$artist, subtitle=${currentSubtitleUrl.take(40)}")
         startActivity(Intent(this, LyricsActivity::class.java).apply {
             putExtra("VIDEO_ID", currentVideoId)
             putExtra("VIDEO_TITLE", currentTitle)
             putExtra("VIDEO_CHANNEL", currentChannel)
-            putExtra("VIDEO_ARTIST", currentArtist.ifBlank { currentChannel })
+            putExtra("VIDEO_ARTIST", artist)
             putExtra("SUBTITLE_URL", currentSubtitleUrl)
         })
     }
@@ -1994,6 +2003,34 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         updateUI()
         loadAudio(newVideoId, isInitial = true)
+    }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (audioSwipeDetector == null) {
+            audioSwipeDetector = android.view.GestureDetector(this, object : android.view.GestureDetector.SimpleOnGestureListener() {
+                override fun onFling(
+                    e1: android.view.MotionEvent?,
+                    e2: android.view.MotionEvent,
+                    vx: Float,
+                    vy: Float
+                ): Boolean {
+                    if (e1 == null) return false
+                    val dy = e2.y - e1.y
+                    val dx = e2.x - e1.x
+                    val absDy = Math.abs(dy)
+                    val absDx = Math.abs(dx)
+                    val absVy = Math.abs(vy)
+                    if (absDy > 80 && absDy > absDx * 1.5f && absVy > 200f) {
+                        diag("audioSwipe: dy=$dy absVy=$absVy")
+                        try { showPlaylistSheet() } catch (e: Exception) { diag("swipe err: ${e.message}") }
+                        return true
+                    }
+                    return false
+                }
+            })
+        }
+        try { audioSwipeDetector?.onTouchEvent(ev) } catch (_: Exception) {}
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onResume() {
@@ -2410,18 +2447,12 @@ class AudioPlayerActivity : AppCompatActivity() {
         try {
             val rv = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvNextSongs) ?: return
             val adapter = rv.adapter as? NextSongsAdapter ?: return
-
             val queue = QueueManager.get(this)
             val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
-
             val result = mutableListOf<HomeVideo>()
-
-            // ★ 1순위: 큐에서 현재 다음 곡들 (순서 유지)
             if (curIdx >= 0 && curIdx < queue.size - 1) {
                 queue.drop(curIdx + 1).take(10).forEach { result.add(it) }
             }
-
-            // ★ 2순위: 부족분은 nextPreviewList(prefetch/radio)로 채움
             if (result.size < 10) {
                 synchronized(nextPreviewList) {
                     nextPreviewList
@@ -2431,13 +2462,16 @@ class AudioPlayerActivity : AppCompatActivity() {
                         .forEach { result.add(it) }
                 }
             }
-
-            val next: List<HomeVideo> = result
-
-            runOnUiThread {
-                adapter.submit(next)
+            val current = adapter.currentItems()
+            val changed = current.size != result.size ||
+                current.zip(result).any { (a, b) -> a.videoId != b.videoId }
+            if (changed) {
+                diag("updateNextSongs: submit ${result.size}곡 (curIdx=$curIdx/${queue.size}, npl=${nextPreviewList.size})")
+                runOnUiThread { adapter.submit(result) }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            diag("updateNextSongs err: ${e.message}")
+        }
     }
 
     /** ★ 다음 곡 어댑터 */
@@ -2449,6 +2483,8 @@ class AudioPlayerActivity : AppCompatActivity() {
             items.addAll(list)
             notifyDataSetChanged()
         }
+
+        fun currentItems(): List<HomeVideo> = items.toList()
 
         override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): VH {
             val v = android.view.LayoutInflater.from(parent.context)

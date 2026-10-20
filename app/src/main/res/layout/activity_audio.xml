@@ -21,7 +21,10 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="24dp"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="96dp"
         android:gravity="center">
 
         <TextView
@@ -174,7 +177,7 @@
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvNextSongs"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="90dp"
                 android:orientation="horizontal"
                 android:clipToPadding="false"
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
@@ -301,4 +304,32 @@
                 app:useMaterialThemeColors="false" />
         </LinearLayout>
     </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/bottomHandle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingTop="10dp"
+        android:paddingBottom="16dp"
+        android:background="#CC0A0A0B"
+        android:clickable="true"
+        android:focusable="true">
+
+        <View
+            android:layout_width="48dp"
+            android:layout_height="5dp"
+            android:background="@color/divider" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="▲ 재생목록"
+            android:textSize="10sp"
+            android:textColor="@color/text_secondary" />
+    </LinearLayout>
+
 </FrameLayout>
