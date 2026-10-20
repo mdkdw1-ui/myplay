@@ -552,33 +552,16 @@ class AudioPlayerActivity : AppCompatActivity() {
                         .distinctBy { it.videoId }
                         .filter { it.videoId != currentVideoId && it.videoId !in failedIds }
 
-                    // ★★ nextPreviewList에 추가 (기존 큐 항목은 유지, 중복 제거)
-                    synchronized(nextPreviewList) {
-                        // 큐에 있는 곡은 nextPreviewList에서 제거 (중복 방지)
-                        val queueIds = QueueManager.get(this@AudioPlayerActivity)
-                            .map { it.videoId }.toSet()
-                        nextPreviewList.removeAll { it.videoId in queueIds }
-
-                        combined.take(10).forEach { v ->
+                    // ★★★ 라디오에서 찾은 곡 10개를 한꺼번에 QueueManager에 추가 (순서 고정)
+                    if (next == null && combined.isNotEmpty()) {
+                        val toAdd = combined.take(10)
+                        for (v in toAdd) {
                             val hv = HomeVideo(v.videoId, v.title, v.channel, v.thumbnail)
-                            nextPreviewList.removeAll { it.videoId == hv.videoId }
-                            nextPreviewList.add(hv)
-                        }
-                        while (nextPreviewList.size > 20) {
-                            nextPreviewList.removeAt(nextPreviewList.size - 1)
-                        }
-                        diag("nextPreviewList 보강: ${nextPreviewList.size}곡")
-                    }
-
-                    // ★ 라디오에서 선택된 곡을 큐에 추가 (순서 고정)
-                    val firstPick = combined.firstOrNull()
-                    if (firstPick != null && next == null) {
-                        val hv = HomeVideo(firstPick.videoId, firstPick.title, firstPick.channel, firstPick.thumbnail)
-                        try {
                             QueueManager.add(this@AudioPlayerActivity, hv)
-                            diag("라디오 픽을 큐에 추가: ${hv.videoId}")
-                        } catch (_: Exception) {}
-                        hv
+                        }
+                        diag("라디오 픽 ${toAdd.size}곡을 큐에 한꺼번에 추가")
+                        val firstPick = toAdd.first()
+                        HomeVideo(firstPick.videoId, firstPick.title, firstPick.channel, firstPick.thumbnail)
                     } else null
                 }
 
@@ -2465,17 +2448,9 @@ class AudioPlayerActivity : AppCompatActivity() {
             val queue = QueueManager.get(this)
             val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
             val result = mutableListOf<HomeVideo>()
+            // ★ 오직 QueueManager만 참조 (뒤죽박죽 방지)
             if (curIdx >= 0 && curIdx < queue.size - 1) {
                 queue.drop(curIdx + 1).take(10).forEach { result.add(it) }
-            }
-            if (result.size < 10) {
-                synchronized(nextPreviewList) {
-                    nextPreviewList
-                        .filter { it.videoId != currentVideoId }
-                        .filter { v -> result.none { it.videoId == v.videoId } }
-                        .take(10 - result.size)
-                        .forEach { result.add(it) }
-                }
             }
             val current = adapter.currentItems()
             val changed = current.size != result.size ||
