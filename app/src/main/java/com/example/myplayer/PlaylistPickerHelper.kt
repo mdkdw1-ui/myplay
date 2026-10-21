@@ -46,8 +46,14 @@ object PlaylistPickerHelper {
                         val target = existing[which - 1]
                         scope.launch {
                             withContext(Dispatchers.IO) {
+                                val existingItems = dao.getItems(target.id)
+                                val existingIds = existingItems.map { it.videoId }.toSet()
                                 var pos = target.itemCount
+                                var added = 0
                                 videos.forEach { v ->
+                                    if (v.videoId in existingIds) {
+                                        return@forEach  // ★ 중복 스킵
+                                    }
                                     dao.insertItem(
                                         SavedPlaylistItemEntity(
                                             playlistId = target.id,
@@ -58,10 +64,24 @@ object PlaylistPickerHelper {
                                             position = pos++
                                         )
                                     )
+                                    added++
                                 }
                                 dao.updateCount(target.id, pos)
+                                if (added == 0) {
+                                    // 이미 있음 → 메인 스레드 알림
+                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                        Toast.makeText(ctx,
+                                            "\"${target.name}\"에 이미 있는 곡입니다",
+                                            Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                        Toast.makeText(ctx,
+                                            "\"${target.name}\"에 추가됨 (${added}곡)",
+                                            Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             }
-                            Toast.makeText(ctx, "\"${target.name}\"에 추가됨", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
