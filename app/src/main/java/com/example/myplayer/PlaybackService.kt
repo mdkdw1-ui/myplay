@@ -206,6 +206,20 @@ class PlaybackService : MediaSessionService() {
             val prefs = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
             val currentVideoId = prefs.getString("current_video_id", "") ?: ""
 
+            // ★★★ 현재 곡이 큐에 없으면 자동 추가 (curIdx 정상화)
+            try {
+                if (currentVideoId.isNotBlank() && !currentVideoId.startsWith("local:")) {
+                    val q = QueueManager.get(this)
+                    if (q.none { it.videoId == currentVideoId }) {
+                        val title = prefs.getString("current_title", "") ?: currentVideoId
+                        val channel = prefs.getString("current_channel", "") ?: "YouTube"
+                        val thumb = prefs.getString("current_thumbnail", "") ?: ""
+                        QueueManager.add(this, HomeVideo(currentVideoId, title, channel, thumb))
+                        Log.d("PlaybackService", "resolveNext: 현재 곡 큐에 자동 추가 $currentVideoId")
+                    }
+                }
+            } catch (_: Exception) {}
+
             val queue = QueueManager.get(this)
             val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
             if (curIdx >= 0 && curIdx < queue.size - 1) {
