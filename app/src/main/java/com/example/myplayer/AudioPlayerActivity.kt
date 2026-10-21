@@ -275,7 +275,16 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
 
         val fromPlaylist = intent.getBooleanExtra("FROM_PLAYLIST", false)
-        if (!fromPlaylist && !fromSubNotif) QueueManager.clear(this)
+        if (!fromPlaylist && !fromSubNotif) {
+            QueueManager.clear(this)
+            // ★★★ fresh selection → 현재 곡 즉시 큐 추가 (title fallback)
+            if (currentVideoId.isNotBlank() && !currentVideoId.startsWith("local:")) {
+                val title = currentTitle.ifBlank { currentVideoId }
+                val channel = currentChannel.ifBlank { "YouTube" }
+                QueueManager.add(this, HomeVideo(currentVideoId, title, channel, currentThumb))
+                diag("onCreate: fresh selection → 큐 즉시 추가 $currentVideoId")
+            }
+        }
 
         reuseStreamUrl = intent.getStringExtra("REUSE_STREAM_URL") ?: ""
         reuseSubtitleUrl = intent.getStringExtra("REUSE_SUBTITLE_URL") ?: ""
@@ -808,15 +817,17 @@ class AudioPlayerActivity : AppCompatActivity() {
             diag("loadAudio setCurrent: $videoId")
         } catch (_: Exception) {}
 
-        // ★★★ 현재 곡이 큐에 없으면 추가 (순서 고정)
+        // ★★★ 현재 곡이 큐에 없으면 추가 (title fallback)
         try {
             if (!videoId.startsWith("local:")) {
                 val queue = QueueManager.get(this)
                 val exists = queue.any { it.videoId == videoId }
-                if (!exists && currentTitle.isNotBlank()) {
+                if (!exists) {
+                    val title = currentTitle.ifBlank { videoId }
+                    val channel = currentChannel.ifBlank { "YouTube" }
                     QueueManager.add(this,
-                        HomeVideo(videoId, currentTitle, currentChannel, currentThumb))
-                    diag("loadAudio: 현재 곡을 큐에 추가 $videoId")
+                        HomeVideo(videoId, title, channel, currentThumb))
+                    diag("loadAudio: 현재 곡을 큐에 추가 $videoId (title=$title)")
                 }
             }
         } catch (_: Exception) {}
@@ -1217,6 +1228,9 @@ class AudioPlayerActivity : AppCompatActivity() {
             delay(500)
             attachEqualizer()
             loadingNext = false
+
+            // ★★★ 초기 로드 후 즉시 prefetch (재생목록 미리 채움)
+            try { prefetchNext() } catch (_: Exception) {}
         }
     }
 
@@ -2578,25 +2592,25 @@ class AudioPlayerActivity : AppCompatActivity() {
             diag("showPlaylistSheet: 재생목록 표시")
             val items = mutableListOf<HomeVideo>()
 
-            // 현재 곡
-            if (currentVideoId.isNotBlank()) {
-                items.add(HomeVideo(currentVideoId, currentTitle, currentChannel, currentThumb))
-            }
-
-            // ★ 큐 순서 우선 (현재 다음부터 끝까지)
+            // ★★★ 전체 큐 순서 그대로 표시 (현재 곡 강조는 BottomSheet에서)
             val queue = QueueManager.get(this)
             val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
-            if (curIdx >= 0 && curIdx < queue.size - 1) {
-                queue.drop(curIdx + 1).forEach { items.add(it) }
+            diag("showPlaylistSheet: curIdx=$curIdx/${queue.size} current=$currentVideoId")
+
+            if (curIdx >= 0) {
+                // 현재 곡을 큐에서 찾음 → 큐 순서 그대로 (current 강조)
+                queue.forEach { items.add(it) }
             } else {
-                // 현재 곡이 큐에 없으면 전체 큐
-                queue.filter { it.videoId != currentVideoId }.forEach { items.add(it) }
+                // 현재 곡이 큐에 없음 → 현재 먼저 + 큐 뒤
+                if (currentVideoId.isNotBlank()) {
+                    items.add(HomeVideo(currentVideoId, currentTitle, currentChannel, currentThumb))
+                }
+                queue.forEach { items.add(it) }
             }
 
-            // ★ 부족분은 nextPreviewList로 채움
+            // nextPreviewList 보충 (큐에 없는 곡만)
             synchronized(nextPreviewList) {
                 nextPreviewList
-                    .filter { it.videoId != currentVideoId }
                     .filter { v -> items.none { it.videoId == v.videoId } }
                     .forEach { items.add(it) }
             }
@@ -2609,7 +2623,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** ★ 스와이프 제스처 설정 */
+
     private fun setupSwipeGestures() {
         val detector = android.view.GestureDetector(this, object : android.view.GestureDetector.SimpleOnGestureListener() {
             override fun onFling(e1: android.view.MotionEvent?, e2: android.view.MotionEvent, vx: Float, vy: Float): Boolean {
