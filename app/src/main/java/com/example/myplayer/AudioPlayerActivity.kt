@@ -2223,6 +2223,8 @@ class AudioPlayerActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnMoreAudio).setOnClickListener {
             AlertDialog.Builder(this)
                 .setItems(arrayOf(
+                    "⭐ 내 플레이리스트에 저장",     // ★ NEW
+                    "🔖 북마크 (★ 표시)",           // ★ NEW
                     "💡 화면 켜짐 유지 (토글)",
                     "🔋 백그라운드 재생 유지 (토글)",
                     "⚙️ 배터리 최적화 설정 열기",
@@ -2233,13 +2235,15 @@ class AudioPlayerActivity : AppCompatActivity() {
                     "🎚 재생 속도"
                 )) { _, which ->
                     when (which) {
-                        0 -> toggleKeepScreenOn()
-                        1 -> toggleBackgroundPlayback()
-                        2 -> openBatterySettings()
-                        3 -> showEqDialog()
-                        4 -> showLoudnessDialog()
-                        5 -> dislikeCurrent()
-                        6 -> {
+                        0 -> saveCurrentToPlaylist()      // ★ NEW
+                        1 -> bookmarkCurrent()             // ★ NEW
+                        2 -> toggleKeepScreenOn()
+                        3 -> toggleBackgroundPlayback()
+                        4 -> openBatterySettings()
+                        5 -> showEqDialog()
+                        6 -> showLoudnessDialog()
+                        7 -> dislikeCurrent()
+                        8 -> {
                             if (currentVideoId.startsWith("local:") || currentVideoId.isBlank()) {
                                 Toast.makeText(this, "로컬 파일은 영상 모드가 없습니다", Toast.LENGTH_SHORT).show()
                             } else {
@@ -2255,7 +2259,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                                 finish()
                             }
                         }
-                        7 -> showSpeedDialog()
+                        9 -> showSpeedDialog()
                     }
                 }
                 .show()
@@ -2660,6 +2664,59 @@ class AudioPlayerActivity : AppCompatActivity() {
                 false
             }
         } catch (_: Exception) {}
+    }
+
+    /** ★ 현재 재생 중인 곡을 내 플레이리스트에 저장 */
+    private fun saveCurrentToPlaylist() {
+        if (currentVideoId.isBlank() || currentVideoId.startsWith("local:")) {
+            Toast.makeText(this, "로컬 파일은 저장할 수 없습니다", Toast.LENGTH_SHORT).show()
+            return
+        }
+        diag("saveCurrentToPlaylist: $currentVideoId")
+
+        val video = VideoItem(
+            videoId = currentVideoId,
+            title = currentTitle.ifBlank { currentVideoId },
+            channel = currentChannel.ifBlank { "YouTube" },
+            thumbnail = currentThumb,
+            duration = "",
+            viewCount = "",
+            uploadDate = ""
+        )
+
+        // ★ PlaylistPickerHelper 재사용
+        PlaylistPickerHelper.showSaveDialog(this, lifecycleScope, listOf(video))
+    }
+
+    /** ★ 현재 재생 중인 곡을 북마크에 저장 (별도 기능) */
+    private fun bookmarkCurrent() {
+        if (currentVideoId.isBlank() || currentVideoId.startsWith("local:")) {
+            Toast.makeText(this, "북마크 불가", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                val dao = HistoryDatabase.get(applicationContext).bookmarkDao()
+                val exists = dao.isBookmarked(currentVideoId)
+                if (exists) {
+                    dao.delete(currentVideoId)
+                    Toast.makeText(this@AudioPlayerActivity, "북마크 해제", Toast.LENGTH_SHORT).show()
+                } else {
+                    dao.insert(
+                        BookmarkEntity(
+                            videoId = currentVideoId,
+                            title = currentTitle,
+                            channel = currentChannel,
+                            thumbnail = currentThumb,
+                            savedAt = System.currentTimeMillis()
+                        )
+                    )
+                    Toast.makeText(this@AudioPlayerActivity, "⭐ 북마크 저장", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@AudioPlayerActivity, "실패: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun savePosition() {
