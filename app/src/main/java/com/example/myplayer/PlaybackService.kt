@@ -32,18 +32,32 @@ class PlaybackService : MediaSessionService() {
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             val newId = mediaItem?.mediaId ?: return
-            if (newId.startsWith("local:")) {
-                val prefs = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
-                prefs.edit()
-                    .putString("current_video_id", newId)
-                    .putString("current_title",
-                        mediaItem.mediaMetadata.title?.toString() ?: "")
-                    .putString("current_channel",
-                        mediaItem.mediaMetadata.artist?.toString() ?: "")
-                    .apply()
-                QueueManager.setCurrent(this@PlaybackService, newId)
-                Log.d("PlaybackService", "transition → $newId")
-            }
+
+            // ★★★ 모든 곡 (로컬 + YouTube) prefs/QueueManager 업데이트 (근본 해결)
+            val title = mediaItem.mediaMetadata.title?.toString() ?: ""
+            val channel = mediaItem.mediaMetadata.artist?.toString() ?: ""
+            val thumb = mediaItem.mediaMetadata.artworkUri?.toString() ?: ""
+
+            val prefs = getSharedPreferences("audio_prefs", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString("current_video_id", newId)
+                .putString("current_title", title)
+                .putString("current_channel", channel)
+                .putString("current_thumbnail", thumb)
+                .apply()
+            QueueManager.setCurrent(this@PlaybackService, newId)
+
+            // ★★★ current 곡이 큐에 없으면 자동 추가 (prefetch/updateNextSongs curIdx 정상화)
+            try {
+                val queue = QueueManager.get(this@PlaybackService)
+                if (queue.none { it.videoId == newId }) {
+                    QueueManager.add(this@PlaybackService,
+                        HomeVideo(newId, title, channel, thumb))
+                    Log.d("PlaybackService", "current 곡을 큐에 자동 추가: $newId")
+                }
+            } catch (_: Exception) {}
+
+            Log.d("PlaybackService", "transition → $newId (title=${title.take(20)})")
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {

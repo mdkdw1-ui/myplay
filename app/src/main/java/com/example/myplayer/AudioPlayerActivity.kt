@@ -485,6 +485,26 @@ class AudioPlayerActivity : AppCompatActivity() {
         wakeLock = null
     }
 
+    /** ★ 큐는 안 건드리고 다음 곡 스트림만 캐시 */
+    private fun prefetchNextStreamOnly() {
+        bgScope.launch {
+            try {
+                val q = QueueManager.get(this@AudioPlayerActivity)
+                val idx = q.indexOfFirst { it.videoId == currentVideoId }
+                if (idx < 0 || idx >= q.size - 1) return@launch
+                val next = q[idx + 1]
+                if (prefetchedStreams.containsKey(next.videoId)) return@launch
+                val result = kotlinx.coroutines.withTimeoutOrNull(15_000) {
+                    YouTubeStream.extractAudioOnly(next.videoId)
+                } ?: return@launch
+                if (result.hasAny) {
+                    prefetchedStreams[next.videoId] = result
+                    diag("prefetchStreamOnly: ${next.videoId} 캐시 완료")
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
     private fun prefetchNext() {
         // ★★★ local 모드 → YouTube 검색 안 함
         if (isLocalMode) {
@@ -497,6 +517,19 @@ class AudioPlayerActivity : AppCompatActivity() {
             diag("prefetch: service_stopped=true → skip")
             return
         }
+
+        // ★★★ 큐에 이미 5곡 이상 있으면 라디오 검색 skip (뒤죽박죽 방지)
+        try {
+            val q = QueueManager.get(this)
+            val idx = q.indexOfFirst { it.videoId == currentVideoId }
+            val afterCount = if (idx >= 0) q.size - idx - 1 else 0
+            if (afterCount >= 5) {
+                diag("prefetch: 큐에 ${afterCount}곡 남음 → skip (이미 충분)")
+                // 다음 곡 스트림만 미리 캐싱
+                prefetchNextStreamOnly()
+                return
+            }
+        } catch (_: Exception) {}
 
         prefetchJob?.cancel()
         prefetchJob = bgScope.launch {
@@ -2451,6 +2484,11 @@ class AudioPlayerActivity : AppCompatActivity() {
             // ★ 오직 QueueManager만 참조 (뒤죽박죽 방지)
             if (curIdx >= 0 && curIdx < queue.size - 1) {
                 queue.drop(curIdx + 1).take(10).forEach { result.add(it) }
+            } else if (curIdx < 0 && queue.isNotEmpty()) {
+                // ★ 현재 곡이 큐에 없을 때: 큐 마지막 10곡 표시 (임시)
+                diag("updateNextSongs: curIdx=-1 (current=$currentVideoId, queue=${queue.size})")
+                // QueueManager.setCurrent로 current 곡이 추가될 때까지 임시 표시
+                queue.takeLast(10).forEach { result.add(it) }
             }
             val current = adapter.currentItems()
             val changed = current.size != result.size ||
