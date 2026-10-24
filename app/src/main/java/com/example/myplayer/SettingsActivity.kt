@@ -48,7 +48,7 @@ class SettingsActivity : AppCompatActivity() {
         btn?.isEnabled = false
         Toast.makeText(this, "업데이트 확인 중...", Toast.LENGTH_SHORT).show()
 
-        androidx.lifecycle.lifecycleScope.launch {
+        lifecycleScope.launch {
             try {
                 val result = UpdateChecker.checkUpdate(applicationContext)
                 btn?.isEnabled = true
@@ -115,7 +115,7 @@ class SettingsActivity : AppCompatActivity() {
             show()
         }
 
-        androidx.lifecycle.lifecycleScope.launch {
+        lifecycleScope.launch {
             try {
                 val result = UpdateChecker.downloadAndInstall(
                     applicationContext, info
