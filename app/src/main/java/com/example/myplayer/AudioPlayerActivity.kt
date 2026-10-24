@@ -55,6 +55,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var pendingStartPos: Long = 0L
     private val isLocalMode: Boolean
         get() = intent.getBooleanExtra("LOCAL_MODE", false)
+            || intent.getBooleanExtra("PLAY_DOWNLOAD_QUEUE", false)
             || currentVideoId.startsWith("local:")
     private val nextPreviewList = mutableListOf<HomeVideo>()
     private var audioSwipeDetector: android.view.GestureDetector? = null   // ★ 다음 곡 미리보기용   // ★ 이어듣기 시작 위치
@@ -899,6 +900,74 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
 
         if (videoId.startsWith("local:download:")) {
+            // ★★★ PLAY_DOWNLOAD_QUEUE: 모든 다운로드를 ExoPlayer 큐에 한 번에 setMediaItems
+            val playDownloadQueue = intent.getBooleanExtra("PLAY_DOWNLOAD_QUEUE", false)
+            if (playDownloadQueue) {
+                diag("loadAudio: PLAY_DOWNLOAD_QUEUE → 다운로드 전체를 ExoPlayer 큐로")
+                bgScope.launch {
+                    try {
+                        val dao = HistoryDatabase.get(applicationContext).downloadDao()
+                        val allDownloads = withContext(Dispatchers.IO) {
+                            dao.getAllOnce().filter { d ->
+                                d.isAudioOnly && java.io.File(d.filePath).exists()
+                            }
+                        }
+                        if (allDownloads.isEmpty()) {
+                            diag("loadAudio: 다운로드 없음")
+                            return@launch
+                        }
+
+                        val items = mutableListOf<MediaItem>()
+                        var startIdx = 0
+                        for ((idx, d) in allDownloads.withIndex()) {
+                            val file = java.io.File(d.filePath)
+                            val fileUri = android.net.Uri.fromFile(file).toString()
+                            val mediaId = "local:download:${d.videoId}"
+                            val metadata = androidx.media3.common.MediaMetadata.Builder()
+                                .setTitle(d.title)
+                                .setArtist(d.channel)
+                                .setArtworkUri(
+                                    if (d.thumbnail.isNotBlank()) android.net.Uri.parse(d.thumbnail)
+                                    else null
+                                )
+                                .build()
+                            items.add(
+                                MediaItem.Builder()
+                                    .setUri(fileUri)
+                                    .setMediaId(mediaId)
+                                    .setMediaMetadata(metadata)
+                                    .build()
+                            )
+                            if (d.videoId == videoId.removePrefix("local:download:")) {
+                                startIdx = idx
+                            }
+                        }
+                        diag("loadAudio: 다운로드 큐 items=${items.size} start=$startIdx")
+
+                        runOnUiThread {
+                            try {
+                                mediaController?.setMediaItems(items, startIdx, 0L)
+                                mediaController?.prepare()
+                                mediaController?.playWhenReady = true
+                            } catch (e: Exception) {
+                                diag("loadAudio 다운로드 큐 err: ${e.message}")
+                            }
+                        }
+
+                        // ★ prefs 업데이트
+                        pref?.edit()
+                            ?.putString("current_video_id", videoId)
+                            ?.putString("current_title", currentTitle)
+                            ?.putString("current_channel", currentChannel)
+                            ?.putString("current_thumbnail", currentThumb)
+                            ?.apply()
+                    } catch (e: Exception) {
+                        diag("loadAudio PLAY_DOWNLOAD_QUEUE err: ${e.message}")
+                    }
+                }
+                return
+            }
+
             val ytId = videoId.removePrefix("local:download:")
             var fileUri = intent.getStringExtra("FILE_URI")
             if (fileUri.isNullOrBlank()) {
