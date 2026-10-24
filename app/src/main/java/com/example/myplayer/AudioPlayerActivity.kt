@@ -695,6 +695,18 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun updateUI() {
+        // ★★★ prefs와 현재 상태 재확인 (동기화 보장)
+        try {
+            val prefId = pref?.getString("current_video_id", null)
+            if (prefId != null && prefId.isNotBlank() && prefId != currentVideoId) {
+                diag("updateUI: prefs와 현재 상태 불일치 → prefs 우선 ($prefId vs $currentVideoId)")
+                currentVideoId = prefId
+                currentTitle = pref?.getString("current_title", "") ?: currentTitle
+                currentChannel = pref?.getString("current_channel", "") ?: currentChannel
+                currentThumb = pref?.getString("current_thumbnail", "") ?: currentThumb
+            }
+        } catch (_: Exception) {}
+
         val isLocal = currentVideoId.startsWith("local:") || currentVideoId.isBlank()
         findViewById<View>(R.id.btnVideoMode)?.visibility = if (isLocal) View.GONE else View.VISIBLE
         tvTitle.text = currentTitle
@@ -1451,32 +1463,54 @@ class AudioPlayerActivity : AppCompatActivity() {
                 if (newId == currentVideoId) return
                 diag("transition to $newId reason=$reason")
 
-                // ★ ExoPlayer 자동 진행 (reason=3=MEDIA_ITEM_TRANSITION_REASON_AUTO)
-                //   → 이제 정상 흐름, 무시하지 말고 상태만 갱신
                 lastMediaSetMs = System.currentTimeMillis()
                 loadingNext = false
+
+                // ★★★ 메타데이터 즉시 추출 (UI 지연 방지)
+                val newTitle = mediaItem.mediaMetadata.title?.toString() ?: currentTitle
+                val newChannel = mediaItem.mediaMetadata.artist?.toString() ?: currentChannel
+                val newThumb = mediaItem.mediaMetadata.artworkUri?.toString() ?: currentThumb
+
                 currentVideoId = newId
-                currentTitle = mediaItem.mediaMetadata.title?.toString() ?: currentTitle
-                currentChannel = mediaItem.mediaMetadata.artist?.toString() ?: currentChannel
-                currentThumb = mediaItem.mediaMetadata.artworkUri?.toString() ?: currentThumb
+                currentTitle = newTitle
+                currentChannel = newChannel
+                currentThumb = newThumb
                 currentArtist = ""
                 currentSubtitleUrl = pref?.getString("current_subtitle_url", "") ?: ""
 
                 QueueManager.setCurrent(this@AudioPlayerActivity, newId)
 
-                if (newId.startsWith("local:")) {
-                    pref?.edit()
-                        ?.putString("current_video_id", newId)
-                        ?.putString("current_title", currentTitle)
-                        ?.putString("current_channel", currentChannel)
-                        ?.apply()
+                // ★★★ prefs 즉시 저장 (모든 곡 — 로컬/YouTube)
+                pref?.edit()
+                    ?.putString("current_video_id", newId)
+                    ?.putString("current_title", newTitle)
+                    ?.putString("current_channel", newChannel)
+                    ?.putString("current_thumbnail", newThumb)
+                    ?.apply()
+
+                // ★★★ UI 즉시 갱신 (runOnUiThread로 바로 반영)
+                runOnUiThread {
+                    try {
+                        tvTitle.text = newTitle
+                        tvChannel.text = newChannel
+                        if (newThumb.isNotBlank()) {
+                            com.bumptech.glide.Glide.with(this@AudioPlayerActivity)
+                                .load(newThumb).into(ivArt)
+                            com.bumptech.glide.Glide.with(this@AudioPlayerActivity)
+                                .load(newThumb).into(ivBackground)
+                        }
+                        updateLyricsButtonLabel()
+                        updateNextSongs()   // ★ 다음 곡 리스트도 즉시 갱신
+                        diag("transition UI 즉시 갱신: $newTitle")
+                    } catch (e: Exception) {
+                        diag("transition UI err: ${e.message}")
+                    }
                 }
 
-                runOnUiThread {
-                    updateUI()
-                    updateLyricsButtonLabel()
-                }
-                // ★ 새 곡 시작 시 prefetch 재예약
+                // ★ 새 곡 artist 파싱 재시작
+                extractArtistAsync()
+
+                // ★ prefetch 재예약
                 try { prefetchNext() } catch (_: Exception) {}
             }
         })
@@ -1914,7 +1948,19 @@ class AudioPlayerActivity : AppCompatActivity() {
             Toast.makeText(this, "곡 정보가 없습니다", Toast.LENGTH_SHORT).show()
             return
         }
-        val artist = currentArtist.ifBlank { currentChannel }
+        // ★★★ artist 즉시 파싱 (currentArtist 빈값 대응)
+        val artist = if (currentArtist.isNotBlank()) {
+            currentArtist
+        } else {
+            // title에서 "artist - title" 파싱
+            val parsed = parseArtistFromTitle(currentTitle)
+            if (parsed.isNotBlank()) {
+                currentArtist = parsed   // 다음에도 재사용
+                parsed
+            } else {
+                currentChannel
+            }
+        }
         diag("openLyrics: $currentVideoId, artist=$artist, subtitle=${currentSubtitleUrl.take(40)}")
         startActivity(Intent(this, LyricsActivity::class.java).apply {
             putExtra("VIDEO_ID", currentVideoId)
@@ -1923,6 +1969,22 @@ class AudioPlayerActivity : AppCompatActivity() {
             putExtra("VIDEO_ARTIST", artist)
             putExtra("SUBTITLE_URL", currentSubtitleUrl)
         })
+    }
+
+    /** ★ title에서 artist 파싱 ("artist - title" 패턴) */
+    private fun parseArtistFromTitle(title: String): String {
+        if (title.isBlank()) return ""
+        var t = title.trim()
+        t = t.replace(Regex("^\\[.*?\\]\\s*"), "")
+        t = t.replace(Regex("^\\(.*?\\)\\s*"), "")
+        val dash = t.split(Regex("\\s*[-–—]\\s*"))
+        if (dash.size >= 2) {
+            val artist = dash[0].trim()
+                .split(Regex("(?i)\\s+(feat\\.?|ft\\.?|with)\\s+"))[0]
+                .trim()
+            if (artist.length in 2..40) return artist
+        }
+        return ""
     }
 
     private fun showEqDialog() {
@@ -2409,6 +2471,31 @@ class AudioPlayerActivity : AppCompatActivity() {
                 if (mc != null && !isDragging) {
                     val pos = mc.currentPosition
                     val dur = mc.duration
+                    // ★★★ 현재 재생 곡 확인 (mediaController vs currentVideoId 동기화)
+                    val mcId = mc.currentMediaItem?.mediaId
+                    if (mcId != null && mcId.isNotBlank() && mcId != currentVideoId
+                        && !mcId.endsWith("_video")) {
+                        // UI와 실제 재생 곡 불일치 → 즉시 갱신
+                        runOnUiThread {
+                            try {
+                                currentVideoId = mcId
+                                val meta = mc.currentMediaItem?.mediaMetadata
+                                if (meta != null) {
+                                    currentTitle = meta.title?.toString() ?: currentTitle
+                                    currentChannel = meta.artist?.toString() ?: currentChannel
+                                    currentThumb = meta.artworkUri?.toString() ?: currentThumb
+                                }
+                                tvTitle.text = currentTitle
+                                tvChannel.text = currentChannel
+                                if (currentThumb.isNotBlank()) {
+                                    com.bumptech.glide.Glide.with(this@AudioPlayerActivity)
+                                        .load(currentThumb).into(ivArt)
+                                }
+                                diag("polling 동기화: mcId=$mcId title=${currentTitle.take(30)}")
+                            } catch (_: Exception) {}
+                        }
+                    }
+
                     runOnUiThread {
                         tvPos.text = fmt(pos)
                         tvDur.text = if (dur > 0) fmt(dur) else "0:00"
@@ -2419,7 +2506,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                         )
                     }
                 }
-                delay(500)
+                delay(300)  // ★ 500ms → 300ms
             }
         }
     }
@@ -2651,11 +2738,41 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
         diag("jumpToSong: ${video.videoId} (${video.title.take(30)})")
+
+        // ★★★ 즉시 상태 업데이트
         currentVideoId = video.videoId
         currentTitle = video.title
         currentChannel = video.channel
         currentThumb = video.thumbnail
-        updateUI()
+        currentArtist = ""
+
+        // ★★★ prefs 즉시 저장
+        pref?.edit()
+            ?.putString("current_video_id", video.videoId)
+            ?.putString("current_title", video.title)
+            ?.putString("current_channel", video.channel)
+            ?.putString("current_thumbnail", video.thumbnail)
+            ?.apply()
+
+        // ★★★ UI 즉시 갱신 (loadAudio의 8초 extract 대기 없이)
+        runOnUiThread {
+            try {
+                tvTitle.text = video.title
+                tvChannel.text = video.channel
+                if (video.thumbnail.isNotBlank()) {
+                    com.bumptech.glide.Glide.with(this@AudioPlayerActivity)
+                        .load(video.thumbnail).into(ivArt)
+                    com.bumptech.glide.Glide.with(this@AudioPlayerActivity)
+                        .load(video.thumbnail).into(ivBackground)
+                }
+                updateLyricsButtonLabel()
+                updateNextSongs()
+                diag("jumpToSong UI 즉시 갱신: ${video.title.take(30)}")
+            } catch (e: Exception) {
+                diag("jumpToSong UI err: ${e.message}")
+            }
+        }
+
         loadAudio(video.videoId, isInitial = false)
     }
 

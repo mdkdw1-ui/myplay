@@ -16,8 +16,18 @@ object ArtistExtractor {
 
     suspend fun extract(videoId: String, title: String, channel: String): String =
         withContext(Dispatchers.IO) {
+            // ★★★ 1순위: title 파싱 (즉시, 안정적)
+            val fromTitle = parseFromTitle(title)
+            if (fromTitle.isNotBlank()) {
+                Log.d(TAG, "Title 파싱: $fromTitle")
+                return@withContext fromTitle
+            }
+
+            // ★★★ 2순위: YouTube API (타임아웃 단축 3초)
             try {
-                val api = fetchPlayerApi(videoId)
+                val api = kotlinx.coroutines.withTimeoutOrNull(3000) {
+                    fetchPlayerApi(videoId)
+                } ?: ""
                 if (api.isNotBlank()) {
                     Log.d(TAG, "API: $api")
                     return@withContext api
@@ -26,12 +36,7 @@ object ArtistExtractor {
                 Log.e(TAG, "player err", e)
             }
 
-            val fromTitle = parseFromTitle(title)
-            if (fromTitle.isNotBlank()) {
-                Log.d(TAG, "Title: $fromTitle")
-                return@withContext fromTitle
-            }
-
+            // ★★★ 3순위: channel 정리
             val fromChannel = cleanChannel(channel)
             Log.d(TAG, "Channel: $fromChannel")
             fromChannel
