@@ -88,6 +88,22 @@ object QueueManager {
         save(ctx, list)
     }
 
+    /** ★ 다운로드 파일 큐 추가 (filePath 사용) */
+    fun addLocalDownload(ctx: Context, download: DownloadEntity) {
+        val list = get(ctx)
+        val id = "local:download:${download.videoId}"
+        if (list.any { it.videoId == id }) return
+        list.add(
+            HomeVideo(
+                videoId = id,
+                title = download.title,
+                channel = download.channel,
+                thumbnail = download.thumbnail
+            )
+        )
+        save(ctx, list)
+    }
+
     fun size(ctx: Context): Int = get(ctx).size
 
     fun setCurrent(ctx: Context, videoId: String) {

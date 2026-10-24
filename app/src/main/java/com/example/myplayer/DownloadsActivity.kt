@@ -167,15 +167,42 @@ class DownloadsActivity : AppCompatActivity() {
         }
         // ★ 음악만이면 AudioPlayerActivity로
         if (item.isAudioOnly) {
-            val intent = Intent(this, AudioPlayerActivity::class.java).apply {
-                putExtra("VIDEO_ID", "local:download:${item.videoId}")
-                putExtra("FILE_URI", Uri.fromFile(f).toString())
-                putExtra("VIDEO_TITLE", item.title)
-                putExtra("VIDEO_CHANNEL", item.channel)
-                putExtra("FROM_PLAYLIST", true)
-                putExtra("LOCAL_MODE", true)
+            // ★★★ 다운로드 전체를 QueueManager에 추가 (로컬 방식)
+            lifecycleScope.launch {
+                try {
+                    val dao = HistoryDatabase.get(applicationContext).downloadDao()
+                    val allDownloads = withContext(Dispatchers.IO) {
+                        dao.getAllOnce().filter { it.isAudioOnly && File(it.filePath).exists() }
+                    }
+                    // ★ 클릭한 곡부터 순서대로
+                    val startIdx = allDownloads.indexOfFirst { it.videoId == item.videoId }
+                        .coerceAtLeast(0)
+                    val orderedList = allDownloads.drop(startIdx) + allDownloads.take(startIdx)
+
+                    QueueManager.clear(this@DownloadsActivity)
+                    for (d in orderedList) {
+                        QueueManager.addLocalDownload(this@DownloadsActivity, d)
+                    }
+                    QueueManager.setCurrent(this@DownloadsActivity, "local:download:${item.videoId}")
+
+                    withContext(Dispatchers.Main) {
+                        val intent = Intent(this@DownloadsActivity, AudioPlayerActivity::class.java).apply {
+                            putExtra("VIDEO_ID", "local:download:${item.videoId}")
+                            putExtra("FILE_URI", Uri.fromFile(f).toString())
+                            putExtra("VIDEO_TITLE", item.title)
+                            putExtra("VIDEO_CHANNEL", item.channel)
+                            putExtra("VIDEO_THUMB", item.thumbnail)
+                            putExtra("FROM_PLAYLIST", true)
+                            putExtra("LOCAL_MODE", true)
+                            putExtra("PLAY_DOWNLOAD_QUEUE", true)  // ★ 다운로드 큐 모드
+                        }
+                        startActivity(intent)
+                    }
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(this@DownloadsActivity,
+                        "재생 실패: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                }
             }
-            startActivity(intent)
         } else {
             val intent = Intent(this, PlayerActivity::class.java).apply {
                 putExtra("VIDEO_URI", Uri.fromFile(f).toString())
