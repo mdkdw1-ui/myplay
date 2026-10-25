@@ -12,35 +12,18 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
 
-      # ★ setup-android 제거 → 수동 라이선스 (v3 버그 회피)
       - name: Accept Android SDK licenses
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ls -la $ANDROID_SDK_ROOT 2>/dev/null | head -20
-          # 기존 cmdline-tools 경로 자동 감지
           SDKMANAGER=$(find $ANDROID_SDK_ROOT/cmdline-tools -name sdkmanager -type f 2>/dev/null | head -1)
-          if [ -z "$SDKMANAGER" ]; then
-            SDKMANAGER=$(which sdkmanager)
-          fi
-          echo "sdkmanager: $SDKMANAGER"
-          if [ -n "$SDKMANAGER" ]; then
-            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-          fi
+          if [ -n "$SDKMANAGER" ]; then yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true; fi
 
-      - name: Cache Gradle
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
@@ -53,29 +36,68 @@ jobs:
 
       - name: Get version
         id: version
-        shell: bash
         run: |
           VERSION=$(sed -n 's/.*versionName *= *"\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
           if [ -z "$VERSION" ]; then VERSION="1.0.0"; fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$VERSION" >> $GITHUB_OUTPUT
-          echo "Building version: $VERSION (tag: v$VERSION)"
+          echo "Building v$VERSION"
 
-      - name: Build Debug APK
+      - name: Decode Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          set -e
+          printf '%s' "$KEYSTORE_BASE64" | tr -d ' \n\r\t' | base64 -d > release.p12
+          SIZE=$(wc -c < release.p12); echo "size=$SIZE"
+          if [ "$SIZE" -le 2000 ]; then echo "keystore damaged"; exit 1; fi
+          openssl pkcs12 -in release.p12 -info -noout -passin "pass:$KEYSTORE_PASSWORD" 2>&1 | grep -q "MAC verified OK" || (echo "bad password"; exit 1)
+          echo "keystore OK"
+          echo "--- aliases ---"
+          openssl pkcs12 -in release.p12 -info -noout -passin "pass:$KEYSTORE_PASSWORD" 2>&1 | grep friendlyName
+          echo "--- cert fingerprint ---"
+          openssl pkcs12 -in release.p12 -nokeys -passin "pass:$KEYSTORE_PASSWORD" 2>/dev/null | openssl x509 -fingerprint -sha256 -noout
+
+      - name: Build SIGNED Release APK
         env:
           GEMINI_API_KEY:        ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY:          ${{ secrets.GROQ_API_KEY }}
           TEXTRA_CLIENT_ID:      ${{ secrets.TEXTRA_CLIENT_ID }}
           TEXTRA_CLIENT_SECRET:  ${{ secrets.TEXTRA_CLIENT_SECRET }}
           TEXTRA_NAME:           ${{ secrets.TEXTRA_NAME }}
+          KEYSTORE_PASSWORD:     ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS:             ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD:          ${{ secrets.KEY_PASSWORD }}
         run: |
-          ./gradlew assembleDebug --stacktrace
+          set -e
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$PWD/release.p12 \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD" \
+            --stacktrace
+
+      - name: Verify APK Signature
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          set -e
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | tail -n1)
+          APK=$(find app/build/outputs/apk/release -name "*.apk" | grep -v unsigned | head -n1)
+          $BT/apksigner verify --print-certs "$APK" | tee /tmp/apk.txt
+          EXPECTED=$(openssl pkcs12 -in release.p12 -nokeys -passin "pass:$KEYSTORE_PASSWORD" 2>/dev/null | openssl x509 -fingerprint -sha256 -noout | sed 's/.*=//; s/://g' | tr 'A-F' 'a-f')
+          ACTUAL=$(grep "SHA-256 digest" /tmp/apk.txt | head -n1 | sed 's/.*digest: //; s/://g' | tr 'A-F' 'a-f')
+          echo "keystore: $EXPECTED"
+          echo "APK     : $ACTUAL"
+          if [ "$EXPECTED" != "$ACTUAL" ]; then echo "signature mismatch"; exit 1; fi
+          echo "signature OK"
 
       - name: Copy APK
         run: |
+          SRC=$(find app/build/outputs/apk/release -name "*.apk" | grep -v unsigned | head -n1)
           mkdir -p release
-          cp app/build/outputs/apk/debug/app-debug.apk \
-             release/myplayer-${{ steps.version.outputs.version }}.apk
+          cp "$SRC" "release/myplayer-${{ steps.version.outputs.version }}.apk"
           ls -la release/
 
       - name: Check if release exists
@@ -97,12 +119,7 @@ jobs:
           name: "v${{ steps.version.outputs.version }}"
           body: |
             ## MyPlayer v${{ steps.version.outputs.version }}
-            
-            자동 빌드 릴리스 (commit: ${{ github.sha }})
-            
-            ### 설치 방법
-            1. 아래 APK 다운로드
-            2. 설치 (출처를 알 수 없는 앱 허용 필요)
+            Auto release (commit: ${{ github.sha }})
           files: release/myplayer-*.apk
           generate_release_notes: true
         env:
