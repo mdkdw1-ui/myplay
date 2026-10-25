@@ -54,6 +54,10 @@ object UpdateChecker {
             val code = conn.responseCode
             Log.d(TAG, "HTTP $code")
             if (code !in 200..299) {
+                if (code == 404) {
+                    Log.d(TAG, "Release 없음 → 최신 버전으로 처리")
+                    return@withContext Result.success(null)
+                }
                 val err = conn.errorStream?.bufferedReader()?.use { it.readText() }
                 Log.e(TAG, "err: ${err?.take(200)}")
                 return@withContext Result.failure(Exception("HTTP $code: ${err?.take(100)}"))
@@ -191,7 +195,6 @@ object UpdateChecker {
         }
     }
 
-    /** APK 설치 인텐트 시작 (FileProvider 필요) */
     fun installApk(ctx: Context, apkFile: File) {
         try {
             val uri: Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -209,9 +212,34 @@ object UpdateChecker {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                         Intent.FLAG_GRANT_READ_URI_PERMISSION
             }
+
+            // SAI 등 서드파티 설치 프로그램에 명시적 읽기 권한 부여
+            try {
+                val resolveInfos = ctx.packageManager.queryIntentActivities(
+                    intent,
+                    android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
+                )
+                for (ri in resolveInfos) {
+                    val pkg = ri.activityInfo.packageName
+                    try {
+                        ctx.grantUriPermission(
+                            pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                        Log.d(TAG, "grantUriPermission -> $pkg")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "grantUriPermission fail ($pkg): ${e.message}")
+                    }
+                }
+                if (resolveInfos.isEmpty()) {
+                    Log.w(TAG, "APK install intent - no handler")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "queryIntentActivities err: ${e.message}", e)
+            }
+
             ctx.startActivity(intent)
         } catch (e: Exception) {
-            Log.e(TAG, "설치 인텐트 err: ${e.message}", e)
+            Log.e(TAG, "install intent err: ${e.message}", e)
             throw e
         }
     }
