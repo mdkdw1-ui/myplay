@@ -327,7 +327,7 @@ object YouTubeApiHelper {
                         videoId = v.optString("videoId", ""),
                         title = v.optString("title", ""),
                         channel = v.optString("author", ""),
-                        thumbnail = v.optString("videoThumbnails", "").ifBlank { "https://i.ytimg.com/vi/${videoId}/mqdefault.jpg" },
+                        thumbnail = v.optString("videoThumbnails", "").ifBlank { "https://i.ytimg.com/vi/${v.optString("videoId", "")}/mqdefault.jpg" },
                         duration = fmtSec(v.optInt("lengthSeconds", 0)),
                         viewCount = fmtViews(v.optLong("viewCount", 0)),
                         uploadDate = ""
@@ -395,7 +395,7 @@ object YouTubeApiHelper {
                         videoId = v.optString("videoId", ""),
                         title = v.optString("title", ""),
                         channel = v.optString("author", ""),
-                        thumbnail = v.optString("videoThumbnails", "").ifBlank { "https://i.ytimg.com/vi/${videoId}/mqdefault.jpg" },
+                        thumbnail = v.optString("videoThumbnails", "").ifBlank { "https://i.ytimg.com/vi/${v.optString("videoId", "")}/mqdefault.jpg" },
                         duration = fmtSec(v.optInt("lengthSeconds", 0)),
                         viewCount = fmtViews(v.optLong("viewCount", 0)),
                         uploadDate = ""
