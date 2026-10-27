@@ -54,7 +54,7 @@ class HorizontalVideoAdapter(
         }
         holder.title.text = item.title
         holder.channel.text = item.channel
-        Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
+        Glide.with(holder.thumb).load(item.thumbnail).placeholder(R.color.bg_elevated).error(R.color.bg_elevated).into(holder.thumb)
         holder.itemView.setOnClickListener { onClick(item) }
     }
 

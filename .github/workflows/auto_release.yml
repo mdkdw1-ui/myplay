@@ -50,14 +50,15 @@ jobs:
         run: |
           set -e
           printf '%s' "$KEYSTORE_BASE64" | tr -d ' \n\r\t' | base64 -d > release.p12
-          SIZE=$(wc -c < release.p12); echo "size=$SIZE"
-          if [ "$SIZE" -le 2000 ]; then echo "keystore damaged"; exit 1; fi
-          openssl pkcs12 -in release.p12 -info -noout -passin "pass:$KEYSTORE_PASSWORD" 2>&1 | grep -q "MAC verified OK" || (echo "bad password"; exit 1)
+          SIZE=$(wc -c < release.p12)
+          echo "keystore size: $SIZE bytes"
+          [ "$SIZE" -gt 2000 ] || (echo "keystore damaged"; exit 1)
+          if ! openssl pkcs12 -in release.p12 -info -noout \
+               -passin "pass:$KEYSTORE_PASSWORD" 2>&1 | grep -q "MAC verified OK"; then
+            echo "password mismatch or damaged"
+            exit 1
+          fi
           echo "keystore OK"
-          echo "--- aliases ---"
-          openssl pkcs12 -in release.p12 -info -noout -passin "pass:$KEYSTORE_PASSWORD" 2>&1 | grep friendlyName
-          echo "--- cert fingerprint ---"
-          openssl pkcs12 -in release.p12 -nokeys -passin "pass:$KEYSTORE_PASSWORD" 2>/dev/null | openssl x509 -fingerprint -sha256 -noout
 
       - name: Build SIGNED Release APK
         env:

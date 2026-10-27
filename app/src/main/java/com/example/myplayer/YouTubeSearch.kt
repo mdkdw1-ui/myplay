@@ -203,11 +203,12 @@ object YouTubeSearch {
         val channel = extractText(v.optJSONObject("ownerText"))
             .ifBlank { extractText(v.optJSONObject("longBylineText")) }
             .ifBlank { extractText(v.optJSONObject("shortBylineText")) }
-        val thumbnail = v.optJSONObject("thumbnail")
+        var rawThumb = v.optJSONObject("thumbnail")
             ?.optJSONArray("thumbnails")
             ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
             ?.takeIf { it.isNotBlank() }
             ?: "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
+        val thumbnail = YouTubeApiHelper.normalizeThumb(rawThumb, videoId)
         val duration = extractText(v.optJSONObject("lengthText"))
         val viewCount = extractText(v.optJSONObject("viewCountText"))
             .ifBlank { extractText(v.optJSONObject("shortViewCountText")) }
