@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   actions: write
 
 jobs:
@@ -153,3 +153,16 @@ jobs:
           name: MyPlayer-v${{ env.VERSION_NAME }}
           path: app/build/outputs/apk/release/MyPlayer-*.apk
           retention-days: 30
+
+      - name: Upload APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION_NAME }}
+          name: "v${{ env.VERSION_NAME }}"
+          body: |
+            자동 빌드 릴리스 (v${{ env.VERSION_NAME }})
+            커밋: ${{ github.sha }}
+          files: app/build/outputs/apk/release/MyPlayer-*.apk
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

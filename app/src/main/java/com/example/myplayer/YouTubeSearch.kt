@@ -206,6 +206,7 @@ object YouTubeSearch {
         val thumbnail = v.optJSONObject("thumbnail")
             ?.optJSONArray("thumbnails")
             ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
+            ?.takeIf { it.isNotBlank() }
             ?: "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
         val duration = extractText(v.optJSONObject("lengthText"))
         val viewCount = extractText(v.optJSONObject("viewCountText"))
