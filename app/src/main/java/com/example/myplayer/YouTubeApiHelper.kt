@@ -11,6 +11,13 @@ import java.net.URL
 import java.net.URLEncoder
 
 object YouTubeApiHelper {
+
+    /** WebP 썸네일 주소를 Glide가 읽을 수 있는 JPG 주소로 변환 */
+    fun normalizeThumb(url: String, videoId: String): String {
+        if (url.isBlank()) return "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
+        return url.replace("/vi_webp/", "/vi/").replace(".webp", ".jpg")
+    }
+
     private const val TAG = "YtApi"
 
     val INVIDIOUS = listOf(
