@@ -53,12 +53,7 @@ jobs:
           SIZE=$(wc -c < release.p12)
           echo "keystore size: $SIZE bytes"
           [ "$SIZE" -gt 2000 ] || (echo "keystore damaged"; exit 1)
-          if ! openssl pkcs12 -in release.p12 -info -noout \
-               -passin "pass:$KEYSTORE_PASSWORD" 2>&1 | grep -q "MAC verified OK"; then
-            echo "password mismatch or damaged"
-            exit 1
-          fi
-          echo "keystore OK"
+          echo "keystore decoded OK (skip openssl check; apksigner will verify)"
 
       - name: Build SIGNED Release APK
         env:
