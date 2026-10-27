@@ -38,7 +38,7 @@ class DownloadsAdapter(
         holder.progressTrack.visibility = View.GONE
 
         if (item.thumbnail.isNotBlank())
-            Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
+            Glide.with(holder.thumb).load("https://i.ytimg.com/vi/${item.videoId}/mqdefault.jpg").placeholder(R.color.bg_elevated).error(R.color.bg_elevated).into(holder.thumb)
 
         holder.btnRelated.text = "⋯"
 

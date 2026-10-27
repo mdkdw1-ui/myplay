@@ -36,7 +36,7 @@ class QueueAdapter(
         holder.idx.text = "${position + 1}"
         holder.title.text = item.title
         holder.channel.text = item.channel
-        Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
+        Glide.with(holder.thumb).load("https://i.ytimg.com/vi/${item.videoId}/mqdefault.jpg").placeholder(R.color.bg_elevated).error(R.color.bg_elevated).into(holder.thumb)
 
         val isCurrent = item.videoId == currentId
         holder.title.setTypeface(

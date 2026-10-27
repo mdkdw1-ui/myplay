@@ -76,7 +76,7 @@ class SearchAdapter(
             holder.meta.visibility = View.VISIBLE
         } else holder.meta.visibility = View.GONE
 
-        Glide.with(holder.thumb).load(item.thumbnail).placeholder(R.color.bg_elevated).error(R.color.bg_elevated).into(holder.thumb)
+        Glide.with(holder.thumb).load("https://i.ytimg.com/vi/${item.videoId}/mqdefault.jpg").placeholder(R.color.bg_elevated).error(R.color.bg_elevated).into(holder.thumb)
 
         // 선택 모드 UI
         if (selectMode) {

@@ -36,7 +36,7 @@ class HistoryAdapter(
         holder.title.text = item.title
         holder.channel.text = item.channel
         holder.duration.text = ""
-        Glide.with(holder.thumb).load(item.thumbnail).into(holder.thumb)
+        Glide.with(holder.thumb).load("https://i.ytimg.com/vi/${item.videoId}/mqdefault.jpg").placeholder(R.color.bg_elevated).error(R.color.bg_elevated).into(holder.thumb)
 
         val percent = item.progressPercent
         if (percent in 1..94) {

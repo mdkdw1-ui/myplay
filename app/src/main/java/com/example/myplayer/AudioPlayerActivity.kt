@@ -712,8 +712,8 @@ class AudioPlayerActivity : AppCompatActivity() {
         tvTitle.text = currentTitle
         tvChannel.text = currentChannel
         if (currentThumb.isNotEmpty()) {
-            Glide.with(this).load(currentThumb).into(ivArt)
-            Glide.with(this).load(currentThumb).into(ivBackground)
+            Glide.with(this).load("https://i.ytimg.com/vi/${currentVideoId}/mqdefault.jpg").placeholder(R.color.bg_elevated).error(R.color.bg_elevated).into(ivArt)
+            Glide.with(this).load("https://i.ytimg.com/vi/${currentVideoId}/mqdefault.jpg").placeholder(R.color.bg_elevated).error(R.color.bg_elevated).into(ivBackground)
         }
         extractArtistAsync()
     }

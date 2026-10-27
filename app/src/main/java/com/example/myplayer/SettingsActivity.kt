@@ -64,10 +64,26 @@ class SettingsActivity : AppCompatActivity() {
                         showUpdateDialog(info)
                     }
                 }.onFailure { e ->
+                    val msg = e.message ?: "알 수 없는 오류"
+                    val displayMsg = when {
+                        msg.contains("404") || msg.contains("Not Found") ->
+                            "GitHub에 아직 릴리스가 없습니다.\n\n릴리스 배포 후 다시 시도하세요.\n\n(개발자: GitHub Releases에 v1.0.0 태그 + APK 업로드 필요)"
+                        msg.contains("timeout") || msg.contains("UnknownHost") ->
+                            "네트워크 연결을 확인하세요.\n\n$msg"
+                        else -> "$msg\n\n네트워크를 확인하거나 나중에 다시 시도하세요."
+                    }
                     androidx.appcompat.app.AlertDialog.Builder(this@SettingsActivity)
                         .setTitle("업데이트 확인 실패")
-                        .setMessage("${e.message}\n\n네트워크를 확인하거나 나중에 다시 시도하세요.")
+                        .setMessage(displayMsg)
                         .setPositiveButton("확인", null)
+                        .setNeutralButton("🌐 GitHub 확인") { _, _ ->
+                            try {
+                                startActivity(android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse("https://github.com/mdkdw1-ui/myplay/releases")
+                                ))
+                            } catch (_: Exception) {}
+                        }
                         .show()
                 }
             } catch (e: Exception) {
