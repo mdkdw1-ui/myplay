@@ -210,6 +210,7 @@ class SearchActivity : AppCompatActivity() {
 
     private fun loadMore() {
         val token = nextContinuation ?: return
+        if (token.isBlank()) return
         loadingMore = true
         lifecycleScope.launch {
             android.util.Log.d("Search", "loadMore: q=$lastQuery, token=${token.take(50)}")

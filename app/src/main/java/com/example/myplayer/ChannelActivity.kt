@@ -197,6 +197,7 @@ class ChannelActivity : AppCompatActivity() {
 
     private fun loadMore() {
         val token = nextContinuation ?: return
+        if (token.isBlank()) return
         loadingMore = true
         lifecycleScope.launch {
             android.util.Log.d("Channel", "loadMore: token=${token.take(60)}...")
