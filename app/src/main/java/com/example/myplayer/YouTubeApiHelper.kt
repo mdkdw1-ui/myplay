@@ -371,9 +371,8 @@ object YouTubeApiHelper {
             val url = if (continuation.isNullOrBlank()) {
                 "$inst/api/v1/channels/$realId/videos"
             } else {
-                // URL 인코딩 필수 (토큰에 특수문자가 많음)
-                val encodedToken = java.net.URLEncoder.encode(continuation, "UTF-8")
-                "$inst/api/v1/channels/$realId/videos?continuation=$encodedToken"
+                // Invidious는 토큰을 원본 그대로 받아야 함 (URL 인코딩 금지)
+                "$inst/api/v1/channels/$realId/videos?continuation=$continuation"
             }
             val obj = getJsonObject(url) ?: continue
             try {
@@ -402,6 +401,40 @@ object YouTubeApiHelper {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "inv channel err: ${e.message}", e)
+            }
+        }
+
+        // Piped 채널 continuation 처리 (만약 continuation이 있다면)
+        if (!continuation.isNullOrBlank() && !continuation.startsWith("inv:")) {
+            for (inst in PIPED) {
+                // Piped 채널 다음 페이지 URL 형식 (nextpage 파라미터)
+                val url = "$inst/nextpage/channel/$realId?nextpage=${java.net.URLEncoder.encode(continuation, "UTF-8")}"
+                val obj = getJsonObject(url) ?: continue
+                try {
+                    val rel = obj.optJSONArray("relatedStreams") ?: continue
+                    val out = mutableListOf<VideoItem>()
+                    for (i in 0 until rel.length()) {
+                        val v = rel.getJSONObject(i)
+                        val u = v.optString("url", "")
+                        val id = u.substringAfter("/watch?v=", "").substringBefore("&")
+                        if (id.isBlank()) continue
+                        out.add(VideoItem(
+                            videoId = id,
+                            title = v.optString("title", ""),
+                            channel = v.optString("uploaderName", ""),
+                            thumbnail = v.optString("thumbnail", ""),
+                            duration = fmtSec(v.optInt("duration", 0)),
+                            viewCount = "",
+                            uploadDate = ""
+                        ))
+                    }
+                    if (out.isNotEmpty()) {
+                        var nextpage = obj.optString("nextpage", "")
+                        if (nextpage.isBlank()) nextpage = findContinuationDeep(obj) ?: ""
+                        val next = nextpage.takeIf { it.isNotBlank() }
+                        return@withContext ChannelVideosPage(out, next)
+                    }
+                } catch (e: Exception) { }
             }
         }
 
