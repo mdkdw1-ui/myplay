@@ -12,6 +12,42 @@ import java.net.URLEncoder
 
 object YouTubeApiHelper {
 
+    /** 
+     * JSONObject 내부를 재귀 탐색하여 다음 페이지 토큰(nextpage, continuation)을 찾습니다.
+     * Piped/Invidious 응답 구조가 제각각이라 깊이 탐색이 필수적입니다.
+     */
+    private fun findContinuationDeep(node: Any?): String? {
+        when (node) {
+            is JSONObject -> {
+                // 1. 직접적인 키 확인
+                val direct = node.optString("nextpage", "").ifBlank { node.optString("continuation", "") }
+                if (direct.isNotBlank()) return direct
+
+                // 2. continuationItemRenderer 내부 확인
+                node.optJSONObject("continuationItemRenderer")?.let { cir ->
+                    val token = cir.optJSONObject("continuationEndpoint")
+                        ?.optJSONObject("continuationCommand")?.optString("token")
+                    if (!token.isNullOrBlank()) return token
+                }
+
+                // 3. 재귀 탐색
+                val keys = node.keys()
+                while (keys.hasNext()) {
+                    val result = findContinuationDeep(node.opt(keys.next()))
+                    if (result != null) return result
+                }
+            }
+            is org.json.JSONArray -> {
+                for (i in 0 until node.length()) {
+                    val result = findContinuationDeep(node.opt(i))
+                    if (result != null) return result
+                }
+            }
+        }
+        return null
+    }
+
+
     /** WebP 썸네일 주소를 Glide가 읽을 수 있는 JPG 주소로 변환 */
     fun normalizeThumb(url: String, videoId: String): String {
         if (url.isBlank()) return "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
@@ -390,6 +426,9 @@ object YouTubeApiHelper {
                     }
                     if (out.isNotEmpty()) {
                         var nextToken = obj.optString("nextpage", "")
+                        if (nextToken.isBlank()) {
+                            nextToken = findContinuationDeep(obj) ?: ""
+                        }
                         if (nextToken.isBlank() && obj.optJSONArray("relatedStreams") != null) {
                             // Piped 채널은 relatedStreams 배열 마지막에 nextpage 오브젝트가 있는 경우가 많음
                             val streams = obj.optJSONArray("relatedStreams")
