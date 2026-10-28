@@ -46,7 +46,7 @@ object YouTubeChannel {
         Pair(null, ChannelVideosPage(emptyList(), null))
     }
     suspend fun fetchMore(continuation: String): ChannelVideosPage = withContext(Dispatchers.IO) {
-        // ★ "inv:<채널ID>|<continuation토큰>" 형식이면 Invidious로 처리
+        // "inv:<채널ID>|<continuation토큰>" 형식이면 Invidious로 처리
         if (continuation.startsWith("inv:")) {
             val rest = continuation.removePrefix("inv:")
             val idx = rest.indexOf('|')
@@ -54,10 +54,14 @@ object YouTubeChannel {
                 val channelId = rest.substring(0, idx)
                 val contToken = rest.substring(idx + 1)
                 Log.d(TAG, "fetchMore (Invidious): channelId=$channelId, cont=${contToken.take(30)}")
+                // ★ YouTubeApiHelper의 channelVideos는 두 번째 인자로 continuation을 받음
                 return@withContext YouTubeApiHelper.channelVideos(channelId, contToken)
-            } else {
-                Log.w(TAG, "fetchMore: 잘못된 inv 토큰 (| 없음): $continuation")
             }
+        }
+        // Piped 토큰 등 다른 형식 처리 (기존 로직 유지)
+        if (continuation.startsWith("piped:")) {
+            // 필요시 Piped 채널 continuation 처리 로직 추가
+            Log.w(TAG, "Piped continuation not fully implemented: $continuation")
         }
 
         // Piped nextpage 토큰 (기존 로직 유지 - 하지만 실질적으로 안 쓰임)

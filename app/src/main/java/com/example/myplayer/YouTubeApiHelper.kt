@@ -371,7 +371,9 @@ object YouTubeApiHelper {
             val url = if (continuation.isNullOrBlank()) {
                 "$inst/api/v1/channels/$realId/videos"
             } else {
-                "$inst/api/v1/channels/$realId/videos?continuation=$continuation"
+                // URL 인코딩 필수 (토큰에 특수문자가 많음)
+                val encodedToken = java.net.URLEncoder.encode(continuation, "UTF-8")
+                "$inst/api/v1/channels/$realId/videos?continuation=$encodedToken"
             }
             val obj = getJsonObject(url) ?: continue
             try {
