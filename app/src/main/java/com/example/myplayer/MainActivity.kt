@@ -41,23 +41,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         BottomNavHelper.setup(this, BottomNavHelper.TAB_VIDEO)
 
-        // ★ 새 유튜브 스타일 2열 그리드 피드 초기화
-        val rvFeed = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvMainFeed)
-        rvFeed.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 2)
-        
-        // 임시 어댑터 (나중에 실제 데이터로 교체)
-        val feedAdapter = SearchAdapter(onClick = { item -> PlayModeChooser.show(this, item) })
-        rvFeed.adapter = feedAdapter
-        
-        // 기존 load 함수들에서 이 어댑터에 데이터를 넣도록 수정할 예정
-        // 우선 Trending 데이터로 채워봄
-        lifecycleScope.launch {
-            try {
-                val trending = YouTubeTrending.fetch()
-                feedAdapter.submit(trending)
-            } catch (_: Exception) {}
-        }
-
+        // 알림 권한 요청
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -66,241 +50,89 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        etHomeSearch = findViewById(R.id.etHomeSearch)
-        etHomeSearch.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                val q = etHomeSearch.text.toString().trim()
-                if (q.isEmpty()) {
-                    Toast.makeText(this, "검색어를 입력하세요", Toast.LENGTH_SHORT).show()
-                } else {
-                    RecentSearches.add(this, q)
-                    etHomeSearch.setText("")
-                    startActivity(Intent(this, SearchActivity::class.java).putExtra("QUERY", q))
-                }
-                true
-            } else false
+        // 상단 검색 아이콘 → SearchActivity
+        findViewById<android.view.View>(R.id.btnSearchTop)?.setOnClickListener {
+            startActivity(android.content.Intent(this, SearchActivity::class.java))
         }
-        findViewById<View>(R.id.btnStartSearch).setOnClickListener { etHomeSearch.requestFocus() }
-        // 배경 그라데이션
-        val rootLayout = findViewById<View>(R.id.rootScroll)
-        val appPref = getSharedPreferences("app_prefs", MODE_PRIVATE)
-        val savedGrad = appPref.getString("home_gradient", "red") ?: "red"
-        applyHomeGradient(rootLayout, savedGrad)
+        findViewById<android.view.View>(R.id.btnSettings)?.setOnClickListener {
+            startActivity(android.content.Intent(this, SettingsActivity::class.java))
+        }
 
-        findViewById<View>(R.id.btnTheme).setOnClickListener {
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("🎨 디자인 설정")
-                .setItems(arrayOf("배경 테마", "카드 크기")) { _, which ->
-                    when (which) {
-                        0 -> {
-                            val options = arrayOf("🔴 빨강 (기본)", "🔵 파랑", "🟢 초록", "🟣 보라")
-                            val keys = arrayOf("red", "blue", "green", "purple")
-                            androidx.appcompat.app.AlertDialog.Builder(this)
-                                .setItems(options) { _, i ->
-                                    appPref.edit().putString("home_gradient", keys[i]).apply()
-                                    applyHomeGradient(rootLayout, keys[i])
-                                }.show()
-                        }
-                        1 -> {
-                            androidx.appcompat.app.AlertDialog.Builder(this)
-                                .setItems(arrayOf("작게", "보통 (기본)", "크게")) { _, i ->
-                                    val key = when (i) { 0 -> "small"; 2 -> "large"; else -> "medium" }
-                                    appPref.edit().putString("card_size", key).apply()
-                                    recreate()
-                                }.show()
-                        }
-                    }
-                }
-                .show()
+        // 카테고리 칩 (일단 "전체"만 활성)
+        findViewById<android.view.View>(R.id.chipAll)?.setOnClickListener {
+            // 나중에 카테고리 필터 구현
         }
-        findViewById<View>(R.id.btnSmartPlaylist).setOnClickListener {
-            startActivity(Intent(this, SmartPlaylistActivity::class.java))
-        }
-        try {
-            findViewById<View>(R.id.btnLocalMedia)?.setOnClickListener {
-                startActivity(Intent(this, LocalMediaActivity::class.java))
+
+        // 유튜브 스타일 2열 그리드 피드 초기화
+        val rvFeed = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvMainFeed)
+        rvFeed.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 2)
+
+        val feedAdapter = SearchAdapter(
+            onMultiSave = null,
+            onClick = { item ->
+                PlayModeChooser.show(this, item)
             }
-        } catch (e: Exception) { }
+        )
+        rvFeed.adapter = feedAdapter
 
-        findViewById<View>(R.id.btnAudioHome).setOnClickListener {
-            startActivity(Intent(this, AudioHomeActivity::class.java))
-        }
-        findViewById<View>(R.id.btnPlaylist).setOnClickListener {
-            val input = android.widget.EditText(this).apply {
-                hint = "재생목록 URL"
-                setPadding(40, 30, 40, 30)
-            }
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("📃 YouTube 재생목록")
-                .setMessage("playlist?list=... 형식 URL")
-                .setView(input)
-                .setPositiveButton("열기") { _, _ ->
-                    val url = input.text.toString().trim()
-                    val pid = YouTubePlaylist.extractPlaylistId(url)
-                    if (pid == null) {
-                        Toast.makeText(this, "재생목록 ID를 찾을 수 없음", Toast.LENGTH_SHORT).show()
-                    } else {
-                        startActivity(Intent(this, PlaylistActivity::class.java)
-                            .putExtra("PLAYLIST_ID", pid))
-                    }
-                }
-                .setNegativeButton("취소", null)
-                .show()
-        }
-        try {
-            findViewById<View>(R.id.btnMyPlaylists)?.setOnClickListener {
-                startActivity(Intent(this, MyPlaylistsActivity::class.java))
-            }
-        } catch (e: Exception) { }
-
-        try {
-            findViewById<View>(R.id.btnSettings)?.setOnClickListener {
-                startActivity(Intent(this, SettingsActivity::class.java))
-            }
-        } catch (e: Exception) { }
-
-        findViewById<View>(R.id.btnStats).setOnClickListener {
-            startActivity(Intent(this, StatsActivity::class.java))
-        }
-        findViewById<View>(R.id.tvHistoryMore).setOnClickListener {
-            startActivity(Intent(this, HistoryActivity::class.java))
-        }
-        findViewById<View>(R.id.tvDownloadsMore).setOnClickListener {
-            startActivity(Intent(this, DownloadsActivity::class.java))
-        }
-        findViewById<View>(R.id.tvTrendingMore).setOnClickListener {
-            loadTrending()
-        }
-        findViewById<View>(R.id.tvClearSearches).setOnClickListener {
-            AlertDialog.Builder(this)
-                .setTitle("최근 검색어")
-                .setMessage("모두 삭제할까요?")
-                .setPositiveButton("삭제") { _, _ ->
-                    RecentSearches.clear(this)
-                    loadRecentSearches()
-
-        // ★ visitorData 1회 획득 (봇 차단 우회)
+        // 피드 데이터 로드 (트렌딩)
         lifecycleScope.launch {
             try {
-                YouTubeVisitorFetcher.ensure(applicationContext)
-            } catch (_: Exception) {}
-        }
+                // 1. 최근 기록
+                val history = withContext(Dispatchers.IO) {
+                    HistoryDatabase.get(applicationContext).historyDao().getAllOnce()
                 }
-                .setNegativeButton("취소", null)
-                .show()
+                val trending = try { YouTubeTrending.fetch() } catch (e: Exception) { emptyList() }
+
+                val combined = mutableListOf<VideoItem>()
+                // 트렌딩 먼저
+                combined.addAll(trending)
+                // 기록 영상 추가 (중복 제거)
+                val existingIds = combined.map { it.videoId }.toSet()
+                history.forEach { h ->
+                    if (h.videoId !in existingIds) {
+                        combined.add(VideoItem(h.videoId, h.title, h.channel, h.thumbnail))
+                    }
+                }
+
+                if (combined.isNotEmpty()) {
+                    runOnUiThread { feedAdapter.submit(combined) }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "피드 로드 실패: ${e.message}")
+            }
         }
 
-        historyAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
-        relatedAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
-        channelAdapter = ChannelAdapter(onClick = { c -> openChannel(c) })
-        bookmarkAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
-        downloadsAdapter = HorizontalVideoAdapter { v -> openDownloadItem(v) }
-        trendingAdapter = HorizontalVideoAdapter { v -> openPlayer(v) }
-        subAdapter = ChannelAdapter(
-            onClick = { c -> openChannel(c) },
-            onLongClick = { c -> playChannelAll(c) }
-        )
-
-        findViewById<RecyclerView>(R.id.rvHistory).apply {
-            layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
-            adapter = historyAdapter
-        }
-        findViewById<RecyclerView>(R.id.rvRelated).apply {
-            layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
-            adapter = relatedAdapter
-        }
-        findViewById<RecyclerView>(R.id.rvChannels).apply {
-            // 2행 그리드 (가로 스크롤)
-            layoutManager = androidx.recyclerview.widget.GridLayoutManager(
-                this@MainActivity, 2,
-                androidx.recyclerview.widget.GridLayoutManager.HORIZONTAL, false
-            )
-            adapter = channelAdapter
-        }
-        findViewById<RecyclerView>(R.id.rvBookmarks).apply {
-            layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
-            adapter = bookmarkAdapter
-        }
-        findViewById<RecyclerView>(R.id.rvDownloads).apply {
-            layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
-            adapter = downloadsAdapter
-        }
-        findViewById<RecyclerView>(R.id.rvTrending).apply {
-            layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
-            adapter = trendingAdapter
-        }
-        findViewById<RecyclerView>(R.id.rvSubscriptions).apply {
-            layoutManager = androidx.recyclerview.widget.GridLayoutManager(
-                this@MainActivity, 2,
-                androidx.recyclerview.widget.GridLayoutManager.HORIZONTAL, false
-            )
-            adapter = subAdapter
-        }
-
-        loadRecentSearches()
-        loadBookmarks()
-        loadDownloads()
-        loadSubscriptions()
-        loadTrending()
-        loadHistory()
-
-        // ★ 구독 알림 스케줄
-        scheduleSubscriptionWorker()
-
-        // ★ 서버 헬스체크 스케줄 (12시간 간격)
-        scheduleServerHealthWorker()
-
-        // ★ #13: 이전 세션 복원 (마지막 오디오 재생)
-        tryRestoreLastAudioSession()
-    }
-
-    // ★ #13: 이전 오디오 세션 복원 다이얼로그
-    private fun tryRestoreLastAudioSession() {
+        // 구독 알림 워커
         try {
-            val pref = getSharedPreferences("audio_prefs", MODE_PRIVATE)
-            val lastId = pref.getString("current_video_id", null)
-            val lastTitle = pref.getString("current_title", null)
-            val lastChannel = pref.getString("current_channel", null)
-            val lastThumb = pref.getString("current_thumbnail", null)
-            val lastPosition = pref.getLong("current_position_ms", 0L)
-
-            if (lastId.isNullOrBlank() || lastId.startsWith("local:")) return
-
-            val titleShort = lastTitle?.take(40) ?: lastId
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("🎵 이어서 재생?")
-                .setMessage("마지막 재생: $titleShort\n" +
-                        "채널: ${lastChannel ?: ""}\n" +
-                        "위치: ${formatTimeForRestore(lastPosition)}")
-                .setPositiveButton("이어 재생") { _, _ ->
-                    startActivity(android.content.Intent(this, AudioPlayerActivity::class.java).apply {
-                        putExtra("VIDEO_ID", lastId)
-                        putExtra("VIDEO_TITLE", lastTitle ?: "")
-                        putExtra("VIDEO_CHANNEL", lastChannel ?: "")
-                        putExtra("VIDEO_THUMB", lastThumb ?: "")
-                        putExtra("FROM_PLAYLIST", false)
-                    })
-                }
-                .setNegativeButton("닫기", null)
-                .show()
+            val req = androidx.work.PeriodicWorkRequestBuilder<SubscriptionWorker>(
+                6, java.util.concurrent.TimeUnit.HOURS
+            ).build()
+            androidx.work.WorkManager.getInstance(applicationContext)
+                .enqueueUniquePeriodicWork(
+                    "sub_check",
+                    androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                    req
+                )
         } catch (_: Exception) {}
-    }
 
-    private fun formatTimeForRestore(ms: Long): String {
-        if (ms <= 0) return "처음부터"
-        val s = ms / 1000
-        val h = s / 3600
-        val m = (s % 3600) / 60
-        val sec = s % 60
-        return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
+        // 서버 헬스체크 워커
+        try {
+            val req = androidx.work.PeriodicWorkRequestBuilder<ServerHealthWorker>(
+                12, java.util.concurrent.TimeUnit.HOURS
+            ).build()
+            androidx.work.WorkManager.getInstance(applicationContext)
+                .enqueueUniquePeriodicWork(
+                    "server_health",
+                    androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                    req
+                )
+        } catch (_: Exception) {}
     }
 
     override fun onResume() {
         super.onResume()
-        loadRecentSearches()
-        loadBookmarks()
-        loadDownloads()
-        loadHistory()
+        // 새 레이아웃에서는 특별한 새로고침 없음
     }
 
 
