@@ -46,6 +46,7 @@ object YouTubeChannel {
         Pair(null, ChannelVideosPage(emptyList(), null))
     }
     suspend fun fetchMore(continuation: String): ChannelVideosPage = withContext(Dispatchers.IO) {
+        Log.d(TAG, "fetchMore 요청: token=${continuation.take(40)}")
         // "inv:<채널ID>|<continuation토큰>" 형식이면 Invidious로 처리
         if (continuation.startsWith("inv:")) {
             val rest = continuation.removePrefix("inv:")

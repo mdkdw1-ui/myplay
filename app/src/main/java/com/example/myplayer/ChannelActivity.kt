@@ -202,9 +202,18 @@ class ChannelActivity : AppCompatActivity() {
         lifecycleScope.launch {
             android.util.Log.d("Channel", "loadMore: token=${token.take(60)}...")
             val page = YouTubeChannel.fetchMore(token)
-            nextContinuation = page.continuation
 
-            // ★ 중복 제거 (같은 영상 여러 번 로드 방지)
+            // ★ 서버가 빈 값을 주더라도 기존 토큰을 유지하여 재시도 가능하게 함
+            if (page.continuation != null && page.continuation.isNotBlank()) {
+                nextContinuation = page.continuation
+            } else if (page.videos.isEmpty()) {
+                // 빈 결과가 오면 기존 토큰 유지 (다음 스크롤에 다시 시도)
+                android.util.Log.w("Channel", "loadMore: 빈 결과 반환됨. 토큰 유지.")
+            } else {
+                nextContinuation = null // 진짜 끝
+            }
+
+            // ★ 중복 제거
             val existingIds = loadedVideos.map { it.videoId }.toSet()
             val newVideos = page.videos.filter { it.videoId !in existingIds }
 
@@ -215,16 +224,16 @@ class ChannelActivity : AppCompatActivity() {
 
             loadingMore = false
 
-            // ★★★ tvStatus 업데이트 (총 로드 개수 표시)
+            // ★ tvStatus 업데이트 (더보기 가능 여부 표시)
             val tvStatus = findViewById<TextView>(R.id.tvStatus)
             if (tvStatus != null) {
-                val hasMore = page.continuation != null
+                val hasMore = nextContinuation != null
                 tvStatus.text = "${loadedVideos.size}개 (더: $hasMore)"
             }
 
             android.util.Log.d("Channel",
                 "loadMore 완료: 신규=${newVideos.size}개, 총=${loadedVideos.size}개, " +
-                "next=${page.continuation?.take(50)}")
+                "next=${nextContinuation?.take(50)}")
         }
     }
 }
