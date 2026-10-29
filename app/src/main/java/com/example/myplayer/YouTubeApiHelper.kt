@@ -187,8 +187,21 @@ object YouTubeApiHelper {
                         uploadDate = v.optString("uploadedDate", "")
                     ))
                 }
-                val next = obj.optString("nextpage", "").takeIf { it.isNotBlank() }
-                    ?.let { "piped:$it" }
+                // Piped는 nextpage 필드가 없으면 items 배열 안에서 nextpage 토큰을 찾습니다.
+                var nextToken = obj.optString("nextpage", "")
+                if (nextToken.isBlank()) {
+                    val itemsArr = obj.optJSONArray("items")
+                    if (itemsArr != null) {
+                        for (k in 0 until itemsArr.length()) {
+                            val item = itemsArr.optJSONObject(k) ?: continue
+                            if (item.optString("type") == "nextpage" || item.has("nextpage")) {
+                                nextToken = item.optString("nextpage")
+                                break
+                            }
+                        }
+                    }
+                }
+                val next = nextToken.takeIf { it.isNotBlank() }?.let { "piped:$it" }
                 if (out.isNotEmpty()) {
                     Log.d(TAG, "piped search: ${out.size}개, next=${next?.take(40)}")
                     return@withContext SearchResultPage(out, next)
@@ -341,8 +354,8 @@ object YouTubeApiHelper {
                     ))
                 }
 
-                val nextCont = obj.optString("continuation", "")
-                    .takeIf { it.isNotBlank() }
+                // Invidious 채널은 응답 최상단의 continuation을 그대로 씁니다.
+                val nextCont = obj.optString("continuation", "").takeIf { it.isNotBlank() }
                 val nextToken = nextCont?.let { "inv:$realId|$it" }
 
                 if (out.isNotEmpty()) {
@@ -376,9 +389,23 @@ object YouTubeApiHelper {
                         ))
                     }
                     if (out.isNotEmpty()) {
-                        val nextpage = obj.optString("nextpage", "").takeIf { it.isNotBlank() }
-                        Log.d(TAG, "piped channel: ${out.size}개")
-                        return@withContext ChannelVideosPage(out, nextpage)
+                        var nextToken = obj.optString("nextpage", "")
+                        if (nextToken.isBlank() && obj.optJSONArray("relatedStreams") != null) {
+                            // Piped 채널은 relatedStreams 배열 마지막에 nextpage 오브젝트가 있는 경우가 많음
+                            val streams = obj.optJSONArray("relatedStreams")
+                            if (streams != null) {
+                                for (k in 0 until streams.length()) {
+                                    val it = streams.optJSONObject(k) ?: continue
+                                    if (it.optString("type") == "nextpage" || it.has("nextpage")) {
+                                        nextToken = it.optString("nextpage")
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                        val next = nextToken.takeIf { it.isNotBlank() }
+                        Log.d(TAG, "piped channel: ${out.size}개, next=${next?.take(20)}")
+                        return@withContext ChannelVideosPage(out, next)
                     }
                 } catch (e: Exception) { }
             }
