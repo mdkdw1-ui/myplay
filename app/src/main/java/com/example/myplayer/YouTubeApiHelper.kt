@@ -225,6 +225,7 @@ object YouTubeApiHelper {
                 }
                 // Piped는 nextpage 필드가 없으면 items 배열 안에서 nextpage 토큰을 찾습니다.
                 var nextToken = obj.optString("nextpage", "")
+                if (nextToken.startsWith("{")) nextToken = ""
                 if (nextToken.isBlank()) {
                     val itemsArr = obj.optJSONArray("items")
                     if (itemsArr != null) {
@@ -431,6 +432,11 @@ object YouTubeApiHelper {
                 if (nextCont.isBlank()) {
                     nextCont = findContinuationDeep(obj) ?: ""
                 }
+                // ★ JSON 형태 토큰 필터링
+                if (nextCont.startsWith("{")) {
+                    Log.d(TAG, "inv channel: JSON 토큰 무시")
+                    nextCont = ""
+                }
                 val nextToken = nextCont.takeIf { it.isNotBlank() }?.let { "inv:$realId|$it" }
 
                 if (out.isNotEmpty()) {
@@ -468,6 +474,7 @@ object YouTubeApiHelper {
                     }
                     if (out.isNotEmpty()) {
                         var nextpage = obj.optString("nextpage", "")
+                        if (nextpage.startsWith("{")) nextpage = ""
                         if (nextpage.isBlank()) nextpage = findContinuationDeep(obj) ?: ""
                         val next = nextpage.takeIf { it.isNotBlank() }
                         return@withContext ChannelVideosPage(out, next)
@@ -499,6 +506,7 @@ object YouTubeApiHelper {
                     }
                     if (out.isNotEmpty()) {
                         var nextToken = obj.optString("nextpage", "")
+                        if (nextToken.startsWith("{")) nextToken = ""
                         if (nextToken.isBlank()) {
                             nextToken = findContinuationDeep(obj) ?: ""
                         }
