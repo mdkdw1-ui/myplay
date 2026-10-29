@@ -19,6 +19,17 @@ import kotlinx.coroutines.withContext
 
 class ChannelActivity : AppCompatActivity() {
 
+    private fun cdiag(msg: String) {
+        android.util.Log.d("ChannelDiag", msg)
+        try {
+            val f = java.io.File(filesDir, "channel_diag.log")
+            if (f.exists() && f.length() > 200_000) f.writeText("")
+            val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+            f.appendText("[$ts] $msg\n")
+        } catch (_: Exception) {}
+    }
+
+
     private lateinit var adapter: SearchAdapter
     private val loadedVideos = mutableListOf<VideoItem>()
     private var nextContinuation: String? = null
@@ -44,6 +55,20 @@ class ChannelActivity : AppCompatActivity() {
         val btnSubscribe = findViewById<MaterialButton>(R.id.btnSubscribe)
 
         tvChannelName.text = channelName
+        
+        // ★ 롱프레스 → 진단 로그 보기
+        tvChannelName.setOnLongClickListener {
+            val f = java.io.File(filesDir, "channel_diag.log")
+            val content = if (f.exists()) f.readText() else "(로그 없음)"
+            val lines = content.lines().takeLast(100).joinToString("\n")
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("채널 진단 로그 (마지막 100줄)")
+                .setMessage(lines)
+                .setPositiveButton("닫기", null)
+                .setNeutralButton("🗑 지우기") { _, _ -> f.delete() }
+                .show()
+            true
+        }
 
         adapter = SearchAdapter { item ->
             startActivity(Intent(this, PlayerActivity::class.java).apply {
@@ -100,6 +125,20 @@ class ChannelActivity : AppCompatActivity() {
                 channelAvatar = info.avatar
                 channelSubs = info.subscribers
                 tvChannelName.text = channelName
+        
+        // ★ 롱프레스 → 진단 로그 보기
+        tvChannelName.setOnLongClickListener {
+            val f = java.io.File(filesDir, "channel_diag.log")
+            val content = if (f.exists()) f.readText() else "(로그 없음)"
+            val lines = content.lines().takeLast(100).joinToString("\n")
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("채널 진단 로그 (마지막 100줄)")
+                .setMessage(lines)
+                .setPositiveButton("닫기", null)
+                .setNeutralButton("🗑 지우기") { _, _ -> f.delete() }
+                .show()
+            true
+        }
                 tvSubscribers.text = listOf(info.subscribers, info.videoCount)
                     .filter { it.isNotBlank() }.joinToString(" · ")
                 if (info.avatar.isNotBlank()) {
@@ -199,41 +238,46 @@ class ChannelActivity : AppCompatActivity() {
         val token = nextContinuation ?: return
         if (token.isBlank()) return
         loadingMore = true
+        cdiag("loadMore 시작: token=${token.take(50)}")
         lifecycleScope.launch {
-            android.util.Log.d("Channel", "loadMore: token=${token.take(60)}...")
-            val page = YouTubeChannel.fetchMore(token)
+            try {
+                val page = YouTubeChannel.fetchMore(token)
+                cdiag("fetchMore 응답: videos=${page.videos.size}, next=${page.continuation?.take(50)}")
 
-            // ★ 서버가 빈 값을 주더라도 기존 토큰을 유지하여 재시도 가능하게 함
-            if (page.continuation != null && page.continuation.isNotBlank()) {
-                nextContinuation = page.continuation
-            } else if (page.videos.isEmpty()) {
-                // 빈 결과가 오면 기존 토큰 유지 (다음 스크롤에 다시 시도)
-                android.util.Log.w("Channel", "loadMore: 빈 결과 반환됨. 토큰 유지.")
-            } else {
-                nextContinuation = null // 진짜 끝
+                // ★ 서버가 빈 값을 주더라도 기존 토큰을 유지
+                if (page.continuation != null && page.continuation.isNotBlank()) {
+                    nextContinuation = page.continuation
+                    cdiag("다음 토큰 갱신: ${nextContinuation?.take(40)}")
+                } else if (page.videos.isEmpty()) {
+                    cdiag("빈 결과 반환됨. 기존 토큰 유지.")
+                } else {
+                    nextContinuation = null // 진짜 끝
+                    cdiag("다음 페이지 없음 (끝).")
+                }
+
+                // ★ 중복 제거
+                val existingIds = loadedVideos.map { it.videoId }.toSet()
+                val newVideos = page.videos.filter { it.videoId !in existingIds }
+
+                if (newVideos.isNotEmpty()) {
+                    adapter.append(newVideos)
+                    loadedVideos.addAll(newVideos)
+                    cdiag("신규 영상 추가: ${newVideos.size}개 (총 ${loadedVideos.size}개)")
+                }
+
+                loadingMore = false
+
+                // ★ tvStatus 업데이트
+                val tvStatus = findViewById<TextView>(R.id.tvStatus)
+                if (tvStatus != null) {
+                    val hasMore = nextContinuation != null
+                    tvStatus.text = "${loadedVideos.size}개 (더: $hasMore)"
+                    cdiag("UI 갱신: 총 ${loadedVideos.size}개 (더: $hasMore)")
+                }
+            } catch (e: Exception) {
+                cdiag("loadMore 에러: ${e.message}")
+                loadingMore = false
             }
-
-            // ★ 중복 제거
-            val existingIds = loadedVideos.map { it.videoId }.toSet()
-            val newVideos = page.videos.filter { it.videoId !in existingIds }
-
-            if (newVideos.isNotEmpty()) {
-                adapter.append(newVideos)
-                loadedVideos.addAll(newVideos)
-            }
-
-            loadingMore = false
-
-            // ★ tvStatus 업데이트 (더보기 가능 여부 표시)
-            val tvStatus = findViewById<TextView>(R.id.tvStatus)
-            if (tvStatus != null) {
-                val hasMore = nextContinuation != null
-                tvStatus.text = "${loadedVideos.size}개 (더: $hasMore)"
-            }
-
-            android.util.Log.d("Channel",
-                "loadMore 완료: 신규=${newVideos.size}개, 총=${loadedVideos.size}개, " +
-                "next=${nextContinuation?.take(50)}")
         }
     }
 }
