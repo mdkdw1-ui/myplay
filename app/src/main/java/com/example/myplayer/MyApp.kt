@@ -9,6 +9,17 @@ class MyApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        
+        // ★ 크래시 로그 저장
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                val f = java.io.File(filesDir, "crash_log.txt")
+                val sw = java.io.StringWriter()
+                throwable.printStackTrace(java.io.PrintWriter(sw))
+                f.writeText("=== Crash at ${java.util.Date()} ===\n$sw")
+            } catch (_: Exception) {}
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
 
         try {
             System.setProperty("java.net.preferIPv4Stack", "true")

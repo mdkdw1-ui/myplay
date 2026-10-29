@@ -19,71 +19,85 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        BottomNavHelper.setup(this, BottomNavHelper.TAB_VIDEO)
 
-        // 알림 권한
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(
-                    this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
-            }
+        try {
+            setContentView(R.layout.activity_main)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "setContentView 실패", e)
+            finish()
+            return
         }
 
-        // 상단 아이콘
+        try {
+            BottomNavHelper.setup(this, BottomNavHelper.TAB_VIDEO)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "BottomNav setup 실패", e)
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(
+                        this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+                }
+            }
+        } catch (_: Exception) {}
+
         findViewById<android.view.View>(R.id.btnSearchTop)?.setOnClickListener {
-            startActivity(Intent(this, SearchActivity::class.java))
+            try { startActivity(Intent(this, SearchActivity::class.java)) } catch (_: Exception) {}
         }
         findViewById<android.view.View>(R.id.btnSettings)?.setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
+            try { startActivity(Intent(this, SettingsActivity::class.java)) } catch (_: Exception) {}
         }
 
-        // 카테고리 칩
-        findViewById<android.view.View>(R.id.chipVideo)?.setOnClickListener { /* current */ }
+        findViewById<android.view.View>(R.id.chipVideo)?.setOnClickListener { }
         findViewById<android.view.View>(R.id.chipAudio)?.setOnClickListener {
-            startActivity(Intent(this, AudioHomeActivity::class.java))
+            try { startActivity(Intent(this, AudioHomeActivity::class.java)) } catch (_: Exception) {}
         }
         findViewById<android.view.View>(R.id.chipLocal)?.setOnClickListener {
-            startActivity(Intent(this, LocalMediaActivity::class.java))
+            try { startActivity(Intent(this, LocalMediaActivity::class.java)) } catch (_: Exception) {}
         }
 
-        // 2열 그리드 피드
         val rvFeed = findViewById<RecyclerView>(R.id.rvMainFeed)
-        rvFeed.layoutManager = GridLayoutManager(this, 2)
-        val feedAdapter = SearchAdapter(
-            onMultiSave = null,
-            onClick = { item -> PlayModeChooser.show(this, item) }
-        )
-        rvFeed.adapter = feedAdapter
-
-        // 피드 데이터 로드
-        lifecycleScope.launch {
+        if (rvFeed != null) {
             try {
-                val trending = try { YouTubeTrending.fetch() } catch (e: Exception) { emptyList() }
-                val history = try {
-                    withContext(Dispatchers.IO) {
-                        HistoryDatabase.get(applicationContext).historyDao().getAllOnce()
-                    }
-                } catch (e: Exception) { emptyList() }
+                rvFeed.layoutManager = GridLayoutManager(this, 2)
+                val feedAdapter = SearchAdapter(
+                    onMultiSave = null,
+                    onClick = { item -> PlayModeChooser.show(this, item) }
+                )
+                rvFeed.adapter = feedAdapter
 
-                val combined = mutableListOf<VideoItem>()
-                combined.addAll(trending)
-                val existingIds = combined.map { it.videoId }.toSet()
-                history.forEach { h ->
-                    if (h.videoId !in existingIds) {
-                        combined.add(VideoItem(h.videoId, h.title, h.channel, h.thumbnail))
+                lifecycleScope.launch {
+                    try {
+                        val trending = try { YouTubeTrending.fetch() } catch (e: Exception) { emptyList() }
+                        val history = try {
+                            withContext(Dispatchers.IO) {
+                                HistoryDatabase.get(applicationContext).historyDao().getAllOnce()
+                            }
+                        } catch (e: Exception) { emptyList() }
+
+                        val combined = mutableListOf<VideoItem>()
+                        combined.addAll(trending)
+                        val existingIds = combined.map { it.videoId }.toSet()
+                        history.forEach { h ->
+                            if (h.videoId !in existingIds) {
+                                combined.add(VideoItem(h.videoId, h.title, h.channel, h.thumbnail))
+                            }
+                        }
+                        if (combined.isNotEmpty()) {
+                            runOnUiThread { feedAdapter.submit(combined) }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("MainActivity", "피드 로드 실패: ${e.message}")
                     }
-                }
-                if (combined.isNotEmpty()) {
-                    runOnUiThread { feedAdapter.submit(combined) }
                 }
             } catch (e: Exception) {
-                android.util.Log.e("MainActivity", "피드 로드 실패: ${e.message}")
+                android.util.Log.e("MainActivity", "RecyclerView 초기화 실패", e)
             }
         }
 
-        // 워커
         try {
             val req1 = androidx.work.PeriodicWorkRequestBuilder<SubscriptionWorker>(
                 6, java.util.concurrent.TimeUnit.HOURS
