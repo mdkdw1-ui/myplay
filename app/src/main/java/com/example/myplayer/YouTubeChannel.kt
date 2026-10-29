@@ -35,14 +35,13 @@ object YouTubeChannel {
         channelId: String,
         channelName: String = ""
     ): Pair<ChannelInfo?, ChannelVideosPage> = withContext(Dispatchers.IO) {
-        // Piped/Invidious를 사용하여 채널 정보 및 첫 페이지 가져오기
+        // Piped/Invidious로 채널 정보 및 첫 페이지 가져오기
         val page = YouTubeApiHelper.channelVideos(channelId)
         if (page.videos.isNotEmpty()) {
             return@withContext Pair(null, page)
         }
         Pair(null, ChannelVideosPage(emptyList(), null))
     }
-
 
     /** 다음 페이지 (Piped nextpage 또는 Invidious continuation) */
     suspend fun fetchMore(continuation: String): ChannelVideosPage = withContext(Dispatchers.IO) {

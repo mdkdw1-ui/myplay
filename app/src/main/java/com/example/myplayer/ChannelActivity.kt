@@ -237,6 +237,11 @@ class ChannelActivity : AppCompatActivity() {
     private fun loadMore() {
         val token = nextContinuation ?: return
         if (token.isBlank()) return
+        // ★ JSON 형태 토큰(NewPipe 잔재)은 무시
+        if (token.startsWith("{")) {
+            cdiag("잘못된 토큰 형식(JSON) → 무시")
+            return
+        }
         loadingMore = true
         cdiag("loadMore 시작: token=${token.take(50)}")
         lifecycleScope.launch {
