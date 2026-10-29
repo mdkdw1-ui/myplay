@@ -367,6 +367,40 @@ object YouTubeApiHelper {
         }
         Log.d(TAG, "channelVideos: realId=$realId cont=${continuation?.take(30)}")
 
+        // ★ 속도 최적화: continuation이 "piped:" 로 시작하면 Piped로 바로 우회 (Invidious 시도 X)
+        if (continuation != null && continuation.startsWith("piped:")) {
+            val nextpage = continuation.removePrefix("piped:")
+            for (inst in PIPED) {
+                val url = "$inst/nextpage/channel/$realId?nextpage=${java.net.URLEncoder.encode(nextpage, "UTF-8")}"
+                val obj = getJsonObject(url) ?: continue
+                try {
+                    val rel = obj.optJSONArray("relatedStreams") ?: continue
+                    val out = mutableListOf<VideoItem>()
+                    for (i in 0 until rel.length()) {
+                        val v = rel.getJSONObject(i)
+                        val u = v.optString("url", "")
+                        val id = u.substringAfter("/watch?v=", "").substringBefore("&")
+                        if (id.isBlank()) continue
+                        out.add(VideoItem(
+                            videoId = id,
+                            title = v.optString("title", ""),
+                            channel = v.optString("uploaderName", ""),
+                            thumbnail = v.optString("thumbnail", ""),
+                            duration = fmtSec(v.optInt("duration", 0)),
+                            viewCount = "",
+                            uploadDate = ""
+                        ))
+                    }
+                    if (out.isNotEmpty()) {
+                        var next = obj.optString("nextpage", "")
+                        if (next.isBlank()) next = findContinuationDeep(obj) ?: ""
+                        return@withContext ChannelVideosPage(out, next.takeIf { it.isNotBlank() }?.let { "piped:$it" })
+                    }
+                } catch (e: Exception) { }
+            }
+            return@withContext ChannelVideosPage(emptyList(), null)
+        }
+
         for (inst in INVIDIOUS) {
             val url = if (continuation.isNullOrBlank()) {
                 "$inst/api/v1/channels/$realId/videos"
