@@ -12,6 +12,19 @@ import java.net.URLEncoder
 
 object YouTubeApiHelper {
 
+    /** 서버 응답 원본을 SharedPreferences에 저장 (앱 내에서 확인 가능) */
+    private fun logRawResponse(tag: String, value: String) {
+        try {
+            val ctx = MyApp.instance
+            val pref = ctx.getSharedPreferences("api_debug", android.content.Context.MODE_PRIVATE)
+            val existing = pref.getString("log", "") ?: ""
+            val line = "$tag: ${value.take(150)} (${value.length}자)\n"
+            val newLog = (existing + line).takeLast(20_000)
+            pref.edit().putString("log", newLog).apply()
+            android.util.Log.d("YtApi", line)
+        } catch (_: Exception) {}
+    }
+
     /** 
      * JSONObject 내부를 재귀 탐색하여 다음 페이지 토큰(nextpage, continuation)을 찾습니다.
      * Piped/Invidious 응답 구조가 제각각이라 깊이 탐색이 필수적입니다.
@@ -213,6 +226,8 @@ object YouTubeApiHelper {
         for (inst in PIPED) {
             val obj = getJsonObject("$inst/search?q=$q&filter=videos") ?: continue
             try {
+                val rawNext = obj.optString("nextpage", "")
+                logRawResponse("SEARCH_piped", rawNext)
                 val items = obj.optJSONArray("items") ?: continue
                 val out = mutableListOf<VideoItem>()
                 for (i in 0 until items.length()) {
@@ -436,6 +451,7 @@ object YouTubeApiHelper {
                 // Invidious 채널은 응답 최상단의 continuation을 그대로 씁니다.
                 // Invidious는 continuation이 최상단에 없을 수 있으므로 깊이 탐색
                 var nextCont = obj.optString("continuation", "")
+                logRawResponse("CHANNEL_inv", nextCont)
                 if (nextCont.isBlank()) {
                     nextCont = findContinuationDeep(obj) ?: ""
                 }
@@ -494,6 +510,8 @@ object YouTubeApiHelper {
             for (inst in PIPED) {
                 val obj = getJsonObject("$inst/channel/$realId") ?: continue
                 try {
+                    val rawNext = obj.optString("nextpage", "")
+                    logRawResponse("CHANNEL_piped", rawNext)
                     val rel = obj.optJSONArray("relatedStreams") ?: continue
                     val out = mutableListOf<VideoItem>()
                     for (i in 0 until rel.length()) {

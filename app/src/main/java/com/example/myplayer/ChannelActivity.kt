@@ -28,6 +28,12 @@ class ChannelActivity : AppCompatActivity() {
             f.appendText("[$ts] $msg\n")
         } catch (_: Exception) {}
     }
+    
+    // ★ 서버 응답 원본 로그도 진단 파일에 함께 기록
+    private fun logServerResponse(tag: String, value: String) {
+        val preview = if (value.length > 100) value.take(100) + "..." else value
+        cdiag("[$tag] '$preview' (${value.length}자)")
+    }
 
 
     private lateinit var adapter: SearchAdapter
