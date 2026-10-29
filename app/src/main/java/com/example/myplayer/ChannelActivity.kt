@@ -22,7 +22,7 @@ class ChannelActivity : AppCompatActivity() {
     private fun cdiag(msg: String) {
         android.util.Log.d("ChannelDiag", msg)
         try {
-            val f = java.io.File(filesDir, "channel_diag.log")
+            val f = java.io.File(applicationContext.filesDir, "channel_diag.log")
             if (f.exists() && f.length() > 200_000) f.writeText("")
             val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
             f.appendText("[$ts] $msg\n")
@@ -58,7 +58,7 @@ class ChannelActivity : AppCompatActivity() {
         
         // ★ 롱프레스 → 진단 로그 보기
         tvChannelName.setOnLongClickListener {
-            val f = java.io.File(filesDir, "channel_diag.log")
+            val f = java.io.File(applicationContext.filesDir, "channel_diag.log")
             val content = if (f.exists()) f.readText() else "(로그 없음)"
             val lines = content.lines().takeLast(100).joinToString("\n")
             androidx.appcompat.app.AlertDialog.Builder(this)
@@ -128,7 +128,7 @@ class ChannelActivity : AppCompatActivity() {
         
         // ★ 롱프레스 → 진단 로그 보기
         tvChannelName.setOnLongClickListener {
-            val f = java.io.File(filesDir, "channel_diag.log")
+            val f = java.io.File(applicationContext.filesDir, "channel_diag.log")
             val content = if (f.exists()) f.readText() else "(로그 없음)"
             val lines = content.lines().takeLast(100).joinToString("\n")
             androidx.appcompat.app.AlertDialog.Builder(this)
@@ -241,7 +241,7 @@ class ChannelActivity : AppCompatActivity() {
         cdiag("loadMore 시작: token=${token.take(50)}")
         lifecycleScope.launch {
             try {
-                val page = com.example.myplayer.YouTubeChannel.fetchMore(token)
+                val page = YouTubeChannel.fetchMore(token)
                 cdiag("fetchMore 응답: videos=${page.videos.size}, next=${page.continuation?.take(50)}")
 
                 // ★ 서버가 빈 값을 주더라도 기존 토큰을 유지
@@ -256,8 +256,8 @@ class ChannelActivity : AppCompatActivity() {
                 }
 
                 // ★ 중복 제거
-                val existingIds = loadedVideos.map { it.videoId }.toSet()
-                val newVideos = page.videos.filter { it.videoId !in existingIds }
+                val existingIds = loadedVideos.map { v -> v.videoId }.toSet()
+                val newVideos = page.videos.filter { v -> v.videoId !in existingIds }
 
                 if (newVideos.isNotEmpty()) {
                     adapter.append(newVideos)
