@@ -1,11 +1,6 @@
 package com.example.myplayer
 
 import android.util.Log
-import org.schabi.newpipe.extractor.channel.ChannelInfo as NPChannelInfo
-import org.schabi.newpipe.extractor.ServiceList
-import org.schabi.newpipe.extractor.NewPipe
-import org.schabi.newpipe.extractor.ServiceList
-import org.schabi.newpipe.extractor.NewPipe
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -40,55 +35,11 @@ object YouTubeChannel {
         channelId: String,
         channelName: String = ""
     ): Pair<ChannelInfo?, ChannelVideosPage> = withContext(Dispatchers.IO) {
-        // ★ 1순위: NewPipe Extractor 사용 (가장 안정적)
-        try {
-            try { NewPipe.init(DownloaderImpl()) } catch (_: Exception) {}
-            val url = if (channelId.startsWith("http")) channelId
-                      else "https://www.youtube.com/channel/$channelId"
-            
-            val info = NPChannelInfo.getInfo(url)
-            
-            // 앱 전용 ChannelInfo 로 변환
-            val chInfo = ChannelInfo(
-                channelId = channelId,
-                name = info.name ?: channelName,
-                avatar = info.avatars?.firstOrNull()?.url ?: "",
-                subscribers = info.subscriberCount.toString(),
-                videoCount = ""
-            )
-            
-            // 영상 목록 변환
-            val videos = info.relatedItems?.mapNotNull { item ->
-                if (item is org.schabi.newpipe.extractor.stream.StreamInfoItem) {
-                    VideoItem(
-                        videoId = item.url?.substringAfter("v=")?.substringBefore("&") ?: "",
-                        title = item.name ?: "",
-                        channel = item.uploaderName ?: "",
-                        thumbnail = item.thumbnails?.firstOrNull()?.url ?: "",
-                        duration = item.duration.toString(),
-                        viewCount = item.viewCount.toString(),
-                        uploadDate = item.textualUploadDate ?: ""
-                    )
-                } else null
-            } ?: emptyList()
-            
-            // ★ NewPipe의 다음 페이지는 링크(URL) 형태입니다.
-            val nextToken = info.nextPage?.url 
-            
-            if (videos.isNotEmpty()) {
-                Log.d(TAG, "NewPipe 채널 로드 성공: ${videos.size}개, next=${nextToken != null}")
-                return@withContext Pair(chInfo, ChannelVideosPage(videos, nextToken))
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "NewPipe 채널 파싱 실패: ${e.message}")
-        }
-
-        // ★ 2순위: Invidious/Piped 폴백 (NewPipe 실패 시)
+        // Piped/Invidious를 사용하여 채널 정보 및 첫 페이지 가져오기
         val page = YouTubeApiHelper.channelVideos(channelId)
         if (page.videos.isNotEmpty()) {
             return@withContext Pair(null, page)
         }
-
         Pair(null, ChannelVideosPage(emptyList(), null))
     }
 

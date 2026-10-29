@@ -241,7 +241,7 @@ class ChannelActivity : AppCompatActivity() {
         cdiag("loadMore 시작: token=${token.take(50)}")
         lifecycleScope.launch {
             try {
-                val page = YouTubeChannel.fetchMore(token)
+                val page = com.example.myplayer.YouTubeChannel.fetchMore(token)
                 cdiag("fetchMore 응답: videos=${page.videos.size}, next=${page.continuation?.take(50)}")
 
                 // ★ 서버가 빈 값을 주더라도 기존 토큰을 유지
