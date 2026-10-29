@@ -259,7 +259,7 @@ class ChannelActivity : AppCompatActivity() {
                 // ★ 서버가 빈 값을 주더라도 기존 토큰을 유지
                 if (page.continuation != null && page.continuation.isNotBlank()) {
                     // ★ JSON 토큰은 nextContinuation에 넣지 않음
-            nextContinuation = page.continuation?.takeIf { it.isNotBlank() && !it.startsWith("{") }
+                    nextContinuation = page.continuation?.takeIf { it.isNotBlank() && !it.startsWith("{") }
                     cdiag("다음 토큰 갱신: ${nextContinuation?.take(40)}")
                 } else if (page.videos.isEmpty()) {
                     cdiag("빈 결과 반환됨. 기존 토큰 유지.")
