@@ -1,7 +1,9 @@
 package com.example.myplayer
 
 import android.util.Log
-import org.schabi.newpipe.extractor.channel.ChannelInfo
+import org.schabi.newpipe.extractor.channel.ChannelInfo as NPChannelInfo
+import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.NewPipe
 import org.json.JSONArray
@@ -38,29 +40,27 @@ object YouTubeChannel {
         channelId: String,
         channelName: String = ""
     ): Pair<ChannelInfo?, ChannelVideosPage> = withContext(Dispatchers.IO) {
-        // ★ 1순위: NewPipe로 채널 직접 파싱 (가장 안정적)
+        // ★ 1순위: NewPipe Extractor 사용 (가장 안정적)
         try {
-            if (NewPipe.getService(0) == null) {
-                try { NewPipe.init(com.example.myplayer.DownloaderImpl()) } catch (_: Exception) {}
-            }
+            try { NewPipe.init(DownloaderImpl()) } catch (_: Exception) {}
             val url = if (channelId.startsWith("http")) channelId
                       else "https://www.youtube.com/channel/$channelId"
             
-            val info = ChannelInfo.getInfo(url)
+            val info = NPChannelInfo.getInfo(url)
             
-            // 채널 기본 정보 추출
-            val chInfo = com.example.myplayer.ChannelInfo(
+            // 앱 전용 ChannelInfo 로 변환
+            val chInfo = ChannelInfo(
                 channelId = channelId,
                 name = info.name ?: channelName,
                 avatar = info.avatars?.firstOrNull()?.url ?: "",
                 subscribers = info.subscriberCount.toString(),
-                videoCount = info.description ?: ""
+                videoCount = ""
             )
             
-            // 영상 목록 추출
+            // 영상 목록 변환
             val videos = info.relatedItems?.mapNotNull { item ->
                 if (item is org.schabi.newpipe.extractor.stream.StreamInfoItem) {
-                    com.example.myplayer.VideoItem(
+                    VideoItem(
                         videoId = item.url?.substringAfter("v=")?.substringBefore("&") ?: "",
                         title = item.name ?: "",
                         channel = item.uploaderName ?: "",
@@ -72,7 +72,8 @@ object YouTubeChannel {
                 } else null
             } ?: emptyList()
             
-            val nextToken = info.nextPage?.url // NewPipe의 다음 페이지 URL
+            // ★ NewPipe의 다음 페이지는 링크(URL) 형태입니다.
+            val nextToken = info.nextPage?.url 
             
             if (videos.isNotEmpty()) {
                 Log.d(TAG, "NewPipe 채널 로드 성공: ${videos.size}개, next=${nextToken != null}")
@@ -82,92 +83,13 @@ object YouTubeChannel {
             Log.e(TAG, "NewPipe 채널 파싱 실패: ${e.message}")
         }
 
-        // ★ 2순위: Invidious/Piped 폴백
+        // ★ 2순위: Invidious/Piped 폴백 (NewPipe 실패 시)
         val page = YouTubeApiHelper.channelVideos(channelId)
         if (page.videos.isNotEmpty()) {
             return@withContext Pair(null, page)
         }
 
         Pair(null, ChannelVideosPage(emptyList(), null))
-    }
-    suspend fun fetchMore(continuation: String): ChannelVideosPage = withContext(Dispatchers.IO) {
-        Log.d(TAG, "fetchMore 요청: token=${continuation.take(40)}")
-        
-        // ★ NewPipe의 다음 페이지 URL인 경우 (https://...)
-        if (continuation.startsWith("https://")) {
-            try {
-                val nextInfo = org.schabi.newpipe.extractor.channel.ChannelInfo.getMoreItems(
-                    com.example.myplayer.DownloaderImpl(),
-                    continuation
-                )
-                val videos = nextInfo.items?.mapNotNull { item ->
-                    if (item is org.schabi.newpipe.extractor.stream.StreamInfoItem) {
-                        com.example.myplayer.VideoItem(
-                            videoId = item.url?.substringAfter("v=")?.substringBefore("&") ?: "",
-                            title = item.name ?: "",
-                            channel = item.uploaderName ?: "",
-                            thumbnail = item.thumbnails?.firstOrNull()?.url ?: "",
-                            duration = item.duration.toString(),
-                            viewCount = item.viewCount.toString(),
-                            uploadDate = item.textualUploadDate ?: ""
-                        )
-                    } else null
-                } ?: emptyList()
-                val next = nextInfo.nextPage?.url
-                if (videos.isNotEmpty()) {
-                    Log.d(TAG, "NewPipe 다음 페이지: ${videos.size}개")
-                    return@withContext ChannelVideosPage(videos, next)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "NewPipe fetchMore 실패: ${e.message}")
-            }
-        }
-        // "inv:<채널ID>|<continuation토큰>" 형식이면 Invidious로 처리
-        if (continuation.startsWith("inv:")) {
-            val rest = continuation.removePrefix("inv:")
-            val idx = rest.indexOf('|')
-            if (idx > 0) {
-                val channelId = rest.substring(0, idx)
-                val contToken = rest.substring(idx + 1)
-                Log.d(TAG, "fetchMore (Invidious): channelId=$channelId, cont=${contToken.take(30)}")
-                // ★ YouTubeApiHelper의 channelVideos는 두 번째 인자로 continuation을 받음
-                return@withContext YouTubeApiHelper.channelVideos(channelId, contToken)
-            }
-        }
-        // Piped 토큰 등 다른 형식 처리 (기존 로직 유지)
-        if (continuation.startsWith("piped:")) {
-            // 필요시 Piped 채널 continuation 처리 로직 추가
-            Log.w(TAG, "Piped continuation not fully implemented: $continuation")
-        }
-
-        // Piped nextpage 토큰 (기존 로직 유지 - 하지만 실질적으로 안 쓰임)
-        val videos = mutableListOf<VideoItem>()
-        var cont: String? = null
-        try {
-            val body = JSONObject().apply {
-                put("context", JSONObject().apply {
-                    put("client", JSONObject().apply {
-                        put("clientName", "WEB")
-                        put("clientVersion", "2.20240101.00.00")
-                        put("clientScreen", "WATCH")
-                        put("hl", "ko")
-                        put("gl", "KR")
-                        put("userAgent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-                            "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                            "Chrome/120.0.0.0 Safari/537.36")
-                    })
-                })
-                put("continuation", continuation)
-            }
-            val response = post(BROWSE, body.toString())
-                ?: return@withContext ChannelVideosPage(emptyList(), null)
-            val json = JSONObject(response)
-            collectVideos(json, videos)
-            cont = findContinuation(json)
-        } catch (e: Exception) {
-            Log.e(TAG, "err: ${e.message}", e)
-        }
-        ChannelVideosPage(videos, cont)
     }
 
     private fun post(urlStr: String, bodyStr: String): String? {
