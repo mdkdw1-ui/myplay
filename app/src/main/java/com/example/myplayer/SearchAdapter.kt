@@ -138,6 +138,7 @@ class SearchAdapter(
 
     class VH(v: View) : RecyclerView.ViewHolder(v) {
         val thumb: ImageView = v.findViewById(R.id.thumb)
+        val channelAvatar: ImageView = v.findViewById(R.id.channelAvatar)
         val title: TextView = v.findViewById(R.id.title)
         val channel: TextView = v.findViewById(R.id.channel)
         val duration: TextView = v.findViewById(R.id.duration)

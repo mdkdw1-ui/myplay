@@ -2,537 +2,184 @@
 <androidx.coordinatorlayout.widget.CoordinatorLayout
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:android="http://schemas.android.com/apk/res/android"
-    
-    android:layout_width="match_parent"
-    android:layout_height="match_parent">
-
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:paddingBottom="56dp">
-
-<androidx.core.widget.NestedScrollView
-    android:id="@+id/rootScroll" xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_dark"
-    android:fillViewport="true">
+    android:background="@color/bg_dark">
 
+    <!-- 메인 스크롤 영역 -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:orientation="vertical"
-        android:paddingTop="32dp"
-        android:paddingBottom="32dp">
+        android:paddingBottom="56dp"> <!-- 하단 내비바 공간 -->
 
+        <!-- 유튜브 스타일 상단 앱바 -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingStart="20dp"
-            android:paddingEnd="20dp"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="MyPlayer"
-                android:textSize="30sp"
-                android:textStyle="bold"
-                android:textColor="@color/text_primary"
-                android:letterSpacing="-0.02" />
-
-            <TextView
-                android:id="@+id/btnTheme"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🎨"
-                android:textSize="22sp"
-                android:padding="8dp"
-                android:background="?android:attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true" />
-
-            <TextView
-                android:id="@+id/btnStats"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📊"
-                android:textSize="22sp"
-                android:padding="8dp"
-                android:background="?android:attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true" />
-
-            <TextView
-                android:id="@+id/btnSettings"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="⚙"
-                android:textSize="22sp"
-                android:padding="8dp"
-                android:background="?android:attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginStart="20dp"
-            android:layout_marginEnd="20dp"
-            android:layout_marginTop="18dp"
+            android:layout_height="56dp"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:background="@drawable/bg_search_input">
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:background="@color/bg_dark"
+            android:elevation="4dp">
 
+            <!-- 유튜브 로고 텍스트 -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:paddingStart="18dp"
-                android:text="🔍"
-                android:textSize="16sp" />
-
-            <EditText
-                android:id="@+id/etHomeSearch"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:hint="동영상 검색"
-                android:textColorHint="@color/text_tertiary"
+                android:text="MyPlayer"
                 android:textColor="@color/text_primary"
-                android:textSize="15sp"
-                android:paddingStart="10dp"
-                android:paddingEnd="18dp"
-                android:background="@android:color/transparent"
-                android:imeOptions="actionSearch"
-                android:inputType="text"
-                android:maxLines="1" />
-        </LinearLayout>
-
-        <!-- ⭐ 저장한 동영상 -->
-        <LinearLayout
-            android:id="@+id/sectionBookmarks"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="24dp"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:text="⭐ 저장한 동영상"
-                android:textSize="15sp"
+                android:textSize="20sp"
                 android:textStyle="bold"
-                android:textColor="@color/text_primary" />
+                android:letterSpacing="-0.05" />
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvBookmarks"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:clipToPadding="false"
-                android:orientation="horizontal"
-                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+            <!-- 우측 아이콘들 (검색, 알림, 프로필 등) -->
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <ImageView
+                android:id="@+id/btnSearchTop"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="10dp"
+                android:src="@android:drawable/ic_menu_search"
+                app:tint="@color/text_primary"
+                android:background="?android:attr/selectableItemBackgroundBorderless" />
+
+            <ImageView
+                android:id="@+id/btnSettings"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="10dp"
+                android:src="@android:drawable/ic_menu_manage"
+                app:tint="@color/text_primary"
+                android:background="?android:attr/selectableItemBackgroundBorderless" />
         </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnPlaylist"
-            style="@style/GhostButton"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginStart="20dp"
-            android:layout_marginEnd="20dp"
-            android:layout_marginTop="12dp"
-            android:text="📃 YouTube 재생목록 열기" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnMyPlaylists"
-            style="@style/GhostButton"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginStart="20dp"
-            android:layout_marginEnd="20dp"
-            android:layout_marginTop="12dp"
-            android:text="📂 내 플레이리스트" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnLocalMedia"
-            style="@style/GhostButton"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginStart="20dp"
-            android:layout_marginEnd="20dp"
-            android:layout_marginTop="12dp"
-            android:text="🎧 로컬 파일 재생" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnAudioHome"
-            style="@style/GhostButton"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginStart="20dp"
-            android:layout_marginEnd="20dp"
-            android:layout_marginTop="12dp"
-            android:text="🎵 오디오 홈 (플레이리스트)" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSmartPlaylist"
-            style="@style/GhostButton"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginStart="20dp"
-            android:layout_marginEnd="20dp"
-            android:layout_marginTop="12dp"
-            android:text="🎧 스마트 플레이리스트" />
-
-        <!-- ⭐ 구독 채널 -->
-        <LinearLayout
-            android:id="@+id/sectionSubscriptions"
+        <!-- 카테고리 칩 (가로 스크롤) -->
+        <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="24dp"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:text="⭐ 구독 채널"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:textColor="@color/text_primary" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvSubscriptions"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:clipToPadding="false"
-                android:orientation="horizontal"
-                app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
-                app:spanCount="2" />
-        </LinearLayout>
-
-        <!-- 🔥 인기 급상승 -->
-        <LinearLayout
-            android:id="@+id/sectionTrending"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="24dp"
-            android:visibility="gone">
+            android:scrollbars="none"
+            android:background="@color/bg_dark"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp">
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:id="@+id/chipsCategories"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:gravity="center_vertical">
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
 
+                <!-- 기본 카테고리 칩들 -->
                 <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="🔥 인기 급상승"
-                    android:textSize="15sp"
+                    android:id="@+id/chipAll"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:gravity="center"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:text="전체"
+                    android:textColor="@color/bg_dark"
+                    android:textSize="13sp"
                     android:textStyle="bold"
-                    android:textColor="@color/text_primary" />
+                    android:background="@drawable/bg_chip_active" />
 
                 <TextView
-                    android:id="@+id/tvTrendingMore"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="새로고침"
-                    android:textSize="12sp"
-                    android:textColor="@color/accent"
-                    android:padding="4dp"
-                    android:clickable="true"
-                    android:focusable="true" />
+                    android:layout_height="32dp"
+                    android:layout_marginStart="8dp"
+                    android:gravity="center"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:text="음악"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:background="@drawable/bg_chip_inactive" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="8dp"
+                    android:gravity="center"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:text="게임"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:background="@drawable/bg_chip_inactive" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="8dp"
+                    android:gravity="center"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:text="영화"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:background="@drawable/bg_chip_inactive" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="8dp"
+                    android:gravity="center"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:text="라이브"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:background="@drawable/bg_chip_inactive" />
             </LinearLayout>
+        </HorizontalScrollView>
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvTrending"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:clipToPadding="false"
-                android:orientation="horizontal"
-                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
-        </LinearLayout>
-
-        <!-- 📥 다운로드한 영상 -->
-        <LinearLayout
-            android:id="@+id/sectionDownloads"
+        <!-- 유튜브 스타일 2열 그리드 리사이클러뷰 -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvMainFeed"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="24dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:paddingBottom="16dp" />
+
+        <!-- 기존 코드 호환을 위한 숨겨진 뷰들 (기능 유지용) -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="0dp"
             android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:gravity="center_vertical">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="📥 다운로드한 영상"
-                    android:textSize="15sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/text_primary" />
-
-                <TextView
-                    android:id="@+id/tvDownloadsMore"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="더보기 ›"
-                    android:textSize="12sp"
-                    android:textColor="@color/accent"
-                    android:padding="4dp"
-                    android:clickable="true"
-                    android:focusable="true" />
-            </LinearLayout>
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvDownloads"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:clipToPadding="false"
-                android:orientation="horizontal"
-                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
-        </LinearLayout>
-
-        <!-- 최근 검색어 -->
-        <LinearLayout
-            android:id="@+id/sectionRecent"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="24dp"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:gravity="center_vertical">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="최근 검색어"
-                    android:textSize="15sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/text_primary" />
-
-                <TextView
-                    android:id="@+id/tvClearSearches"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="전체 삭제"
-                    android:textSize="12sp"
-                    android:textColor="@color/text_secondary"
-                    android:padding="4dp"
-                    android:clickable="true"
-                    android:focusable="true" />
-            </LinearLayout>
-
-            <HorizontalScrollView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:scrollbars="none">
-
-                <LinearLayout
-                    android:id="@+id/chipsContainer"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal" />
-            </HorizontalScrollView>
-        </LinearLayout>
-
-        <!-- 최근 본 동영상 -->
-        <LinearLayout
-            android:id="@+id/sectionHistory"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="24dp"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:gravity="center_vertical">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="최근 본 동영상"
-                    android:textSize="15sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/text_primary" />
-
-                <TextView
-                    android:id="@+id/tvHistoryMore"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="더보기 ›"
-                    android:textSize="12sp"
-                    android:textColor="@color/accent"
-                    android:padding="4dp"
-                    android:clickable="true"
-                    android:focusable="true" />
-            </LinearLayout>
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvHistory"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:clipToPadding="false"
-                android:orientation="horizontal"
-                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
-        </LinearLayout>
-
-        <!-- 당신을 위한 추천 -->
-        <LinearLayout
-            android:id="@+id/sectionRelated"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="24dp"
-            android:visibility="gone">
-
-            <TextView
-                android:id="@+id/tvRelatedHeader"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:text="당신을 위한 추천"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:textColor="@color/text_primary" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvRelated"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:clipToPadding="false"
-                android:orientation="horizontal"
-                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
-        </LinearLayout>
-
-        <!-- 추천 채널 -->
-        <LinearLayout
-            android:id="@+id/sectionChannels"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="24dp"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:text="추천 채널"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:textColor="@color/text_primary" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvChannels"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:clipToPadding="false"
-                android:orientation="horizontal"
-                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
-        </LinearLayout>
-
-        <!-- 빈 상태 -->
-        <LinearLayout
-            android:id="@+id/emptyState"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:paddingTop="80dp"
-            android:paddingBottom="80dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="▶"
-                android:textSize="56sp"
-                android:textColor="@color/accent" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:text="검색해서 시작하세요"
-                android:textSize="16sp"
-                android:textColor="@color/text_secondary" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnStartSearch"
-                style="@style/PrimaryButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:paddingStart="32dp"
-                android:paddingEnd="32dp"
-                android:text="동영상 검색" />
+            <EditText android:id="@+id/etHomeSearch" />
+            <View android:id="@+id/btnTheme" />
+            <View android:id="@+id/btnStats" />
+            <View android:id="@+id/btnSmartPlaylist" />
+            <View android:id="@+id/btnLocalMedia" />
+            <View android:id="@+id/btnAudioHome" />
+            <View android:id="@+id/btnPlaylist" />
+            <View android:id="@+id/btnMyPlaylists" />
+            <View android:id="@+id/btnStartSearch" />
+            <View android:id="@+id/tvHistoryMore" />
+            <View android:id="@+id/tvDownloadsMore" />
+            <View android:id="@+id/tvTrendingMore" />
+            <View android:id="@+id/tvClearSearches" />
+            <View android:id="@+id/emptyState" />
+            <LinearLayout android:id="@+id/sectionRecent"><LinearLayout android:id="@+id/chipsContainer" /></LinearLayout>
+            <LinearLayout android:id="@+id/sectionHistory"><androidx.recyclerview.widget.RecyclerView android:id="@+id/rvHistory" /></LinearLayout>
+            <LinearLayout android:id="@+id/sectionRelated"><androidx.recyclerview.widget.RecyclerView android:id="@+id/rvRelated" /></LinearLayout>
+            <LinearLayout android:id="@+id/sectionChannels"><androidx.recyclerview.widget.RecyclerView android:id="@+id/rvChannels" /></LinearLayout>
+            <LinearLayout android:id="@+id/sectionBookmarks"><androidx.recyclerview.widget.RecyclerView android:id="@+id/rvBookmarks" /></LinearLayout>
+            <LinearLayout android:id="@+id/sectionDownloads"><androidx.recyclerview.widget.RecyclerView android:id="@+id/rvDownloads" /></LinearLayout>
+            <LinearLayout android:id="@+id/sectionTrending"><androidx.recyclerview.widget.RecyclerView android:id="@+id/rvTrending" /></LinearLayout>
+            <LinearLayout android:id="@+id/sectionSubscriptions"><androidx.recyclerview.widget.RecyclerView android:id="@+id/rvSubscriptions" /></LinearLayout>
         </LinearLayout>
     </LinearLayout>
-</androidx.core.widget.NestedScrollView>
 
-
-    </FrameLayout>
-
+    <!-- 하단 내비게이션 바 (유튜브 스타일) -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNav"
         android:layout_width="match_parent"

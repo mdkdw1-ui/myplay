@@ -41,6 +41,23 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         BottomNavHelper.setup(this, BottomNavHelper.TAB_VIDEO)
 
+        // ★ 새 유튜브 스타일 2열 그리드 피드 초기화
+        val rvFeed = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvMainFeed)
+        rvFeed.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 2)
+        
+        // 임시 어댑터 (나중에 실제 데이터로 교체)
+        val feedAdapter = SearchAdapter(onClick = { item -> PlayModeChooser.show(this, item) })
+        rvFeed.adapter = feedAdapter
+        
+        // 기존 load 함수들에서 이 어댑터에 데이터를 넣도록 수정할 예정
+        // 우선 Trending 데이터로 채워봄
+        lifecycleScope.launch {
+            try {
+                val trending = YouTubeTrending.fetch()
+                feedAdapter.submit(trending)
+            } catch (_: Exception) {}
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
