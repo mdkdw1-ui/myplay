@@ -188,10 +188,63 @@ object UpdateChecker {
                 }
             }
             Log.d(TAG, "다운로드 완료: ${apkFile.absolutePath} (${apkFile.length() / 1024 / 1024}MB)")
+            
+            // ★ APK를 공용 Downloads 폴더로 복사 (파일 관리자에서 볼 수 있도록)
+            try {
+                val publicFile = copyToPublicDownloads(ctx, apkFile)
+                if (publicFile != null) {
+                    Log.d(TAG, "공용 Downloads 복사 완료: ${publicFile.absolutePath}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "공용 Downloads 복사 실패: ${e.message}")
+            }
+            
             Result.success(apkFile)
         } catch (e: Exception) {
             Log.e(TAG, "다운로드 err: ${e.message}", e)
             Result.failure(e)
+        }
+    }
+
+
+    /** APK를 공용 Downloads 폴더로 복사 (Android Q+ MediaStore 사용) */
+    private fun copyToPublicDownloads(ctx: Context, src: File): File? {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.Downloads.DISPLAY_NAME, src.name)
+                    put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive")
+                    put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/MyPlayer")
+                    put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val collection = android.provider.MediaStore.Downloads.getContentUri(
+                    android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY
+                )
+                val uri = ctx.contentResolver.insert(collection, values) ?: return null
+                ctx.contentResolver.openOutputStream(uri)?.use { out ->
+                    src.inputStream().use { it.copyTo(out) }
+                } ?: return null
+                values.clear()
+                values.put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
+                ctx.contentResolver.update(uri, values, null, null)
+                // 파일 경로는 MediaStore가 관리하므로 File 반환은 형식적
+                File(android.os.Environment.getExternalStoragePublicDirectory(
+                    android.os.Environment.DIRECTORY_DOWNLOADS), "MyPlayer/${src.name}")
+            } else {
+                @Suppress("DEPRECATION")
+                val dir = File(
+                    android.os.Environment.getExternalStoragePublicDirectory(
+                        android.os.Environment.DIRECTORY_DOWNLOADS
+                    ), "MyPlayer"
+                )
+                dir.mkdirs()
+                val dst = File(dir, src.name)
+                src.copyTo(dst, overwrite = true)
+                dst
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "copyToPublicDownloads err: ${e.message}", e)
+            null
         }
     }
 
