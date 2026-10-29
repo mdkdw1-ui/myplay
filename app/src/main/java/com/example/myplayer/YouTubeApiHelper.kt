@@ -392,8 +392,12 @@ object YouTubeApiHelper {
                 }
 
                 // Invidious 채널은 응답 최상단의 continuation을 그대로 씁니다.
-                val nextCont = obj.optString("continuation", "").takeIf { it.isNotBlank() }
-                val nextToken = nextCont?.let { "inv:$realId|$it" }
+                // Invidious는 continuation이 최상단에 없을 수 있으므로 깊이 탐색
+                var nextCont = obj.optString("continuation", "")
+                if (nextCont.isBlank()) {
+                    nextCont = findContinuationDeep(obj) ?: ""
+                }
+                val nextToken = nextCont.takeIf { it.isNotBlank() }?.let { "inv:$realId|$it" }
 
                 if (out.isNotEmpty()) {
                     Log.d(TAG, "inv channel: ${out.size}개, next=${nextToken?.take(60)}")

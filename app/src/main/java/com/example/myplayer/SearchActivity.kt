@@ -218,8 +218,11 @@ class SearchActivity : AppCompatActivity() {
             nextContinuation = page.continuation
             adapter.append(page.videos)
             loadingMore = false
+            // ★ 누적된 총 개수로 텍스트 갱신
+            val totalCount = adapter.itemCount
+            tvStatus.text = "${totalCount}개 (로딩됨)"
             android.util.Log.d("Search",
-                "loadMore 완료: +${page.videos.size}개, next=${page.continuation?.take(40)}")
+                "loadMore 완료: +\${page.videos.size}개, 총 \${totalCount}개")
         }
     }
 
