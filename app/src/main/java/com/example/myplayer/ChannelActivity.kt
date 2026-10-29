@@ -61,7 +61,7 @@ class ChannelActivity : AppCompatActivity() {
             val f = java.io.File(applicationContext.filesDir, "channel_diag.log")
             val content = if (f.exists()) f.readText() else "(로그 없음)"
             val lines = content.lines().takeLast(100).joinToString("\n")
-            androidx.appcompat.app.AlertDialog.Builder(this)
+            androidx.appcompat.app.AlertDialog.Builder(this@ChannelActivity)
                 .setTitle("채널 진단 로그 (마지막 100줄)")
                 .setMessage(lines)
                 .setPositiveButton("닫기", null)
@@ -131,7 +131,7 @@ class ChannelActivity : AppCompatActivity() {
             val f = java.io.File(applicationContext.filesDir, "channel_diag.log")
             val content = if (f.exists()) f.readText() else "(로그 없음)"
             val lines = content.lines().takeLast(100).joinToString("\n")
-            androidx.appcompat.app.AlertDialog.Builder(this)
+            androidx.appcompat.app.AlertDialog.Builder(this@ChannelActivity)
                 .setTitle("채널 진단 로그 (마지막 100줄)")
                 .setMessage(lines)
                 .setPositiveButton("닫기", null)
