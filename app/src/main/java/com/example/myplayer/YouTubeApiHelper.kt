@@ -21,7 +21,14 @@ object YouTubeApiHelper {
             is JSONObject -> {
                 // 1. 직접적인 키 확인
                 val direct = node.optString("nextpage", "").ifBlank { node.optString("continuation", "") }
-                if (direct.isNotBlank()) return direct
+                if (direct.isNotBlank()) {
+                    // ★ JSON 형태면 무시하고 계속 탐색
+                    if (direct.startsWith("{")) {
+                        // skip
+                    } else {
+                        return direct
+                    }
+                }
 
                 // 2. continuationItemRenderer 내부 확인
                 node.optJSONObject("continuationItemRenderer")?.let { cir ->

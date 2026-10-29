@@ -146,7 +146,8 @@ class ChannelActivity : AppCompatActivity() {
                 }
             }
 
-            nextContinuation = page.continuation
+            // ★ JSON 토큰은 nextContinuation에 넣지 않음
+            nextContinuation = page.continuation?.takeIf { it.isNotBlank() && !it.startsWith("{") }
             // ★ 로그: 첫 페이지 결과 + continuation 유무
             android.util.Log.d("Channel", "fetch: videos=${page.videos.size} cont=${page.continuation?.take(40)} debug=${YouTubeChannel.lastDebug}")
             tvStatus.text = if (page.videos.isEmpty()) "영상 없음"
@@ -251,7 +252,8 @@ class ChannelActivity : AppCompatActivity() {
 
                 // ★ 서버가 빈 값을 주더라도 기존 토큰을 유지
                 if (page.continuation != null && page.continuation.isNotBlank()) {
-                    nextContinuation = page.continuation
+                    // ★ JSON 토큰은 nextContinuation에 넣지 않음
+            nextContinuation = page.continuation?.takeIf { it.isNotBlank() && !it.startsWith("{") }
                     cdiag("다음 토큰 갱신: ${nextContinuation?.take(40)}")
                 } else if (page.videos.isEmpty()) {
                     cdiag("빈 결과 반환됨. 기존 토큰 유지.")
