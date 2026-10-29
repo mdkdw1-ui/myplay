@@ -1,47 +1,28 @@
 package com.example.myplayer
 
 import android.Manifest
-import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.view.Gravity
-import android.view.View
-import android.view.inputmethod.EditorInfo
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
-
-    private lateinit var historyAdapter: HorizontalVideoAdapter
-    private lateinit var relatedAdapter: HorizontalVideoAdapter
-    private lateinit var channelAdapter: ChannelAdapter
-    private lateinit var bookmarkAdapter: HorizontalVideoAdapter
-    private lateinit var downloadsAdapter: HorizontalVideoAdapter
-    private val downloadsMap = mutableMapOf<String, DownloadEntity>()
-    private lateinit var trendingAdapter: HorizontalVideoAdapter
-    private lateinit var subAdapter: ChannelAdapter
-    private lateinit var etHomeSearch: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         BottomNavHelper.setup(this, BottomNavHelper.TAB_VIDEO)
 
-        // 알림 권한 요청
+        // 알림 권한
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -50,51 +31,50 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 상단 검색 아이콘 → SearchActivity
+        // 상단 아이콘
         findViewById<android.view.View>(R.id.btnSearchTop)?.setOnClickListener {
-            startActivity(android.content.Intent(this, SearchActivity::class.java))
+            startActivity(Intent(this, SearchActivity::class.java))
         }
         findViewById<android.view.View>(R.id.btnSettings)?.setOnClickListener {
-            startActivity(android.content.Intent(this, SettingsActivity::class.java))
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
 
-        // 카테고리 칩 (일단 "전체"만 활성)
-        findViewById<android.view.View>(R.id.chipAll)?.setOnClickListener {
-            // 나중에 카테고리 필터 구현
+        // 카테고리 칩
+        findViewById<android.view.View>(R.id.chipVideo)?.setOnClickListener { /* current */ }
+        findViewById<android.view.View>(R.id.chipAudio)?.setOnClickListener {
+            startActivity(Intent(this, AudioHomeActivity::class.java))
+        }
+        findViewById<android.view.View>(R.id.chipLocal)?.setOnClickListener {
+            startActivity(Intent(this, LocalMediaActivity::class.java))
         }
 
-        // 유튜브 스타일 2열 그리드 피드 초기화
-        val rvFeed = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvMainFeed)
-        rvFeed.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 2)
-
+        // 2열 그리드 피드
+        val rvFeed = findViewById<RecyclerView>(R.id.rvMainFeed)
+        rvFeed.layoutManager = GridLayoutManager(this, 2)
         val feedAdapter = SearchAdapter(
             onMultiSave = null,
-            onClick = { item ->
-                PlayModeChooser.show(this, item)
-            }
+            onClick = { item -> PlayModeChooser.show(this, item) }
         )
         rvFeed.adapter = feedAdapter
 
-        // 피드 데이터 로드 (트렌딩)
+        // 피드 데이터 로드
         lifecycleScope.launch {
             try {
-                // 1. 최근 기록
-                val history = withContext(Dispatchers.IO) {
-                    HistoryDatabase.get(applicationContext).historyDao().getAllOnce()
-                }
                 val trending = try { YouTubeTrending.fetch() } catch (e: Exception) { emptyList() }
+                val history = try {
+                    withContext(Dispatchers.IO) {
+                        HistoryDatabase.get(applicationContext).historyDao().getAllOnce()
+                    }
+                } catch (e: Exception) { emptyList() }
 
                 val combined = mutableListOf<VideoItem>()
-                // 트렌딩 먼저
                 combined.addAll(trending)
-                // 기록 영상 추가 (중복 제거)
                 val existingIds = combined.map { it.videoId }.toSet()
                 history.forEach { h ->
                     if (h.videoId !in existingIds) {
                         combined.add(VideoItem(h.videoId, h.title, h.channel, h.thumbnail))
                     }
                 }
-
                 if (combined.isNotEmpty()) {
                     runOnUiThread { feedAdapter.submit(combined) }
                 }
@@ -103,435 +83,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 구독 알림 워커
+        // 워커
         try {
-            val req = androidx.work.PeriodicWorkRequestBuilder<SubscriptionWorker>(
+            val req1 = androidx.work.PeriodicWorkRequestBuilder<SubscriptionWorker>(
                 6, java.util.concurrent.TimeUnit.HOURS
             ).build()
             androidx.work.WorkManager.getInstance(applicationContext)
-                .enqueueUniquePeriodicWork(
-                    "sub_check",
-                    androidx.work.ExistingPeriodicWorkPolicy.KEEP,
-                    req
-                )
-        } catch (_: Exception) {}
+                .enqueueUniquePeriodicWork("sub_check",
+                    androidx.work.ExistingPeriodicWorkPolicy.KEEP, req1)
 
-        // 서버 헬스체크 워커
-        try {
-            val req = androidx.work.PeriodicWorkRequestBuilder<ServerHealthWorker>(
+            val req2 = androidx.work.PeriodicWorkRequestBuilder<ServerHealthWorker>(
                 12, java.util.concurrent.TimeUnit.HOURS
             ).build()
             androidx.work.WorkManager.getInstance(applicationContext)
-                .enqueueUniquePeriodicWork(
-                    "server_health",
-                    androidx.work.ExistingPeriodicWorkPolicy.KEEP,
-                    req
-                )
+                .enqueueUniquePeriodicWork("server_health",
+                    androidx.work.ExistingPeriodicWorkPolicy.KEEP, req2)
         } catch (_: Exception) {}
-    }
-
-    override fun onResume() {
-        super.onResume()
-        // 새 레이아웃에서는 특별한 새로고침 없음
-    }
-
-
-
-    private fun loadSubscriptions() {
-        lifecycleScope.launch {
-            val section = findViewById<View>(R.id.sectionSubscriptions)
-            try {
-                HistoryDatabase.get(applicationContext).subscriptionDao().getAll().collect { list ->
-                    if (list.isEmpty()) {
-                        section.visibility = View.GONE
-                    } else {
-                        section.visibility = View.VISIBLE
-                        subAdapter.submit(list.map {
-                            ChannelItem(it.channelId, it.name, it.avatar, it.subscribers)
-                        })
-                    }
-                }
-            } catch (e: Exception) {
-                section.visibility = View.GONE
-            }
-        }
-    }
-
-    private fun loadTrending() {
-        lifecycleScope.launch {
-            val section = findViewById<View>(R.id.sectionTrending)
-            try {
-                val list = YouTubeTrending.fetch()
-                if (list.isEmpty()) {
-                    section.visibility = View.GONE
-                } else {
-                    section.visibility = View.VISIBLE
-                    trendingAdapter.submit(list.take(15).map {
-                        HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
-                    })
-                }
-            } catch (e: Exception) {
-                section.visibility = View.GONE
-            }
-        }
-    }
-
-    private fun loadDownloads() {
-        lifecycleScope.launch {
-            val section = findViewById<View>(R.id.sectionDownloads)
-            try {
-                HistoryDatabase.get(applicationContext).downloadDao().getAll().collect { list ->
-                    // ★ 다운로드 map 채우기 (filePath 조회용)
-                    downloadsMap.clear()
-                    for (item in list) downloadsMap[item.videoId] = item
-
-                    if (list.isEmpty()) {
-                        section.visibility = View.GONE
-                    } else {
-                        section.visibility = View.VISIBLE
-                        downloadsAdapter.submit(list.take(10).map {
-                            HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
-                        })
-                    }
-                }
-            } catch (e: Exception) {
-                section.visibility = View.GONE
-            }
-        }
-    }
-
-    /** ★ 홈 다운로드 클릭: 로컬 파일 있으면 로컬 재생, 없으면 스트리밍 */
-    private fun openDownloadItem(v: HomeVideo) {
-        val item = downloadsMap[v.videoId]
-        val f = item?.let { java.io.File(it.filePath) }
-        if (item != null && f != null && f.exists()) {
-            // 로컬 재생
-            if (item.isAudioOnly) {
-                startActivity(android.content.Intent(this, AudioPlayerActivity::class.java).apply {
-                    putExtra("VIDEO_ID", "local:download:${item.videoId}")
-                    putExtra("FILE_URI", android.net.Uri.fromFile(f).toString())
-                    putExtra("VIDEO_TITLE", item.title)
-                    putExtra("VIDEO_CHANNEL", item.channel)
-                    putExtra("FROM_PLAYLIST", true)
-                    putExtra("LOCAL_MODE", true)
-                })
-            } else {
-                startActivity(android.content.Intent(this, PlayerActivity::class.java).apply {
-                    putExtra("VIDEO_URI", android.net.Uri.fromFile(f).toString())
-                    putExtra("VIDEO_TITLE", item.title)
-                    putExtra("VIDEO_CHANNEL", item.channel)
-                    putExtra("VIDEO_THUMB", item.thumbnail)
-                })
-            }
-        } else {
-            // 파일 없음 → 스트리밍 (기존)
-            openPlayer(v)
-        }
-    }
-
-
-    private fun applyHomeGradient(view: View, key: String) {
-        val res = when (key) {
-            "blue" -> R.drawable.bg_gradient_blue
-            "green" -> R.drawable.bg_gradient_green
-            "purple" -> R.drawable.bg_gradient_purple
-            else -> R.drawable.bg_gradient_red
-        }
-        view.setBackgroundResource(res)
-    }
-
-    
-    private fun scheduleServerHealthWorker() {
-        try {
-            val req = androidx.work.PeriodicWorkRequestBuilder<ServerHealthWorker>(
-                12, java.util.concurrent.TimeUnit.HOURS
-            ).build()
-            androidx.work.WorkManager.getInstance(applicationContext)
-                .enqueueUniquePeriodicWork(
-                    "server_health",
-                    androidx.work.ExistingPeriodicWorkPolicy.KEEP,
-                    req
-                )
-        } catch (e: Exception) { }
-    }
-
-    private fun scheduleSubscriptionWorker() {
-        try {
-            val req = androidx.work.PeriodicWorkRequestBuilder<SubscriptionWorker>(
-                6, java.util.concurrent.TimeUnit.HOURS
-            ).build()
-            androidx.work.WorkManager.getInstance(applicationContext)
-                .enqueueUniquePeriodicWork(
-                    "sub_check",
-                    androidx.work.ExistingPeriodicWorkPolicy.KEEP,
-                    req
-                )
-        } catch (e: Exception) { }
-    }
-
-        private fun loadRecentSearches() {
-        val section = findViewById<View>(R.id.sectionRecent)
-        val container = findViewById<LinearLayout>(R.id.chipsContainer)
-        container.removeAllViews()
-
-        val list = RecentSearches.get(this)
-        if (list.isEmpty()) { section.visibility = View.GONE; return }
-        section.visibility = View.VISIBLE
-
-        for (q in list) {
-            val chip = TextView(this).apply {
-                text = q
-                textSize = 13f
-                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
-                setBackgroundResource(R.drawable.bg_search_input)
-                val p = (14 * resources.displayMetrics.density).toInt()
-                setPadding(p, p / 2, p, p / 2)
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { marginEnd = (8 * resources.displayMetrics.density).toInt() }
-                gravity = Gravity.CENTER
-                setOnClickListener {
-                    RecentSearches.add(this@MainActivity, q)
-                    startActivity(Intent(this@MainActivity, SearchActivity::class.java).putExtra("QUERY", q))
-                }
-                setOnLongClickListener {
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle("검색어 삭제")
-                        .setMessage("\"$q\" 삭제할까요?")
-                        .setPositiveButton("삭제") { _, _ ->
-                            RecentSearches.remove(this@MainActivity, q)
-                            loadRecentSearches()
-                        }
-                        .setNegativeButton("취소", null)
-                        .show()
-                    true
-                }
-            }
-            container.addView(chip)
-        }
-    }
-
-    private fun loadBookmarks() {
-        lifecycleScope.launch {
-            val section = findViewById<View>(R.id.sectionBookmarks)
-            try {
-                HistoryDatabase.get(applicationContext).bookmarkDao().getAll().collect { list ->
-                    if (list.isEmpty()) {
-                        section.visibility = View.GONE
-                    } else {
-                        section.visibility = View.VISIBLE
-                        bookmarkAdapter.submit(list.take(10).map {
-                            HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
-                        })
-                    }
-                }
-            } catch (e: Exception) {
-                section.visibility = View.GONE
-            }
-        }
-    }
-
-    private fun loadHistory() {
-        lifecycleScope.launch {
-            HistoryDatabase.get(applicationContext).historyDao().getAll().collect { list ->
-                val section = findViewById<View>(R.id.sectionHistory)
-                val emptyState = findViewById<View>(R.id.emptyState)
-
-                if (list.isEmpty()) {
-                    section.visibility = View.GONE
-                    emptyState.visibility = View.VISIBLE
-                    findViewById<View>(R.id.sectionRelated).visibility = View.GONE
-                    findViewById<View>(R.id.sectionChannels).visibility = View.GONE
-                    return@collect
-                }
-
-                section.visibility = View.VISIBLE
-                emptyState.visibility = View.GONE
-
-                historyAdapter.submit(list.take(10).map {
-                    HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
-                })
-
-                loadRecommended(list)
-
-                // ★ 상위 5개 서로 다른 채널로 다양화
-                val topChannels = list.map { it.channel }
-                    .filter { it.isNotBlank() }
-                    .groupingBy { it }.eachCount()
-                    .entries.sortedByDescending { it.value }
-                    .take(5).map { it.key }
-                if (topChannels.isNotEmpty()) loadChannelsMulti(topChannels)
-            }
-        }
-    }
-
-    private suspend fun buildRecommendations(history: List<HistoryEntity>): List<VideoItem> =
-        withContext(Dispatchers.IO) {
-            val seeds = history.take(5)
-            val watchedIds = history.map { it.videoId }.toSet()
-            val channelWeight = history.map { it.channel }
-                .filter { it.isNotBlank() }
-                .groupingBy { it }.eachCount()
-            val scoreMap = mutableMapOf<String, Pair<VideoItem, Int>>()
-
-            for (seed in seeds) {
-                try {
-                    var related = YouTubeRelated.fetch(seed.videoId)
-                    if (related.size < 3) {
-                        val keyword = seed.title.split(" ")
-                            .filter { it.isNotBlank() }.take(4).joinToString(" ")
-                        if (keyword.isNotEmpty()) related = YouTubeSearch.search(keyword)
-                    }
-                    for (v in related) {
-                        if (v.videoId in watchedIds) continue
-                        if (v.videoId == seed.videoId) continue
-                        val existing = scoreMap[v.videoId]
-                        val bonus = (channelWeight[v.channel] ?: 0)
-                        val addScore = 1 + bonus
-                        scoreMap[v.videoId] = if (existing != null)
-                            existing.copy(second = existing.second + addScore)
-                        else Pair(v, addScore)
-                    }
-                } catch (e: Exception) { e.printStackTrace() }
-            }
-            scoreMap.values.sortedByDescending { it.second }.map { it.first }
-        }
-
-    private fun loadRecommended(history: List<HistoryEntity>) {
-        lifecycleScope.launch {
-            val recs = buildRecommendations(history)
-            if (recs.isEmpty()) {
-                findViewById<View>(R.id.sectionRelated).visibility = View.GONE
-                return@launch
-            }
-            findViewById<View>(R.id.sectionRelated).visibility = View.VISIBLE
-            relatedAdapter.submit(recs.take(10).map {
-                HomeVideo(it.videoId, it.title, it.channel, it.thumbnail)
-            })
-        }
-    }
-
-    private fun loadChannelsMulti(baseChannelNames: List<String>) {
-        lifecycleScope.launch {
-            val all = mutableListOf<ChannelItem>()
-            val seen = mutableSetOf<String>()
-            val knownNames = baseChannelNames.toSet()
-
-            // ===== 1) 내가 본 채널 (최대 5개) =====
-            for (name in baseChannelNames) {
-                if (all.size >= 5) break
-                val res = YouTubeChannels.search(name)
-                for (c in res) {
-                    if (c.channelId.isBlank() || c.channelId in seen) continue
-                    seen.add(c.channelId)
-                    all.add(c)
-                    if (all.size >= 5) break
-                }
-            }
-
-            // ===== 2) 연관 채널 (관련 영상 + 제목 키워드) =====
-            try {
-                val history = withContext(Dispatchers.IO) {
-                    HistoryDatabase.get(applicationContext).historyDao().getAll().first()
-                }
-
-                val relatedNames = mutableSetOf<String>()
-
-                // (a) 관련 영상 (next) 의 채널
-                for (h in history.take(5)) {
-                    if (relatedNames.size >= 20) break
-                    val related = YouTubeRelated.fetch(h.videoId)
-                    for (v in related) {
-                        if (v.channel.isNotBlank()) relatedNames.add(v.channel)
-                    }
-                }
-
-                // (b) ★ next가 부족하면 제목 키워드 검색
-                if (relatedNames.size < 10) {
-                    for (h in history.take(5)) {
-                        if (relatedNames.size >= 20) break
-                        val kw = h.title.split(" ")
-                            .filter { it.isNotBlank() && it.length >= 2 }
-                            .take(3).joinToString(" ")
-                        if (kw.isBlank()) continue
-                        try {
-                            val res = YouTubeSearch.search(kw)
-                            for (v in res) {
-                                if (v.channel.isNotBlank()) relatedNames.add(v.channel)
-                            }
-                        } catch (e: Exception) { }
-                    }
-                }
-
-                // (c) 이미 본 채널 제외 + 검색
-                val candidates = relatedNames
-                    .filter { it !in knownNames }
-                    .take(10)
-
-                for (name in candidates) {
-                    if (all.size >= 10) break
-                    val res = YouTubeChannels.search(name)
-                    for (c in res) {
-                        if (c.channelId.isBlank() || c.channelId in seen) continue
-                        seen.add(c.channelId)
-                        all.add(c)
-                        if (all.size >= 10) break
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-
-            val filtered = all.distinctBy { it.channelId }.take(10)
-            if (filtered.isEmpty()) {
-                findViewById<View>(R.id.sectionChannels).visibility = View.GONE
-                return@launch
-            }
-            findViewById<View>(R.id.sectionChannels).visibility = View.VISIBLE
-            channelAdapter.submit(filtered)
-        }
-    }
-
-    private fun openPlayer(v: HomeVideo) {
-        PlayModeChooser.showHomeVideo(this, v)
-    }
-
-    // ★ 채널 페이지로 이동
-    private fun playChannelAll(c: ChannelItem) {
-        lifecycleScope.launch {
-            try {
-                val (info, page) = YouTubeChannel.fetch(c.channelId, c.name)
-                val list = page.videos
-                if (list.isEmpty()) {
-                    Toast.makeText(this@MainActivity, "영상 없음", Toast.LENGTH_SHORT).show()
-                    return@launch
-                }
-                QueueManager.clear(this@MainActivity)
-                for (v in list) {
-                    QueueManager.add(this@MainActivity,
-                        HomeVideo(v.videoId, v.title, v.channel, v.thumbnail))
-                }
-                val first = list.first()
-                QueueManager.setCurrent(this@MainActivity, first.videoId)
-                startActivity(Intent(this@MainActivity, AudioPlayerActivity::class.java).apply {
-                    putExtra("VIDEO_ID", first.videoId)
-                    putExtra("VIDEO_TITLE", first.title)
-                    putExtra("VIDEO_CHANNEL", first.channel)
-                    putExtra("VIDEO_THUMB", first.thumbnail)
-                    putExtra("FROM_PLAYLIST", true)
-                })
-            } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "실패: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private fun openChannel(c: ChannelItem) {
-        val intent = Intent(this, ChannelActivity::class.java).apply {
-            putExtra("CHANNEL_ID", c.channelId)
-            putExtra("CHANNEL_NAME", c.name)
-        }
-        startActivity(intent)
     }
 }
