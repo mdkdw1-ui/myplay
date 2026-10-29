@@ -43,6 +43,93 @@ object YouTubeChannel {
         Pair(null, ChannelVideosPage(emptyList(), null))
     }
 
+
+    /** 다음 페이지 (Piped nextpage 또는 Invidious continuation) */
+    suspend fun fetchMore(continuation: String): ChannelVideosPage = withContext(Dispatchers.IO) {
+        Log.d(TAG, "fetchMore: token=${continuation.take(60)}")
+
+        // ─────────────────────────────────────
+        // 1. Piped nextpage 토큰 ("piped:<token>" or "piped:<channelId>|<token>")
+        // ─────────────────────────────────────
+        if (continuation.startsWith("piped:")) {
+            val rest = continuation.removePrefix("piped:")
+            val channelId = if (rest.contains("|")) rest.substringBefore("|") else ""
+            val nextpage = if (rest.contains("|")) rest.substringAfter("|") else rest
+
+            for (inst in YouTubeApiHelper.PIPED) {
+                try {
+                    val url = if (channelId.isNotBlank() && nextpage.isNotBlank()) {
+                        "$inst/nextpage/channel/$channelId?nextpage=${java.net.URLEncoder.encode(nextpage, "UTF-8")}"
+                    } else if (channelId.isNotBlank()) {
+                        "$inst/nextpage/channel/$channelId"
+                    } else if (nextpage.isNotBlank()) {
+                        "$inst/nextpage?nextpage=${java.net.URLEncoder.encode(nextpage, "UTF-8")}"
+                    } else {
+                        continue
+                    }
+
+                    val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 5000
+                    conn.readTimeout = 5000
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                    if (conn.responseCode !in 200..299) continue
+
+                    val jsonStr = conn.inputStream.bufferedReader().use { it.readText() }
+                    val obj = org.json.JSONObject(jsonStr)
+
+                    val out = mutableListOf<VideoItem>()
+                    val streams = obj.optJSONArray("relatedStreams")
+                    if (streams != null) {
+                        for (i in 0 until streams.length()) {
+                            val v = streams.getJSONObject(i)
+                            val id = v.optString("url", "").substringAfter("/watch?v=", "").substringBefore("&")
+                            if (id.isBlank()) continue
+                            out.add(VideoItem(
+                                videoId = id,
+                                title = v.optString("title", ""),
+                                channel = v.optString("uploaderName", ""),
+                                thumbnail = v.optString("thumbnail", ""),
+                                duration = YouTubeApiHelper.fmtSec(v.optInt("duration", 0))
+                            ))
+                        }
+                    }
+                    if (out.isNotEmpty()) {
+                        var next = obj.optString("nextpage", "")
+                        if (next.isBlank()) next = nextpage
+                        Log.d(TAG, "Piped fetchMore 성공: ${out.size}개, next=${next.take(30)}")
+                        return@withContext ChannelVideosPage(
+                            out,
+                            if (next.isNotBlank()) "piped:$next" else null
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Piped fetchMore err: ${e.message}")
+                }
+            }
+        }
+
+        // ─────────────────────────────────────
+        // 2. Invidious continuation 토큰 ("inv:<channelId>|<token>")
+        // ─────────────────────────────────────
+        if (continuation.startsWith("inv:")) {
+            val rest = continuation.removePrefix("inv:")
+            val idx = rest.indexOf('|')
+            if (idx > 0) {
+                val channelId = rest.substring(0, idx)
+                val contToken = rest.substring(idx + 1)
+                Log.d(TAG, "Invidious fetchMore: channelId=$channelId")
+                return@withContext YouTubeApiHelper.channelVideos(channelId, contToken)
+            }
+        }
+
+        // ─────────────────────────────────────
+        // 3. 그 외(또는 폴백): 빈 결과
+        // ─────────────────────────────────────
+        Log.d(TAG, "fetchMore: 알 수 없는 토큰 형식 - $continuation")
+        ChannelVideosPage(emptyList(), null)
+    }
+
+
     private fun post(urlStr: String, bodyStr: String): String? {
         val fullUrl = "$urlStr?key=$API_KEY&prettyPrint=false"
         // ★ IPv4 강제
