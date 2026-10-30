@@ -28,6 +28,16 @@ object YouTubeStream {
 
     private const val TAG = "YouTubeStream"
 
+    private fun flog(msg: String) {
+        android.util.Log.d(TAG, msg)
+        try {
+            val f = java.io.File(MyApp.instance.filesDir, "audio_diag.log")
+            if (f.exists() && f.length() > 500_000) f.writeText("")
+            val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+            f.appendText("[$ts] [YTS] $msg\n")
+        } catch (_: Exception) {}
+    }
+
     // ─────────────────────────────────────────
     // 캐시 (5분 TTL)
     // ─────────────────────────────────────────
@@ -74,12 +84,15 @@ object YouTubeStream {
 
     /** ★ 오디오 모드 전용: muxed 대신 audio-only 스트림 우선 */
     suspend fun extractAudioOnly(videoId: String): StreamResult = withContext(Dispatchers.IO) {
+        flog("A1 extractAudioOnly IO 진입: $videoId")
         getCached(videoId)?.let {
             Log.d(TAG, "audio-only cache hit: $videoId")
             return@withContext it
         }
+        flog("A2 extractAudioOnly → extract 호출: $videoId")
 
         val full = extract(videoId)
+        flog("A3 extractAudioOnly ← extract 복귀: hasAny=${full.hasAny}")
         val audioUrl = full.audioUrlBest ?: full.audioUrl
         if (audioUrl != null) {
             val audioOnly = full.copy(
@@ -103,6 +116,7 @@ object YouTubeStream {
      * Piped의 itag=18 muxed를 최우선으로 쓰고, 실패하면 NewPipe로.
      */
     suspend fun extract(videoId: String): StreamResult = withContext(Dispatchers.IO) {
+        flog("B1 extract IO 진입: $videoId")
         getCached(videoId)?.let {
             Log.d(TAG, "cache hit: $videoId")
             return@withContext it
@@ -113,7 +127,9 @@ object YouTubeStream {
 
         // ★★★ 1순위: InnerTube (ydpy 방식) - 직접 googlevideo URL
         try {
+            flog("B2 InnerTube 호출 직전: $videoId")
             val innerTube = InnerTubeExtractor.extract(videoId)
+            flog("B3 InnerTube 복귀: hasAny=${innerTube.hasAny}")
             if (innerTube.hasAny) {
                 sb.append("→ InnerTube OK (itag=${innerTube.audioItag})\n")
                 Log.d(TAG, "InnerTube 성공: audio=${innerTube.audioUrl?.take(50)}")

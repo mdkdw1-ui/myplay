@@ -17,6 +17,16 @@ import java.net.URL
 object InnerTubeExtractor {
 
     private const val TAG = "InnerTube"
+
+    private fun flog(msg: String) {
+        android.util.Log.d(TAG, msg)
+        try {
+            val f = java.io.File(MyApp.instance.filesDir, "audio_diag.log")
+            if (f.exists() && f.length() > 500_000) f.writeText("")
+            val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+            f.appendText("[$ts] [IT] $msg\n")
+        } catch (_: Exception) {}
+    }
     private const val API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
     private const val PLAYER_ENDPOINT = "https://www.youtube.com/youtubei/v1/player"
 
@@ -73,10 +83,13 @@ object InnerTubeExtractor {
      * 여러 클라이언트 순환 시도
      */
     suspend fun extract(videoId: String): StreamData = withContext(Dispatchers.IO) {
+        flog("C1 InnerTube.extract IO 진입: $videoId")
         val sb = StringBuilder()
         for ((idx, client) in CLIENTS.withIndex()) {
             sb.append("try client[$idx]: ${client.name}\n")
+            flog("C2 tryClient[$idx] 시작: ${client.name}")
             val result = tryClient(videoId, client, sb)
+            flog("C3 tryClient[$idx] 복귀: ${client.name} hasAny=${result?.hasAny}")
             if (result != null && result.hasAny) {
                 Log.d(TAG, "✅ 성공: ${client.name} (${result.audioUrl != null || result.muxedUrl != null})")
                 return@withContext result
