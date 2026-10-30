@@ -46,48 +46,35 @@ object YouTubeChannel {
         Pair(null, ChannelVideosPage(emptyList(), null))
     }
     suspend fun fetchMore(continuation: String): ChannelVideosPage = withContext(Dispatchers.IO) {
-        // ★ "inv:<채널ID>|<continuation토큰>" 형식이면 Invidious로 처리
+        Log.d(TAG, "fetchMore: token=${continuation.take(60)}")
+
+        // 1) Invidious 토큰 ("inv:<channelId>|<token>")
         if (continuation.startsWith("inv:")) {
             val rest = continuation.removePrefix("inv:")
             val idx = rest.indexOf('|')
             if (idx > 0) {
                 val channelId = rest.substring(0, idx)
                 val contToken = rest.substring(idx + 1)
-                Log.d(TAG, "fetchMore (Invidious): channelId=$channelId, cont=${contToken.take(30)}")
+                Log.d(TAG, "Invidious fetchMore: channelId=$channelId")
                 return@withContext YouTubeApiHelper.channelVideos(channelId, contToken)
-            } else {
-                Log.w(TAG, "fetchMore: 잘못된 inv 토큰 (| 없음): $continuation")
             }
         }
 
-        // Piped nextpage 토큰 (기존 로직 유지 - 하지만 실질적으로 안 쓰임)
-        val videos = mutableListOf<VideoItem>()
-        var cont: String? = null
-        try {
-            val body = JSONObject().apply {
-                put("context", JSONObject().apply {
-                    put("client", JSONObject().apply {
-                        put("clientName", "WEB")
-                        put("clientVersion", "2.20240101.00.00")
-                        put("clientScreen", "WATCH")
-                        put("hl", "ko")
-                        put("gl", "KR")
-                        put("userAgent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-                            "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                            "Chrome/120.0.0.0 Safari/537.36")
-                    })
-                })
-                put("continuation", continuation)
+        // 2) Piped 토큰 ("piped:<channelId>|<token>" 또는 "piped:<token>")
+        if (continuation.startsWith("piped:")) {
+            val rest = continuation.removePrefix("piped:")
+            val channelId = if (rest.contains("|")) rest.substringBefore("|") else ""
+            val nextpage = if (rest.contains("|")) rest.substringAfter("|") else rest
+            Log.d(TAG, "Piped fetchMore: channelId=$channelId")
+            // Piped 채널은 channelVideos에서 처리
+            if (channelId.isNotBlank()) {
+                return@withContext YouTubeApiHelper.channelVideos(channelId, nextpage)
             }
-            val response = post(BROWSE, body.toString())
-                ?: return@withContext ChannelVideosPage(emptyList(), null)
-            val json = JSONObject(response)
-            collectVideos(json, videos)
-            cont = findContinuation(json)
-        } catch (e: Exception) {
-            Log.e(TAG, "err: ${e.message}", e)
         }
-        ChannelVideosPage(videos, cont)
+
+        // 3) 그 외 (JSON 등) → 실패 처리
+        Log.d(TAG, "알 수 없는 토큰: ${continuation.take(40)}")
+        ChannelVideosPage(emptyList(), null)
     }
 
     private fun post(urlStr: String, bodyStr: String): String? {
