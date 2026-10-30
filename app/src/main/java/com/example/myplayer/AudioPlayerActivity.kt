@@ -560,20 +560,33 @@ class AudioPlayerActivity : AppCompatActivity() {
                 }
                 
                 // ★ 큐의 다음 곡들 병렬 캐시
+                diag("prefetch: toPrefetch.size=${toPrefetch.size}, ids=${toPrefetch.map { it.videoId.take(11) }}")
                 if (toPrefetch.isNotEmpty()) {
                     diag("prefetch: ${toPrefetch.size}곡 병렬 캐시 시작")
                     toPrefetch.forEach { item ->
                         bgScope.launch {
                             try {
-                                if (prefetchedStreams.containsKey(item.videoId)) return@launch
+                                if (prefetchedStreams.containsKey(item.videoId)) {
+                                    diag("prefetch skip (이미 캐시): ${item.videoId}")
+                                    return@launch
+                                }
+                                diag("prefetch 시작: ${item.videoId}")
                                 val result = kotlinx.coroutines.withTimeoutOrNull(15_000) {
                                     YouTubeStream.extractAudioOnly(item.videoId)
-                                } ?: return@launch
+                                }
+                                if (result == null) {
+                                    diag("prefetch timeout: ${item.videoId}")
+                                    return@launch
+                                }
                                 if (result.hasAny) {
                                     prefetchedStreams[item.videoId] = result
-                                    diag("prefetch 완료: ${item.videoId} (${item.title.take(20)})")
+                                    diag("prefetch 완료: ${item.videoId} (cache size=${prefetchedStreams.size})")
+                                } else {
+                                    diag("prefetch 실패 (hasAny=false): ${item.videoId}")
                                 }
-                            } catch (_: Exception) {}
+                            } catch (e: Exception) {
+                                diag("prefetch err: ${item.videoId} - ${e.message}")
+                            }
                         }
                     }
                 }
