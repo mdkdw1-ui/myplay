@@ -303,29 +303,6 @@ object YouTubeSearch {
         }
     }
 
-    private fun findContinuation(node: Any?): String? {
-        when (node) {
-            is JSONObject -> {
-                node.optJSONObject("continuationItemRenderer")?.let { cir ->
-                    val token = cir.optJSONObject("continuationEndpoint")
-                        ?.optJSONObject("continuationCommand")
-                        ?.optString("token")
-                    if (!token.isNullOrEmpty()) return token
-                }
-                val keys = node.keys()
-                while (keys.hasNext()) {
-                    val r = findContinuation(node.opt(keys.next()))
-                    if (r != null) return r
-                }
-            }
-            is JSONArray -> for (i in 0 until node.length()) {
-                val r = findContinuation(node.opt(i))
-                if (r != null) return r
-            }
-        }
-        return null
-    }
-
     private fun extractText(obj: JSONObject?): String {
         if (obj == null) return ""
         val simple = obj.optString("simpleText")
