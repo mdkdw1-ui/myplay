@@ -28,13 +28,15 @@ object YouTubeStream {
 
     private const val TAG = "YouTubeStream"
 
-    // ★ 스트림 URL 캐시 (5분 TTL)
+    // ─────────────────────────────────────────
+    // 캐시 (5분 TTL)
+    // ─────────────────────────────────────────
     private data class CachedStream(
         val result: StreamResult,
         val timestamp: Long
     )
     private val streamCache = mutableMapOf<String, CachedStream>()
-    private const val CACHE_TTL_MS = 30 * 60 * 1000L  // 30분
+    private const val CACHE_TTL_MS = 30 * 60 * 1000L
 
     private fun getCached(videoId: String): StreamResult? {
         val cached = streamCache[videoId] ?: return null
@@ -47,7 +49,6 @@ object YouTubeStream {
 
     private fun putCache(videoId: String, result: StreamResult) {
         streamCache[videoId] = CachedStream(result, System.currentTimeMillis())
-        // 캐시 크기 제한 (최대 30개)
         if (streamCache.size > 100) {
             val oldest = streamCache.minByOrNull { it.value.timestamp }
             oldest?.let { streamCache.remove(it.key) }
@@ -73,14 +74,12 @@ object YouTubeStream {
 
     /** ★ 오디오 모드 전용: muxed 대신 audio-only 스트림 우선 */
     suspend fun extractAudioOnly(videoId: String): StreamResult = withContext(Dispatchers.IO) {
-        // 캐시 확인
         getCached(videoId)?.let {
-            android.util.Log.d(TAG, "audio-only cache hit: $videoId")
+            Log.d(TAG, "audio-only cache hit: $videoId")
             return@withContext it
         }
 
         val full = extract(videoId)
-        // audio가 있으면 audio-only로 재구성
         val audioUrl = full.audioUrlBest ?: full.audioUrl
         if (audioUrl != null) {
             val audioOnly = full.copy(
@@ -90,33 +89,38 @@ object YouTubeStream {
                 audioUrlBest = audioUrl
             )
             putCache(videoId, audioOnly)
-            android.util.Log.d(TAG, "audio-only 반환: $videoId")
             return@withContext audioOnly
         }
-        // 오디오 없으면 muxed라도 반환 (폴백)
-        android.util.Log.d(TAG, "audio-only 없음, muxed 폴백: $videoId")
         full
     }
 
+    /**
+     * ★ 최적화된 스트림 추출
+     * 1) Piped 우선 (1~2초, 360p muxed)
+     * 2) Invidious (실패 예상, 1.5초 타임아웃)
+     * 3) NewPipe 폴백 (5~18초, 고화질 muxed)
+     *
+     * Piped의 itag=18 muxed를 최우선으로 쓰고, 실패하면 NewPipe로.
+     */
     suspend fun extract(videoId: String): StreamResult = withContext(Dispatchers.IO) {
-        // ★ 캐시 확인
         getCached(videoId)?.let {
-            android.util.Log.d(TAG, "cache hit: $videoId")
+            Log.d(TAG, "cache hit: $videoId")
             return@withContext it
         }
 
         val sb = StringBuilder()
-        sb.append("parallel extract\n")
+        sb.append("parallel extract (piped-first)\n")
 
+        // ★ 속도 우선순위: Piped → Invidious → NewPipe
         val result = coroutineScope {
-            val invDeferred = async(Dispatchers.IO) {
-                try {
-                    withTimeoutOrNull(3000) { tryInvidious(videoId, sb) }
-                } catch (e: Exception) { null }
-            }
             val pipedDeferred = async(Dispatchers.IO) {
                 try {
-                    withTimeoutOrNull(5000) { tryPiped(videoId, sb) }
+                    withTimeoutOrNull(3000) { tryPiped(videoId, sb) }
+                } catch (e: Exception) { null }
+            }
+            val invDeferred = async(Dispatchers.IO) {
+                try {
+                    withTimeoutOrNull(1500) { tryInvidious(videoId, sb) }
                 } catch (e: Exception) { null }
             }
             val npDeferred = async(Dispatchers.IO) {
@@ -125,21 +129,28 @@ object YouTubeStream {
                 } catch (e: Exception) { null }
             }
 
-            // ★ muxed 우선 (NewPipe itag=18 등)
-            val inv = invDeferred.await()
+            // ★ Piped 우선 (빠름)
             val piped = pipedDeferred.await()
+            if (piped != null && piped.hasAny) {
+                sb.append("→ piped fast path\n")
+                return@coroutineScope piped
+            }
+
+            // ★ Invidious 폴백 (지금 실패 상태, 빠른 실패)
+            val inv = invDeferred.await()
+            if (inv != null && inv.hasAny) {
+                sb.append("→ inv fallback\n")
+                return@coroutineScope inv
+            }
+
+            // ★ NewPipe 최후 폴백 (18초)
             val np = npDeferred.await()
+            if (np != null && np.hasAny) {
+                sb.append("→ np fallback (slow)\n")
+                return@coroutineScope np
+            }
 
-            val list = listOfNotNull(inv, piped, np)
-
-            // 1순위: muxed (병합 불필요)
-            val muxedResult = list.firstOrNull { it.muxedUrl != null }
-            // 2순위: video+audio
-            val videoAudio = list.firstOrNull { it.videoUrl != null && (it.audioUrl != null || it.audioUrlBest != null) }
-            // 3순위: audio only
-            val audioOnly = list.firstOrNull { it.audioUrl != null || it.audioUrlBest != null }
-
-            muxedResult ?: videoAudio ?: audioOnly
+            null
         }
 
         if (result != null && result.hasAny) {
@@ -151,16 +162,21 @@ object YouTubeStream {
         StreamResult(null, null, null, "", "", "", sb.toString())
     }
 
-    private suspend fun tryInvidious(videoId: String, sb: StringBuilder): StreamResult? {
-        // ★ 헬스체크로 저장된 살아있는 서버만 사용
+    // ─────────────────────────────────────────
+    // Piped: muxed(itag=18) 우선 반환
+    // ─────────────────────────────────────────
+    private suspend fun tryPiped(videoId: String, sb: StringBuilder): StreamResult? {
         val aliveServers = try {
-            ServerHealthChecker.getAliveInvidious(MyApp.instance)
+            ServerHealthChecker.getAlivePiped(MyApp.instance)
         } catch (_: Exception) {
-            YouTubeApiHelper.INVIDIOUS
+            YouTubeApiHelper.PIPED
         }
-        // ★ 성공 서버 최우선
-        val prefs = MyApp.instance.getSharedPreferences("server_priority", android.content.Context.MODE_PRIVATE)
-        val topServer = prefs.getString("invidious_top", null)
+        if (aliveServers.isEmpty()) return null
+
+        val prefs = MyApp.instance.getSharedPreferences(
+            "server_priority", android.content.Context.MODE_PRIVATE
+        )
+        val topServer = prefs.getString("piped_top", null)
         val servers = mutableListOf<String>()
         if (topServer != null && topServer in aliveServers) {
             servers.add(topServer)
@@ -169,12 +185,144 @@ object YouTubeStream {
 
         for (inst in servers) {
             try {
-                val conn = java.net.URL("$inst/api/v1/videos/$videoId").openConnection() as java.net.HttpURLConnection
+                val conn = java.net.URL("$inst/streams/$videoId").openConnection() as java.net.HttpURLConnection
                 conn.connectTimeout = 2000
-                conn.readTimeout = 6000
+                conn.readTimeout = 5000
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0")
                 if (conn.responseCode !in 200..299) continue
                 val json = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+
+                val title = json.optString("title", "")
+                val author = json.optString("uploader", "")
+
+                var audioUrl: String? = null
+                var audioBitrate = 0
+                var videoUrl: String? = null
+                var videoHeight = 0
+                var muxed: String? = null
+                var bestMuxedH = 0
+                val qualities = mutableListOf<VideoQuality>()
+
+                // 오디오 스트림 (현재 Piped는 0개인 경우 많음)
+                json.optJSONArray("audioStreams")?.let { aStreams ->
+                    for (i in 0 until aStreams.length()) {
+                        val f = aStreams.getJSONObject(i)
+                        val br = f.optInt("bitrate", 0)
+                        val u = f.optString("url", "")
+                        if (u.isNotBlank() && br > audioBitrate) {
+                            audioBitrate = br
+                            audioUrl = u
+                        }
+                    }
+                }
+
+                // 비디오 스트림
+                json.optJSONArray("videoStreams")?.let { vStreams ->
+                    for (i in 0 until vStreams.length()) {
+                        val f = vStreams.getJSONObject(i)
+                        val h = f.optInt("height", 0)
+                        val q = f.optString("quality", "")
+                        val u = f.optString("url", "")
+                        val onlyVideo = f.optBoolean("videoOnly", false)
+                        val mime = f.optString("mimeType", "")
+                        if (u.isBlank()) continue
+
+                        // ★ LBRY (Odysee 미러) 제외 — YouTube 영상 아님
+                        if (q.contains("LBRY", ignoreCase = true) ||
+                            u.contains("odycdn.com")) {
+                            continue
+                        }
+                        // HLS 스트림 제외 (불안정)
+                        if (mime.contains("mpegurl", ignoreCase = true)) continue
+
+                        // muxed (video+audio)
+                        if (!onlyVideo && h >= bestMuxedH) {
+                            bestMuxedH = h
+                            muxed = u
+                        }
+                        // video-only
+                        if (h > videoHeight) {
+                            videoHeight = h
+                            videoUrl = u
+                        }
+                        // 화질 옵션
+                        if (h > 0) {
+                            qualities.add(VideoQuality("${h}p", h, u, onlyVideo))
+                        }
+                    }
+                }
+
+                // ★ muxed 우선 반환 (가장 빠른 재생)
+                if (muxed != null) {
+                    try {
+                        prefs.edit().putString("piped_top", inst).apply()
+                    } catch (_: Exception) {}
+                    sb.append("piped OK muxed($inst): h=${bestMuxedH}p\n")
+                    return StreamResult(
+                        videoUrl = null,
+                        audioUrl = null,
+                        muxedUrl = muxed,
+                        title = title,
+                        channelName = author,
+                        description = "",
+                        debug = sb.toString(),
+                        qualities = qualities.distinctBy { it.label }.sortedByDescending { it.height },
+                        audioUrlBest = null
+                    )
+                }
+
+                // muxed 없으면 video+audio
+                if (audioUrl != null && videoUrl != null) {
+                    try {
+                        prefs.edit().putString("piped_top", inst).apply()
+                    } catch (_: Exception) {}
+                    sb.append("piped OK va($inst): a=$audioUrl v=$videoUrl\n")
+                    return StreamResult(
+                        videoUrl = videoUrl,
+                        audioUrl = audioUrl,
+                        muxedUrl = null,
+                        title = title,
+                        channelName = author,
+                        description = "",
+                        debug = sb.toString(),
+                        qualities = qualities.distinctBy { it.label }.sortedByDescending { it.height },
+                        audioUrlBest = audioUrl
+                    )
+                }
+            } catch (_: Exception) {}
+        }
+        return null
+    }
+
+    // ─────────────────────────────────────────
+    // Invidious (현재 실패, 폴백용)
+    // ─────────────────────────────────────────
+    private suspend fun tryInvidious(videoId: String, sb: StringBuilder): StreamResult? {
+        val aliveServers = try {
+            ServerHealthChecker.getAliveInvidious(MyApp.instance)
+        } catch (_: Exception) {
+            YouTubeApiHelper.INVIDIOUS
+        }
+
+        val prefs = MyApp.instance.getSharedPreferences(
+            "server_priority", android.content.Context.MODE_PRIVATE
+        )
+        val topServer = prefs.getString("invidious_top", null)
+        val servers = mutableListOf<String>()
+        if (topServer != null && topServer in aliveServers) servers.add(topServer)
+        servers.addAll(aliveServers.filter { it != topServer })
+
+        for (inst in servers) {
+            try {
+                val conn = java.net.URL("$inst/api/v1/videos/$videoId").openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 2000
+                conn.readTimeout = 4000
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                if (conn.responseCode !in 200..299) continue
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                // ★ 빈 응답 방어
+                if (body.length < 100) continue
+                val json = org.json.JSONObject(body)
                 if (json.optBoolean("liveNow", false)) continue
 
                 val title = json.optString("title", "")
@@ -189,20 +337,17 @@ object YouTubeStream {
                 json.optJSONArray("adaptiveFormats")?.let { formats ->
                     for (i in 0 until formats.length()) {
                         val f = formats.getJSONObject(i)
-                        val type = f.optString("type", f.optString("encoding", ""))
+                        val type = f.optString("type", f.optString("encoding", "")).lowercase()
                         val u = f.optString("url", "")
                         if (u.isBlank()) continue
-                        val t = type.lowercase()
-                        if (t.startsWith("audio/") || t.contains("audio")) {
+                        if (type.startsWith("audio/") || type.contains("audio")) {
                             val br = f.optInt("bitrate", f.optInt("bitrateAvg", 0))
                             if (br > audioBitrate) { audioBitrate = br; audioUrl = u }
-                        } else if (t.startsWith("video/") || t.contains("video") || t.contains("mp4")) {
+                        } else if (type.startsWith("video/") || type.contains("video") || type.contains("mp4")) {
                             val itag = f.optString("itag", "").toIntOrNull() ?: 0
                             val h = f.optInt("height", 0).takeIf { it > 0 }
-                                ?: f.optInt("resolution", 0).takeIf { it > 0 }
                                 ?: YouTubeApiHelper.itagToHeight(itag)
-                            // ★ 720p 이하 (화질/안정성 균형)
-                            if (h in 144..720 && h > videoHeight) { videoHeight = h; videoUrl = u }
+                            if (h in 144..1080 && h > videoHeight) { videoHeight = h; videoUrl = u }
                         }
                     }
                 }
@@ -219,10 +364,8 @@ object YouTubeStream {
                 }
 
                 if (audioUrl != null || videoUrl != null || muxed != null) {
-                    // ★ 성공한 서버 저장
                     try {
-                        MyApp.instance.getSharedPreferences("server_priority", android.content.Context.MODE_PRIVATE)
-                            .edit().putString("invidious_top", inst).apply()
+                        prefs.edit().putString("invidious_top", inst).apply()
                     } catch (_: Exception) {}
                     sb.append("inv OK($inst): a=${audioUrl != null} v=${videoUrl != null} m=${muxed != null}\n")
                     return StreamResult(
@@ -236,80 +379,9 @@ object YouTubeStream {
         return null
     }
 
-    private suspend fun tryPiped(videoId: String, sb: StringBuilder): StreamResult? {
-        // ★ 헬스체크로 저장된 살아있는 Piped만
-        val aliveServers = try {
-            ServerHealthChecker.getAlivePiped(MyApp.instance)
-        } catch (_: Exception) {
-            YouTubeApiHelper.PIPED
-        }
-        if (aliveServers.isEmpty()) return null   // ★ 살아있는 것 없으면 스킵
-
-        val prefs = MyApp.instance.getSharedPreferences("server_priority", android.content.Context.MODE_PRIVATE)
-        val topServer = prefs.getString("piped_top", null)
-        val servers = mutableListOf<String>()
-        if (topServer != null && topServer in aliveServers) {
-            servers.add(topServer)
-        }
-        servers.addAll(aliveServers.filter { it != topServer })
-
-        for (inst in servers) {
-            try {
-                val conn = java.net.URL("$inst/streams/$videoId").openConnection() as java.net.HttpURLConnection
-                conn.connectTimeout = 2000
-                conn.readTimeout = 6000
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-                if (conn.responseCode !in 200..299) continue
-                val json = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-
-                val title = json.optString("title", "")
-                val author = json.optString("uploader", "")
-                var audioUrl: String? = null
-                var audioBitrate = 0
-                var videoUrl: String? = null
-                var videoHeight = 0
-                var muxed: String? = null
-                var bestMuxedH = 0
-
-                json.optJSONArray("audioStreams")?.let { aStreams ->
-                    for (i in 0 until aStreams.length()) {
-                        val f = aStreams.getJSONObject(i)
-                        val br = f.optInt("bitrate", 0)
-                        val u = f.optString("url", "")
-                        if (u.isNotBlank() && br > audioBitrate) { audioBitrate = br; audioUrl = u }
-                    }
-                }
-
-                json.optJSONArray("videoStreams")?.let { vStreams ->
-                    for (i in 0 until vStreams.length()) {
-                        val f = vStreams.getJSONObject(i)
-                        val h = f.optInt("height", 0)
-                        val u = f.optString("url", "")
-                        val onlyVideo = f.optBoolean("videoOnly", false)
-                        if (u.isBlank()) continue
-                        if (!onlyVideo && h >= bestMuxedH) { bestMuxedH = h; muxed = u }
-                        if (h > videoHeight) { videoHeight = h; videoUrl = u }
-                    }
-                }
-
-                if (audioUrl != null || videoUrl != null || muxed != null) {
-                    // ★ 성공한 서버 저장
-                    try {
-                        MyApp.instance.getSharedPreferences("server_priority", android.content.Context.MODE_PRIVATE)
-                            .edit().putString("piped_top", inst).apply()
-                    } catch (_: Exception) {}
-                    sb.append("piped OK($inst): a=${audioUrl != null} v=${videoUrl != null} m=${muxed != null}\n")
-                    return StreamResult(
-                        videoUrl = videoUrl, audioUrl = audioUrl, muxedUrl = muxed,
-                        title = title, channelName = author, description = "",
-                        debug = sb.toString(), audioUrlBest = audioUrl
-                    )
-                }
-            } catch (_: Exception) {}
-        }
-        return null
-    }
-
+    // ─────────────────────────────────────────
+    // NewPipe (최후 폴백, 고화질)
+    // ─────────────────────────────────────────
     private suspend fun tryNewPipe(videoId: String, sb: StringBuilder): StreamResult? {
         return try {
             try { NewPipe.init(DownloaderImpl()) } catch (_: Exception) {}
@@ -323,20 +395,34 @@ object YouTubeStream {
             val title = info.name ?: ""
             val channelName = try { info.uploaderName ?: "" } catch (_: Exception) { "" }
             val description = try { info.description?.content ?: "" } catch (_: Exception) { "" }
+
+            // 오디오
             val bestAudio = try {
                 info.audioStreams.filter { it.isUrl }.maxByOrNull { it.averageBitrate }?.content
             } catch (_: Exception) { null }
+
+            // muxed (video+audio)
             val muxed = info.videoStreams.firstOrNull { !it.isVideoOnly && it.isUrl }
             if (muxed != null) {
-                sb.append("np OK: muxed\n")
-                return StreamResult(null, null, muxed.content, title, channelName, description, sb.toString(), audioUrlBest = bestAudio)
+                sb.append("np OK muxed\n")
+                return StreamResult(
+                    videoUrl = null, audioUrl = null, muxedUrl = muxed.content,
+                    title = title, channelName = channelName, description = description,
+                    debug = sb.toString(), audioUrlBest = bestAudio
+                )
             }
+
+            // video-only + audio 분리
             val videoOnly = info.videoStreams.filter { it.isUrl }.maxByOrNull {
                 (it.resolution?.replace("p", "")?.toIntOrNull() ?: 0)
             }
             if (videoOnly != null && bestAudio != null) {
-                sb.append("np OK: video+audio\n")
-                return StreamResult(videoOnly.content, bestAudio, null, title, channelName, description, sb.toString(), audioUrlBest = bestAudio)
+                sb.append("np OK video+audio\n")
+                return StreamResult(
+                    videoUrl = videoOnly.content, audioUrl = bestAudio, muxedUrl = null,
+                    title = title, channelName = channelName, description = description,
+                    debug = sb.toString(), audioUrlBest = bestAudio
+                )
             }
             null
         } catch (e: Exception) { null }
