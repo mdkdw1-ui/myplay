@@ -102,13 +102,13 @@ class PlaybackService : MediaSessionService() {
 
         val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                5_000,      // ★ minBufferMs: 60초 → 5초 (즉시 재생 시작)
+                30_000,     // minBufferMs: 5초 → 30초 (끊김 흡수)
                 600_000,    // maxBufferMs: 10분 유지
-                1_000,      // ★ bufferForPlaybackMs: 5초 → 1초
-                2_000       // ★ bufferForPlaybackAfterRebufferMs: 10초 → 2초
+                5_000,      // bufferForPlaybackMs: 1초 → 5초 (넉넉히)
+                15_000      // bufferForPlaybackAfterRebufferMs: 2초 → 15초
             )
             .setPrioritizeTimeOverSizeThresholds(true)
-            .setTargetBufferBytes(100 * 1024 * 1024)   // ★ 200MB → 100MB
+            .setTargetBufferBytes(200 * 1024 * 1024)   // 100MB → 200MB
             .build()
 
         val player = ExoPlayer.Builder(this)
