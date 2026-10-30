@@ -109,15 +109,15 @@ object YouTubeStream {
         sb.append("parallel extract\n")
 
         val result = coroutineScope {
-            // ★ 속도 복구: NewPipe를 1순위로 먼저 실행 (타임아웃 넉넉히)
-            val npDeferred = async(Dispatchers.IO) {
-                try {
-                    withTimeoutOrNull(8000) { tryNewPipe(videoId, sb) }
-                } catch (e: Exception) { null }
-            }
+            // ★ 속도 우선순위: Invidious → NewPipe → Piped
             val invDeferred = async(Dispatchers.IO) {
                 try {
-                    withTimeoutOrNull(4000) { tryInvidious(videoId, sb) }
+                    withTimeoutOrNull(3000) { tryInvidious(videoId, sb) }
+                } catch (e: Exception) { null }
+            }
+            val npDeferred = async(Dispatchers.IO) {
+                try {
+                    withTimeoutOrNull(6000) { tryNewPipe(videoId, sb) }
                 } catch (e: Exception) { null }
             }
             val pipedDeferred = async(Dispatchers.IO) {
@@ -126,17 +126,24 @@ object YouTubeStream {
                 } catch (e: Exception) { null }
             }
 
-            // NewPipe 결과를 먼저 기다림
+            // Invidious 결과를 먼저 기다림 (가장 빠름)
+            val inv = invDeferred.await()
+            if (inv != null && inv.hasAny) {
+                sb.append("inv fast: a=${inv.audioUrl != null} v=${inv.videoUrl != null} m=${inv.muxedUrl != null}\n")
+                return@coroutineScope inv
+            }
+
+            // Invidious 실패 시 NewPipe 시도
             val np = npDeferred.await()
             if (np != null && np.hasAny) {
+                sb.append("np fallback\n")
                 return@coroutineScope np
             }
 
-            // NewPipe 실패 시 Invidious/Piped 결과 사용
-            val inv = invDeferred.await()
+            // 최후 폴백: Piped
             val piped = pipedDeferred.await()
 
-            val list = listOfNotNull(inv, piped)
+            val list = listOfNotNull(piped)
 
             val muxedResult = list.firstOrNull { it.muxedUrl != null }
             val videoAudio = list.firstOrNull { it.videoUrl != null && (it.audioUrl != null || it.audioUrlBest != null) }

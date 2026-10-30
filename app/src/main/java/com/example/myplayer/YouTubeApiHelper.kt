@@ -390,21 +390,36 @@ object YouTubeApiHelper {
                     }
                     if (out.isNotEmpty()) {
                         var nextToken = obj.optString("nextpage", "")
-                        if (nextToken.isBlank() && obj.optJSONArray("relatedStreams") != null) {
-                            // Piped 채널은 relatedStreams 배열 마지막에 nextpage 오브젝트가 있는 경우가 많음
+                        android.util.Log.d(TAG, "piped channel raw nextpage='${nextToken.take(40)}' (${nextToken.length}자)")
+
+                        // 1) 응답 최상단 nextpage가 없으면 relatedStreams 배열 내부 탐색
+                        if (nextToken.isBlank()) {
                             val streams = obj.optJSONArray("relatedStreams")
                             if (streams != null) {
                                 for (k in 0 until streams.length()) {
-                                    val it = streams.optJSONObject(k) ?: continue
-                                    if (it.optString("type") == "nextpage" || it.has("nextpage")) {
-                                        nextToken = it.optString("nextpage")
-                                        break
+                                    val item = streams.optJSONObject(k) ?: continue
+                                    if (item.optString("type") == "nextpage") {
+                                        nextToken = item.optString("nextpage", "")
+                                        if (nextToken.isNotBlank()) break
+                                    }
+                                    if (item.has("nextpage") && nextToken.isBlank()) {
+                                        nextToken = item.optString("nextpage", "")
+                                        if (nextToken.isNotBlank()) break
                                     }
                                 }
                             }
                         }
+
+                        // 2) 그래도 없으면 JSON 전체 재귀 탐색
+                        if (nextToken.isBlank()) {
+                            nextToken = findContinuationDeep(obj) ?: ""
+                        }
+
+                        // 3) JSON 형태 토큰은 필터링
+                        if (nextToken.startsWith("{")) nextToken = ""
+
                         val next = nextToken.takeIf { it.isNotBlank() }
-                        Log.d(TAG, "piped channel: ${out.size}개, next=${next?.take(20)}")
+                        android.util.Log.d(TAG, "piped channel: ${out.size}개, next=${next?.take(40)}")
                         return@withContext ChannelVideosPage(out, next)
                     }
                 } catch (e: Exception) { }

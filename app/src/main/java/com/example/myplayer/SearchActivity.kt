@@ -210,6 +210,7 @@ class SearchActivity : AppCompatActivity() {
 
     private fun loadMore() {
         val token = nextContinuation ?: return
+        if (token.isBlank()) return
         loadingMore = true
         lifecycleScope.launch {
             android.util.Log.d("Search", "loadMore: q=$lastQuery, token=${token.take(50)}")
@@ -217,8 +218,13 @@ class SearchActivity : AppCompatActivity() {
             nextContinuation = page.continuation
             adapter.append(page.videos)
             loadingMore = false
+
+            // ★ 누적된 총 개수로 tvStatus 갱신
+            val totalCount = adapter.itemCount
+            val hasMore = nextContinuation != null
+            tvStatus.text = "${totalCount}개 (더: $hasMore)"
             android.util.Log.d("Search",
-                "loadMore 완료: +${page.videos.size}개, next=${page.continuation?.take(40)}")
+                "loadMore 완료: +${page.videos.size}개, 총 ${totalCount}개, next=${nextContinuation?.take(40)}")
         }
     }
 
