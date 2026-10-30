@@ -131,8 +131,13 @@ object InnerTubeExtractor {
             }
 
             val useKeyless = client.name == "ANDROID_VR"
-            val endpoint = if (useKeyless) PLAYER_ENDPOINT else "$PLAYER_ENDPOINT?key=$API_KEY"
-            val conn = URL("$endpoint&prettyPrint=false").openConnection() as HttpURLConnection
+            val fullUrl = if (useKeyless) {
+                "$PLAYER_ENDPOINT?prettyPrint=false"
+            } else {
+                "$PLAYER_ENDPOINT?key=$API_KEY&prettyPrint=false"
+            }
+            sb.append("  url: ${fullUrl.take(80)}\n")
+            val conn = URL(fullUrl).openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("User-Agent", client.userAgent)
@@ -240,7 +245,8 @@ object InnerTubeExtractor {
                 debug = sb.toString()
             )
         } catch (e: Exception) {
-            sb.append("  err: ${e.message?.take(60)}\n")
+            sb.append("  ⚠ err: ${e.javaClass.simpleName}: ${e.message?.take(120)}\n")
+            android.util.Log.e(TAG, "${client.name} tryClient 예외", e)
             null
         }
     }

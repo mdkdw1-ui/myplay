@@ -130,6 +130,7 @@ object YouTubeStream {
             flog("B2 InnerTube 호출 직전: $videoId")
             val innerTube = InnerTubeExtractor.extract(videoId)
             flog("B3 InnerTube 복귀: hasAny=${innerTube.hasAny}")
+            flog("B3-debug: ${innerTube.debug.take(1200)}")
             if (innerTube.hasAny) {
                 sb.append("→ InnerTube OK (itag=${innerTube.audioItag})\n")
                 Log.d(TAG, "InnerTube 성공: audio=${innerTube.audioUrl?.take(50)}")
@@ -160,11 +161,9 @@ object YouTubeStream {
             // ★ Invidious 현재 완전 다운 → skip (타입 명시)
             val invDeferred: kotlinx.coroutines.Deferred<StreamResult?> =
                 kotlinx.coroutines.CompletableDeferred(null)
-            val npDeferred = async(Dispatchers.IO) {
-                try {
-                    withTimeoutOrNull(18000) { tryNewPipe(videoId, sb) }
-                } catch (e: Exception) { null }
-            }
+            // ★ 진단용: NewPipe 폴백 임시 비활성화
+            val npDeferred: kotlinx.coroutines.Deferred<StreamResult?> =
+                kotlinx.coroutines.CompletableDeferred(null)
 
             // ★ Piped 우선 (빠름)
             val piped = pipedDeferred.await()
