@@ -113,17 +113,16 @@ object YouTubeStream {
 
         // ★ 속도 우선순위: Piped → Invidious → NewPipe
         val result = coroutineScope {
-            val pipedDeferred = async(Dispatchers.IO) {
-                try {
-                    withTimeoutOrNull(3000) { tryPiped(videoId, sb) }
-                } catch (e: Exception) { null }
+            val pipedDeferred = async<StreamResult?>(Dispatchers.IO) {
+                // ★ Piped 완전 skip (8개 서버 timeout 방지)
+                null
             }
             // ★ Invidious 현재 완전 다운 → skip (타입 명시)
             val invDeferred: kotlinx.coroutines.Deferred<StreamResult?> =
                 kotlinx.coroutines.CompletableDeferred(null)
             val npDeferred = async(Dispatchers.IO) {
                 try {
-                    withTimeoutOrNull(25000) { tryNewPipe(videoId, sb) }
+                    withTimeoutOrNull(18000) { tryNewPipe(videoId, sb) }
                 } catch (e: Exception) { null }
             }
 
@@ -175,13 +174,10 @@ object YouTubeStream {
         }
         if (aliveServers.isEmpty()) return null
 
-        // ★ 로테이션은 살아있는 상위 3개 서버만 (죽은 서버 제외)
-        val liveServers = aliveServers.take(3)
+        // ★ 로테이션은 살아있는 상위 2개 서버만 (죽은 서버 시도 X)
+        val liveServers = aliveServers.take(2)
         val hashIdx = kotlin.math.abs(videoId.hashCode()) % liveServers.size
-        val rotated = liveServers.drop(hashIdx) + liveServers.take(hashIdx)
-        // 뒤에 나머지 서버를 폴백으로 추가
-        val remaining = aliveServers.drop(3)
-        val servers = (rotated + remaining).distinct()
+        val servers = liveServers.drop(hashIdx) + liveServers.take(hashIdx)
         sb.append("piped rotation: idx=$hashIdx, first=${servers.firstOrNull()?.take(40)}, total=${servers.size}\n")
 
         // ★ Piped 실패 곡 캐시 (다음엔 시도 skip)
