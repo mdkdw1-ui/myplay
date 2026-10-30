@@ -35,3 +35,10 @@ auto_create.log
 auto_create.sh
 __pycache__/
 *.pyc
+
+# 테스트 JSON (curl 응답)
+*.json
+!app/src/main/**/*.json
+/mweb.json
+/vr.json
+/vr2.json
