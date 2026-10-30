@@ -388,6 +388,47 @@ object YouTubeApiHelper {
             }
         }
 
+        // ★ [piped_fallback_from_inv] Invidious가 토큰을 안 줬으면 Piped로 우회
+        // (Invidious가 성공했고 토큰도 있으면 이 블록은 실행 안 됨)
+        Log.d(TAG, "Invidious 토큰 없음 → Piped 채널 시도")
+        for (inst in PIPED) {
+            val url = if (continuation.isNullOrBlank())
+                "$inst/channel/$realId"
+            else
+                "$inst/nextpage/channel/$realId?nextpage=${URLEncoder.encode(continuation, "UTF-8")}"
+            
+            val obj = getJsonObject(url) ?: continue
+            try {
+                val rel = obj.optJSONArray("relatedStreams") ?: continue
+                val out = mutableListOf<VideoItem>()
+                for (i in 0 until rel.length()) {
+                    val v = rel.getJSONObject(i)
+                    val u = v.optString("url", "")
+                    val id = u.substringAfter("/watch?v=", "").substringBefore("&")
+                    if (id.isBlank()) continue
+                    out.add(VideoItem(
+                        videoId = id,
+                        title = v.optString("title", ""),
+                        channel = v.optString("uploaderName", ""),
+                        thumbnail = v.optString("thumbnail", ""),
+                        duration = fmtSec(v.optInt("duration", 0)),
+                        viewCount = "",
+                        uploadDate = ""
+                    ))
+                }
+                if (out.isNotEmpty()) {
+                    var nextToken = obj.optString("nextpage", "")
+                    if (nextToken.isBlank()) {
+                        nextToken = findContinuationDeep(obj) ?: ""
+                    }
+                    Log.d(TAG, "Piped 채널 성공: ${out.size}개, next=${nextToken.take(40)}")
+                    return@withContext ChannelVideosPage(out, nextToken.takeIf { it.isNotBlank() })
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Piped 채널 오류: ${e.message}")
+            }
+        }
+
         ChannelVideosPage(emptyList(), null)
     }
 
