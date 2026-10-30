@@ -78,12 +78,8 @@ class ChannelActivity : AppCompatActivity() {
         }
 
         adapter = SearchAdapter { item ->
-            startActivity(Intent(this, PlayerActivity::class.java).apply {
-                putExtra("VIDEO_ID", item.videoId)
-                putExtra("VIDEO_TITLE", item.title)
-                putExtra("VIDEO_CHANNEL", item.channel)
-                putExtra("VIDEO_THUMB", item.thumbnail)
-            })
+            // ★ 동영상/음악 모드 선택 다이얼로그
+            PlayModeChooser.show(this, item)
         }
         recycler.layoutManager = GridLayoutManager(this, 2)
         recycler.adapter = adapter
