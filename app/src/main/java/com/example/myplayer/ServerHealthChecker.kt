@@ -25,7 +25,7 @@ object ServerHealthChecker {
     private const val KEY_PIPED = "alive_piped"
     private const val KEY_LAST_CHECK = "last_check"
 
-    private const val CHECK_INTERVAL = 12 * 60 * 60 * 1000L  // 12시간
+    private const val CHECK_INTERVAL = 6 * 60 * 60 * 1000L  // 6시간
 
     // 전체 서버 풀 (체크 대상)
     val ALL_INVIDIOUS = listOf(
@@ -66,7 +66,12 @@ object ServerHealthChecker {
         val saved = prefs.getStringSet(KEY_INVIDIOUS, null)
             ?.toList()
             ?: emptyList()
-        return if (saved.isNotEmpty()) saved else ALL_INVIDIOUS
+        return if (saved.isNotEmpty()) {
+            // ★ 살아있는 서버를 우선으로, 나머지는 폴백으로 뒤에 붙임
+            saved + ALL_INVIDIOUS.filter { it !in saved }
+        } else {
+            ALL_INVIDIOUS
+        }
     }
 
     suspend fun getAlivePiped(ctx: Context): List<String> {
@@ -75,7 +80,11 @@ object ServerHealthChecker {
         val saved = prefs.getStringSet(KEY_PIPED, null)
             ?.toList()
             ?: emptyList()
-        return if (saved.isNotEmpty()) saved else ALL_PIPED
+        return if (saved.isNotEmpty()) {
+            saved + ALL_PIPED.filter { it !in saved }
+        } else {
+            ALL_PIPED
+        }
     }
 
     /**
@@ -145,8 +154,8 @@ object ServerHealthChecker {
         withTimeoutOrNull(2500) {
             try {
                 val conn = URL("$server/api/v1/stats").openConnection() as HttpURLConnection
-                conn.connectTimeout = 1500
-                conn.readTimeout = 1500
+                conn.connectTimeout = 2000
+                conn.readTimeout = 2000
                 conn.requestMethod = "GET"
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0")
                 val code = conn.responseCode
@@ -166,8 +175,8 @@ object ServerHealthChecker {
         withTimeoutOrNull(2500) {
             try {
                 val conn = URL("$server/healthcheck").openConnection() as HttpURLConnection
-                conn.connectTimeout = 1500
-                conn.readTimeout = 1500
+                conn.connectTimeout = 2000
+                conn.readTimeout = 2000
                 conn.requestMethod = "GET"
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0")
                 val code = conn.responseCode
