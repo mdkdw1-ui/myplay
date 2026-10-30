@@ -71,8 +71,137 @@ object YouTubeSearch {
         }
     }
     suspend fun searchPage(query: String, filter: SearchFilter? = null): SearchPage = withContext(Dispatchers.IO) {
+        try {
+            val result = youTubeApiSearch(query, null)
+            if (result.videos.isNotEmpty()) {
+                return@withContext result
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "YouTube API 검색 실패: ${e.message}")
+        }
+        // 폴백: Piped
         val page = YouTubeApiHelper.searchVideosPage(query, null)
         SearchPage(page.videos, page.continuation)
+    }
+
+    /** YouTube API 직접 검색 (youtubei/v1/search) */
+    private fun youTubeApiSearch(query: String, continuation: String?): SearchPage {
+        try {
+            val body = JSONObject().apply {
+                put("context", JSONObject().apply {
+                    put("client", JSONObject().apply {
+                        put("clientName", "WEB")
+                        put("clientVersion", "2.20250101.00.00")
+                        put("hl", "ko")
+                        put("gl", "KR")
+                    })
+                })
+                if (continuation != null) {
+                    put("continuation", continuation)
+                } else {
+                    put("query", query)
+                }
+            }
+
+            val conn = URL("$ENDPOINT?key=$API_KEY&prettyPrint=false").openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
+            conn.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9")
+            conn.setRequestProperty("Origin", "https://www.youtube.com")
+            conn.doOutput = true
+            conn.connectTimeout = 15000
+            conn.readTimeout = 15000
+            conn.outputStream.use { it.write(body.toString().toByteArray()) }
+
+            if (conn.responseCode !in 200..299) return SearchPage(emptyList(), null)
+
+            val response = conn.inputStream.bufferedReader().use(BufferedReader::readText)
+            val json = JSONObject(response)
+
+            val videos = mutableListOf<VideoItem>()
+            extractVideosFromSearch(json, videos)
+            val nextCont = findContinuation(json)
+
+            Log.d(TAG, "YouTube API 검색: ${videos.size}개, next=${nextCont?.take(20)}")
+            return SearchPage(videos, nextCont)
+        } catch (e: Exception) {
+            Log.e(TAG, "youTubeApiSearch err: ${e.message}", e)
+            return SearchPage(emptyList(), null)
+        }
+    }
+
+    /** 검색 응답에서 영상 추출 */
+    private fun extractVideosFromSearch(node: Any?, out: MutableList<VideoItem>) {
+        when (node) {
+            is JSONObject -> {
+                node.optJSONObject("videoRenderer")?.let { v ->
+                    val vid = v.optString("videoId", "")
+                    if (vid.isNotBlank() && out.none { it.videoId == vid }) {
+                        val title = v.optJSONObject("title")?.let { t ->
+                            t.optString("simpleText").ifBlank {
+                                t.optJSONArray("runs")?.optJSONObject(0)?.optString("text", "") ?: ""
+                            }
+                        } ?: ""
+                        val channel = v.optJSONObject("ownerText")?.let { o ->
+                            o.optJSONArray("runs")?.optJSONObject(0)?.optString("text", "") ?: ""
+                        } ?: ""
+                        val thumb = v.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
+                            ?.let { it.optJSONObject(it.length() - 1)?.optString("url", "") }
+                            ?: "https://i.ytimg.com/vi/$vid/mqdefault.jpg"
+                        val dur = v.optJSONObject("lengthText")?.optString("simpleText", "") ?: ""
+                        val views = v.optJSONObject("viewCountText")?.optString("simpleText", "") ?: ""
+                        val upload = v.optJSONObject("publishedTimeText")?.optString("simpleText", "") ?: ""
+                        out.add(VideoItem(vid, title, channel, thumb, dur, views, upload))
+                    }
+                }
+                node.optJSONObject("lockupViewModel")?.let { lv ->
+                    val vid = lv.optString("contentId", "")
+                    if (vid.length == 11 && out.none { it.videoId == vid }) {
+                        val meta = lv.optJSONObject("metadata")?.optJSONObject("lockupMetadataViewModel")
+                        val title = meta?.optJSONObject("title")?.optString("content", "") ?: ""
+                        val channel = meta?.optJSONObject("metadata")
+                            ?.optJSONObject("contentMetadataViewModel")
+                            ?.optJSONArray("metadataRows")?.optJSONObject(0)
+                            ?.optJSONArray("metadataParts")?.optJSONObject(0)
+                            ?.optJSONObject("text")?.optString("content", "") ?: ""
+                        val thumb = "https://i.ytimg.com/vi/$vid/mqdefault.jpg"
+                        out.add(VideoItem(vid, title, channel, thumb))
+                    }
+                }
+                val keys = node.keys()
+                while (keys.hasNext()) {
+                    extractVideosFromSearch(node.opt(keys.next()), out)
+                }
+            }
+            is JSONArray -> for (i in 0 until node.length()) extractVideosFromSearch(node.opt(i), out)
+        }
+    }
+
+    /** continuation 추출 */
+    private fun findContinuation(node: Any?): String? {
+        when (node) {
+            is JSONObject -> {
+                node.optJSONObject("continuationItemRenderer")?.let { cir ->
+                    val token = cir.optJSONObject("continuationEndpoint")
+                        ?.optJSONObject("continuationCommand")
+                        ?.optString("token")
+                    if (!token.isNullOrBlank()) return token
+                }
+                val keys = node.keys()
+                while (keys.hasNext()) {
+                    val r = findContinuation(node.opt(keys.next()))
+                    if (r != null) return r
+                }
+            }
+            is JSONArray -> for (i in 0 until node.length()) {
+                val r = findContinuation(node.opt(i))
+                if (r != null) return r
+            }
+        }
+        return null
     }
 
     /**
@@ -110,6 +239,15 @@ object YouTubeSearch {
     }
 
     suspend fun searchMore(query: String, continuation: String): SearchPage = withContext(Dispatchers.IO) {
+        try {
+            val result = youTubeApiSearch(query, continuation)
+            if (result.videos.isNotEmpty() || result.continuation != null) {
+                return@withContext result
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "YouTube API 다음페이지 실패: ${e.message}")
+        }
+        // 폴백: Piped
         val page = YouTubeApiHelper.searchVideosPage(query, continuation)
         SearchPage(page.videos, page.continuation)
     }
