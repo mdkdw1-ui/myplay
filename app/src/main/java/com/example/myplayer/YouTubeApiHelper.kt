@@ -65,8 +65,10 @@ object YouTubeApiHelper {
     )
 
     val PIPED = listOf(
+        // ✅ curl 검증된 살아있는 서버 (2~3초 응답)
         "https://api.piped.private.coffee",
         "https://pipedapi.ducks.party",
+        // ⚠️ 폴백 (응답 불안정하지만 시도)
         "https://pipedapi.adminforge.de",
         "https://pipedapi.kavin.rocks",
         "https://pipedapi.drgns.space",
