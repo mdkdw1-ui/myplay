@@ -65,11 +65,15 @@ object YouTubeApiHelper {
     )
 
     val PIPED = listOf(
-        "https://api.piped.private.coffee",     // ⚠️ 봇 차단 가능
+        "https://api.piped.private.coffee",
+        "https://pipedapi.ducks.party",
+        "https://api.piped.projectsegfau.lt",
         "https://pipedapi.adminforge.de",
         "https://pipedapi.kavin.rocks",
         "https://pipedapi.drgns.space",
-        "https://pipedapi.ducks.party"
+        "https://pipedapi.nosebs.ru",
+        "https://pipedapi.reallyaweso.me",
+        "https://pipedapi.leptons.xyz"
     )
 
     // ═══════════════════════════════════════════════
