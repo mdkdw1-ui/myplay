@@ -131,6 +131,19 @@ object YouTubeStream {
             val innerTube = InnerTubeExtractor.extract(videoId)
             flog("B3 InnerTube 복귀: hasAny=${innerTube.hasAny}")
             flog("B3-debug: ${innerTube.debug.take(1200)}")
+            if (!innerTube.hasAny &&
+                (innerTube.debug.contains("HARD_FAIL:") ||
+                 innerTube.debug.contains("LOGIN_REQUIRED") ||
+                 innerTube.debug.contains("UNPLAYABLE"))) {
+                flog("⚡ hard-fail 감지 → 폴백 스킵")
+                val r = StreamResult(
+                    videoUrl = null, audioUrl = null, muxedUrl = null,
+                    title = "", channelName = "", description = "",
+                    debug = innerTube.debug
+                )
+                putCache(videoId, r)
+                return@withContext r
+            }
             if (innerTube.hasAny) {
                 sb.append("→ InnerTube OK (itag=${innerTube.audioItag})\n")
                 Log.d(TAG, "InnerTube 성공: audio=${innerTube.audioUrl?.take(50)}")

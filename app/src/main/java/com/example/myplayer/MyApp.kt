@@ -17,6 +17,18 @@ class MyApp : Application() {
             //   → 시스템 DNS 리졸버 사용 (제거)
         } catch (_: Exception) {}
 
+        // ★★★ 진단: visitorData 강제 리셋 (1회)
+        try {
+            val pref = getSharedPreferences("app_prefs", MODE_PRIVATE)
+            val version = pref.getInt("vd_reset_version", 0)
+            if (version < 1) {
+                YouTubeVisitorData.save(applicationContext, "")
+                getSharedPreferences("yt_cookie_pref", MODE_PRIVATE).edit().clear().apply()
+                pref.edit().putInt("vd_reset_version", 1).apply()
+                android.util.Log.d("MyApp", "visitorData + cookie 강제 리셋")
+            }
+        } catch (_: Exception) {}
+
         // ★ visitorData 미리 획득
         try {
             kotlinx.coroutines.GlobalScope.launch(
