@@ -18,49 +18,33 @@ import java.io.StringWriter
 class CrashInitProvider : ContentProvider() {
 
     override fun onCreate(): Boolean {
-        val prev = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            try {
-                val sw = StringWriter()
-                throwable.printStackTrace(PrintWriter(sw))
-                val content = "=== Crash ${java.util.Date()} ===\n$sw"
-
-                // 1) 내부 파일
+        try {
+            val prev = Thread.getDefaultUncaughtExceptionHandler()
+            Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
                 try {
-                    context?.let { File(it.filesDir, "crash_log.txt").writeText(content) }
-                } catch (_: Exception) {}
-
-                // 2) 공용 Downloads
-                try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        val values = ContentValues().apply {
-                            put(MediaStore.Downloads.DISPLAY_NAME, "myplayer_crash_log.txt")
-                            put(MediaStore.Downloads.MIME_TYPE, "text/plain")
-                            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                            put(MediaStore.Downloads.IS_PENDING, 1)
-                        }
-                        val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                        val uri = context?.contentResolver?.insert(collection, values)
-                        uri?.let {
-                            context?.contentResolver?.openOutputStream(it)?.use { out ->
-                                out.write(content.toByteArray())
-                            }
-                            values.clear()
-                            values.put(MediaStore.Downloads.IS_PENDING, 0)
-                            context?.contentResolver?.update(it, values, null, null)
-                        }
-                    } else {
+                    val sw = StringWriter()
+                    throwable.printStackTrace(PrintWriter(sw))
+                    val content = "=== Crash ${java.util.Date()} ===\n$sw"
+                    
+                    // 여러 위치에 저장 시도 (각각 실패해도 계속)
+                    try {
+                        context?.let { File(it.filesDir, "crash_log.txt").writeText(content) }
+                    } catch (_: Exception) {}
+                    
+                    try {
+                        val ctx = context ?: MyApp.instance.applicationContext
                         @Suppress("DEPRECATION")
-                        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                        dir.mkdirs()
-                        File(dir, "myplayer_crash_log.txt").writeText(content)
-                    }
+                        val dl = Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOWNLOADS)
+                        dl.mkdirs()
+                        File(dl, "myplayer_crash_log.txt").writeText(content)
+                    } catch (_: Exception) {}
                 } catch (_: Exception) {}
-            } catch (_: Exception) {}
-
-            prev?.uncaughtException(thread, throwable)
-                ?: android.os.Process.killProcess(android.os.Process.myPid())
-        }
+                
+                prev?.uncaughtException(thread, throwable)
+                    ?: android.os.Process.killProcess(android.os.Process.myPid())
+            }
+        } catch (_: Exception) {}
         return true
     }
 
