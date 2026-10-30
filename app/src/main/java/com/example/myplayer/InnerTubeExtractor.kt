@@ -157,6 +157,12 @@ object InnerTubeExtractor {
             
             // ★ 쿠키 + visitorData (CookieUtil이 UA를 덮어쓰므로 아래에서 다시 설정)
             try { CookieUtil.apply(conn) } catch (_: Exception) {}
+            try {
+                val cookieHeader = conn.getRequestProperty("Cookie")
+                val authHeader = conn.getRequestProperty("Authorization")
+                sb.append("  cookie: ${if (cookieHeader.isNullOrBlank()) "(none)" else cookieHeader.take(50) + "..."}\n")
+                sb.append("  auth: ${if (authHeader.isNullOrBlank()) "(none)" else authHeader.take(40) + "..."}\n")
+            } catch (_: Exception) {}
             // ★★★ CookieUtil.apply 이후 클라이언트 UA/헤더 재설정 (덮어쓰기 방지)
             conn.setRequestProperty("User-Agent", client.userAgent)
             conn.setRequestProperty("X-YouTube-Client-Name", client.clientNameHeader)
