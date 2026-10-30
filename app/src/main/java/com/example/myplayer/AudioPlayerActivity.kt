@@ -1201,7 +1201,9 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
             extractInProgress = false
             diag("extractAudioOnly($videoId)")
-            diag("  debug=${result.debug.take(200)}")
+            diag("  debug=${result.debug.take(800)}")
+            diag("  audioUrl=${result.audioUrl?.take(80)}")
+            diag("  muxedUrl=${result.muxedUrl?.take(80)}")
 
             if (result.isLive) {
                 android.util.Log.d("AudioPlayer", "skip LIVE: $videoId")
