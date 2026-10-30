@@ -90,6 +90,15 @@ object InnerTubeExtractor {
             flog("C2 tryClient[$idx] 시작: ${client.name}")
             val result = tryClient(videoId, client, sb)
             flog("C3 tryClient[$idx] 복귀: ${client.name} hasAny=${result?.hasAny}")
+            if (result != null && result.debug.startsWith("HARD_FAIL:")) {
+                sb.append("⚡ ${client.name} → ${result.debug} (다른 클라이언트 skip)\n")
+                return@withContext StreamData(
+                    audioUrl = null, audioBitrate = 0, audioItag = 0,
+                    muxedUrl = null, muxedItag = 0,
+                    title = "", channel = "", durationMs = 0,
+                    debug = sb.toString()
+                )
+            }
             if (result != null && result.hasAny) {
                 Log.d(TAG, "✅ 성공: ${client.name} (${result.audioUrl != null || result.muxedUrl != null})")
                 return@withContext result
@@ -146,8 +155,15 @@ object InnerTubeExtractor {
             conn.setRequestProperty("X-YouTube-Client-Name", client.clientNameHeader)
             conn.setRequestProperty("X-YouTube-Client-Version", client.version)
             
-            // ★ 쿠키 + visitorData (ydpy와 동일)
+            // ★ 쿠키 + visitorData (CookieUtil이 UA를 덮어쓰므로 아래에서 다시 설정)
             try { CookieUtil.apply(conn) } catch (_: Exception) {}
+            // ★★★ CookieUtil.apply 이후 클라이언트 UA/헤더 재설정 (덮어쓰기 방지)
+            conn.setRequestProperty("User-Agent", client.userAgent)
+            conn.setRequestProperty("X-YouTube-Client-Name", client.clientNameHeader)
+            conn.setRequestProperty("X-YouTube-Client-Version", client.version)
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("Origin", "https://www.youtube.com")
+            conn.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9")
             try {
                 val vd = com.example.myplayer.YouTubeVisitorData.load(MyApp.instance)
                 if (vd.isNotBlank()) {
@@ -155,6 +171,7 @@ object InnerTubeExtractor {
                     sb.append("  visitorData: ${vd.take(20)}\n")
                 }
             } catch (_: Exception) {}
+            sb.append("  UA: ${client.userAgent.take(50)}\n")
             
             conn.doOutput = true
             conn.connectTimeout = 2500
@@ -174,6 +191,14 @@ object InnerTubeExtractor {
             sb.append("  status: $status\n")
             if (status != "OK") {
                 sb.append("  reason: ${playability?.optString("reason")?.take(80)}\n")
+                if (status == "LOGIN_REQUIRED" || status == "UNPLAYABLE" || status == "ERROR") {
+                    return StreamData(
+                        audioUrl = null, audioBitrate = 0, audioItag = 0,
+                        muxedUrl = null, muxedItag = 0,
+                        title = "", channel = "", durationMs = 0,
+                        debug = "HARD_FAIL:$status"
+                    )
+                }
                 return null
             }
 
