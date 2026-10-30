@@ -67,7 +67,6 @@ object YouTubeApiHelper {
     val PIPED = listOf(
         "https://api.piped.private.coffee",
         "https://pipedapi.ducks.party",
-        "https://api.piped.projectsegfau.lt",
         "https://pipedapi.adminforge.de",
         "https://pipedapi.kavin.rocks",
         "https://pipedapi.drgns.space",
