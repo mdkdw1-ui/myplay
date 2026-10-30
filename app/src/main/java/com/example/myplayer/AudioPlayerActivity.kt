@@ -515,31 +515,15 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun prefetchNext() {
-        // ★★★ local 모드 → YouTube 검색 안 함
+        private fun prefetchNext() {
         if (isLocalMode) {
             diag("prefetch: local 모드 → skip")
             return
         }
-
-        // ★ 서비스 정지 상태면 prefetch 금지
         if (pref?.getBoolean("service_stopped", false) == true) {
             diag("prefetch: service_stopped=true → skip")
             return
         }
-
-        // ★★★ 큐에 이미 5곡 이상 있으면 라디오 검색 skip (뒤죽박죽 방지)
-        try {
-            val q = QueueManager.get(this)
-            val idx = q.indexOfFirst { it.videoId == currentVideoId }
-            val afterCount = if (idx >= 0) q.size - idx - 1 else 0
-            if (afterCount >= 5) {
-                diag("prefetch: 큐에 ${afterCount}곡 남음 → skip (이미 충분)")
-                // 다음 곡 스트림만 미리 캐싱
-                prefetchNextStreamOnly()
-                return
-            }
-        } catch (_: Exception) {}
 
         prefetchJob?.cancel()
         prefetchJob = bgScope.launch {
@@ -549,124 +533,108 @@ class AudioPlayerActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                diag("prefetch: 즉시 시작")
-
-                // ★ 1순위: 큐의 다음 곡
                 val queue = QueueManager.get(this@AudioPlayerActivity)
                 val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
-                diag("prefetch: queue=${queue.size} curIdx=$curIdx current=$currentVideoId")
-
-                val next: HomeVideo? = if (curIdx >= 0 && curIdx < queue.size - 1) {
-                    // 실패 곡 건너뛰기
-                    var nextIdx = curIdx + 1
-                    while (nextIdx < queue.size && queue[nextIdx].videoId in failedIds) {
-                        nextIdx++
-                    }
-                    if (nextIdx < queue.size) {
-                        val q = queue[nextIdx]
-                        diag("prefetch: 큐 다음 곡 → ${q.videoId} (${q.title.take(30)})")
-                        q
-                    } else null
-                } else null
-
-                // ★ 2순위: 큐 끝 → 유튜브 radio/artist
-                val target: HomeVideo? = next ?: run {
-                    diag("prefetch: 큐 끝 → 유튜브 병렬 검색")
-                    val artistName = currentArtist.ifBlank { currentChannel }
-                    val radioDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
-                        try {
-                            kotlinx.coroutines.withTimeoutOrNull(5_000) {
-                                YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
-                            } ?: emptyList()
-                        } catch (_: Exception) { emptyList() }
-                    }
-                    val artistDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
-                        try {
-                            kotlinx.coroutines.withTimeoutOrNull(5_000) {
-                                if (artistName.isNotBlank())
-                                    YouTubeArtist.fetchSongs(artistName, currentVideoId)
-                                else emptyList<VideoItem>()
-                            } ?: emptyList()
-                        } catch (_: Exception) { emptyList() }
-                    }
-                    val radioList = radioDeferred.await()
-                    val artistList = artistDeferred.await()
-                    val combined = (radioList + artistList)
-                        .distinctBy { it.videoId }
-                        .filter { it.videoId != currentVideoId && it.videoId !in failedIds }
-
-                    // ★★★ 라디오에서 찾은 곡 10개를 한꺼번에 QueueManager에 추가 (순서 고정)
-                    if (next == null && combined.isNotEmpty()) {
-                        val toAdd = combined.take(10)
-                        for (v in toAdd) {
-                            val hv = HomeVideo(v.videoId, v.title, v.channel, v.thumbnail)
-                            QueueManager.add(this@AudioPlayerActivity, hv)
+                
+                // ★ 큐에 다음 3곡 미리 캐시 (병렬)
+                val toPrefetch = mutableListOf<HomeVideo>()
+                if (curIdx >= 0) {
+                    for (i in (curIdx + 1) until minOf(curIdx + 4, queue.size)) {
+                        val item = queue[i]
+                        if (item.videoId !in failedIds && !prefetchedStreams.containsKey(item.videoId)) {
+                            toPrefetch.add(item)
                         }
-                        diag("라디오 픽 ${toAdd.size}곡을 큐에 한꺼번에 추가")
-                        val firstPick = toAdd.first()
-                        HomeVideo(firstPick.videoId, firstPick.title, firstPick.channel, firstPick.thumbnail)
-                    } else null
-                }
-
-                if (target == null) {
-                    diag("prefetch: 다음 곡 없음")
-                    return@launch
-                }
-
-                if (prefetchedStreams.containsKey(target.videoId)) {
-                    diag("prefetch: 이미 캐시됨 → skip")
-                    // ★ 이미 캐시면 ExoPlayer에 addMediaItem
-                    addToExoQueue(target, prefetchedStreams[target.videoId]!!)
-                    return@launch
-                }
-
-                // ★ 스트림 추출
-                val result = kotlinx.coroutines.withTimeoutOrNull(15_000) {
-                    YouTubeStream.extractAudioOnly(target.videoId)
-                } ?: return@launch
-
-                if (result.hasAny) {
-                    prefetchedStreams[target.videoId] = result
-                    diag("prefetch 완료: ${target.videoId} (${target.title.take(30)})")
-                    // ★ addToExoQueue 완전 제거 (조기 재생 방지)
-                    // ★★ nextPreviewList 갱신 (다음 곡 미리보기용)
-                    synchronized(nextPreviewList) {
-                        nextPreviewList.removeAll { it.videoId == target.videoId }
-                        nextPreviewList.add(0, target)
-                        while (nextPreviewList.size > 10) {
-                            nextPreviewList.removeAt(nextPreviewList.size - 1)
-                        }
-                        diag("nextPreviewList +: ${target.title.take(30)} (총 ${nextPreviewList.size})")
                     }
-
-                    // ★ 다음다음 곡도 미리 준비 (2곡 prefetch)
-                    try {
-                        val q = QueueManager.get(this@AudioPlayerActivity)
-                        val tIdx = q.indexOfFirst { it.videoId == target.videoId }
-                        if (tIdx >= 0 && tIdx < q.size - 1) {
-                            val next2 = q[tIdx + 1]
-                            if (!prefetchedStreams.containsKey(next2.videoId) &&
-                                next2.videoId !in failedIds) {
-                                bgScope.launch {
-                                    try {
-                                        val r2 = kotlinx.coroutines.withTimeoutOrNull(15_000) {
-                                            YouTubeStream.extractAudioOnly(next2.videoId)
-                                        }
-                                        if (r2 != null && r2.hasAny) {
-                                            prefetchedStreams[next2.videoId] = r2
-                                            diag("prefetch(2) 완료: ${next2.videoId}")
-                                        }
-                                    } catch (_: Exception) {}
+                }
+                
+                // ★ 큐가 부족하면 라디오 검색을 병렬로 (곡 끝나기 전에 준비)
+                if (toPrefetch.isEmpty() || curIdx >= queue.size - 2) {
+                    diag("prefetch: 큐 부족 → 라디오 병렬 검색 시작")
+                    bgScope.launch {
+                        try {
+                            fillQueueFromRadio()
+                        } catch (e: Exception) {
+                            diag("fillQueue err: ${e.message}")
+                        }
+                    }
+                }
+                
+                // ★ 큐의 다음 곡들 병렬 캐시
+                if (toPrefetch.isNotEmpty()) {
+                    diag("prefetch: ${toPrefetch.size}곡 병렬 캐시 시작")
+                    toPrefetch.forEach { item ->
+                        bgScope.launch {
+                            try {
+                                if (prefetchedStreams.containsKey(item.videoId)) return@launch
+                                val result = kotlinx.coroutines.withTimeoutOrNull(15_000) {
+                                    YouTubeStream.extractAudioOnly(item.videoId)
+                                } ?: return@launch
+                                if (result.hasAny) {
+                                    prefetchedStreams[item.videoId] = result
+                                    diag("prefetch 완료: ${item.videoId} (${item.title.take(20)})")
                                 }
-                            }
+                            } catch (_: Exception) {}
                         }
-                    } catch (_: Exception) {}
+                    }
                 }
             } catch (e: Exception) {
                 diag("prefetch err: ${e.message}")
             }
         }
     }
+    
+    /** 큐가 부족할 때 라디오에서 채우기 (병렬 소스) */
+    private suspend fun fillQueueFromRadio() {
+        val artistName = currentArtist.ifBlank { currentChannel }
+        
+        val radioDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                    YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
+                } ?: emptyList()
+            } catch (_: Exception) { emptyList() }
+        }
+        val artistDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                    if (artistName.isNotBlank())
+                        YouTubeArtist.fetchSongs(artistName, currentVideoId)
+                    else emptyList()
+                } ?: emptyList()
+            } catch (_: Exception) { emptyList() }
+        }
+        
+        val radioList = radioDeferred.await()
+        val artistList = artistDeferred.await()
+        val combined = (radioList + artistList)
+            .distinctBy { it.videoId }
+            .filter { it.videoId != currentVideoId && it.videoId !in failedIds }
+            .take(10)
+        
+        if (combined.isNotEmpty()) {
+            for (v in combined) {
+                val hv = HomeVideo(v.videoId, v.title, v.channel, v.thumbnail)
+                QueueManager.add(this@AudioPlayerActivity, hv)
+            }
+            diag("라디오 ${combined.size}곡 큐 추가")
+            
+            // ★ 추가된 곡 즉시 병렬 캐시
+            combined.take(3).forEach { v ->
+                bgScope.launch {
+                    try {
+                        val result = kotlinx.coroutines.withTimeoutOrNull(15_000) {
+                            YouTubeStream.extractAudioOnly(v.videoId)
+                        } ?: return@launch
+                        if (result.hasAny) {
+                            prefetchedStreams[v.videoId] = result
+                            diag("라디오 prefetch: ${v.videoId} (${v.title.take(20)})")
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+    }
+
 
     /** ★ 비활성화: ExoPlayer 큐에 미리 추가하지 않음 (조기 재생 방지) */
     private fun addToExoQueue(target: HomeVideo, result: YouTubeStream.StreamResult) {
@@ -1301,11 +1269,9 @@ class AudioPlayerActivity : AppCompatActivity() {
             addToHistory(videoId, currentTitle, currentChannel, currentThumb)
             failedIds.remove(videoId)
 
-            delay(500)
+            // ★★★ 재생 시작과 동시에 prefetch (지연 없이)
             attachEqualizer()
             loadingNext = false
-
-            // ★★★ 초기 로드 후 즉시 prefetch (재생목록 미리 채움)
             try { prefetchNext() } catch (_: Exception) {}
         }
     }
