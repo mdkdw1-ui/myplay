@@ -521,6 +521,17 @@ class AudioPlayerActivity : AppCompatActivity() {
             diag("prefetch: local 모드 → skip")
             return
         }
+        
+        // ★ 다운로드된 곡은 프리페치 필요 없음 (로컬 즉시 재생)
+        bgScope.launch {
+            try {
+                val dao = HistoryDatabase.get(applicationContext).downloadDao()
+                val downloaded = dao.getAllOnce().filter { it.isAudioOnly }.map { it.videoId }.toSet()
+                if (downloaded.isNotEmpty()) {
+                    diag("prefetch: 다운로드된 곡 ${downloaded.size}개 (로컬 우선)")
+                }
+            } catch (_: Exception) {}
+        }
         if (pref?.getBoolean("service_stopped", false) == true) {
             diag("prefetch: service_stopped=true → skip")
             return
