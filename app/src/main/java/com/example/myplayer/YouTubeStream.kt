@@ -118,10 +118,9 @@ object YouTubeStream {
                     withTimeoutOrNull(3000) { tryPiped(videoId, sb) }
                 } catch (e: Exception) { null }
             }
-            // ★ Invidious 현재 완전 다운 → skip (1.5초 절약)
-            val invDeferred = async(Dispatchers.IO) {
-                null
-            }
+            // ★ Invidious 현재 완전 다운 → skip (타입 명시)
+            val invDeferred: kotlinx.coroutines.Deferred<StreamResult?> =
+                kotlinx.coroutines.CompletableDeferred(null)
             val npDeferred = async(Dispatchers.IO) {
                 try {
                     withTimeoutOrNull(25000) { tryNewPipe(videoId, sb) }
