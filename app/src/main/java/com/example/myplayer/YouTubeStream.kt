@@ -118,10 +118,9 @@ object YouTubeStream {
                     withTimeoutOrNull(3000) { tryPiped(videoId, sb) }
                 } catch (e: Exception) { null }
             }
+            // ★ Invidious 현재 완전 다운 → skip (1.5초 절약)
             val invDeferred = async(Dispatchers.IO) {
-                try {
-                    withTimeoutOrNull(1500) { tryInvidious(videoId, sb) }
-                } catch (e: Exception) { null }
+                null
             }
             val npDeferred = async(Dispatchers.IO) {
                 try {
@@ -177,11 +176,22 @@ object YouTubeStream {
         }
         if (aliveServers.isEmpty()) return null
 
-        // ★ videoId 해시로 서버 로테이션 (부하 분산)
-        val hashIdx = kotlin.math.abs(videoId.hashCode()) % aliveServers.size
-        val rotated = aliveServers.drop(hashIdx) + aliveServers.take(hashIdx)
-        val servers = rotated
-        sb.append("piped rotation: idx=$hashIdx, first=${servers.firstOrNull()?.take(40)}\n")
+        // ★ 로테이션은 살아있는 상위 3개 서버만 (죽은 서버 제외)
+        val liveServers = aliveServers.take(3)
+        val hashIdx = kotlin.math.abs(videoId.hashCode()) % liveServers.size
+        val rotated = liveServers.drop(hashIdx) + liveServers.take(hashIdx)
+        // 뒤에 나머지 서버를 폴백으로 추가
+        val remaining = aliveServers.drop(3)
+        val servers = (rotated + remaining).distinct()
+        sb.append("piped rotation: idx=$hashIdx, first=${servers.firstOrNull()?.take(40)}, total=${servers.size}\n")
+
+        // ★ Piped 실패 곡 캐시 (다음엔 시도 skip)
+        val pipedFailed = MyApp.instance.getSharedPreferences("piped_fail", android.content.Context.MODE_PRIVATE)
+            .getStringSet("failed", emptySet()) ?: emptySet()
+        if (videoId in pipedFailed) {
+            sb.append("piped skip (previously failed): $videoId\n")
+            return null
+        }
 
         for (inst in servers) {
             try {
@@ -189,7 +199,25 @@ object YouTubeStream {
                 conn.connectTimeout = 2000
                 conn.readTimeout = 5000
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-                if (conn.responseCode !in 200..299) continue
+                if (conn.responseCode !in 200..299) {
+                    // ★ 500 등 실패 → 캐시 저장
+                    if (conn.responseCode in 400..599) {
+                        try {
+                            val failPref = MyApp.instance.getSharedPreferences("piped_fail", android.content.Context.MODE_PRIVATE)
+                            val existing = failPref.getStringSet("failed", mutableSetOf())?.toMutableSet() ?: mutableSetOf()
+                            existing.add(videoId)
+                            // 최대 100개 유지
+                            if (existing.size > 100) {
+                                val sorted = existing.take(100).toSet()
+                                failPref.edit().putStringSet("failed", sorted).apply()
+                            } else {
+                                failPref.edit().putStringSet("failed", existing).apply()
+                            }
+                            sb.append("piped fail cached: $videoId (code=${conn.responseCode})\n")
+                        } catch (_: Exception) {}
+                    }
+                    continue
+                }
                 val json = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
 
                 val title = json.optString("title", "")
