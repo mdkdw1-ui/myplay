@@ -1187,6 +1187,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 } catch (_: Exception) {}
             }
 
+            diag("⏩ extractAudioOnly 진입: $videoId (cacheSize=${prefetchedStreams.size})")
             extractInProgress = true
             val prefetched = prefetchedStreams.remove(videoId)
             val result = if (prefetched != null) {
@@ -1194,7 +1195,21 @@ class AudioPlayerActivity : AppCompatActivity() {
                 prefetched
             } else {
                 try {
-                    YouTubeStream.extractAudioOnly(videoId)
+                    val r = kotlinx.coroutines.withTimeoutOrNull(25_000) {
+                        YouTubeStream.extractAudioOnly(videoId)
+                    }
+                    if (r == null) {
+                        diag("❌ extract 25초 타임아웃: $videoId")
+                        runOnUiThread {
+                            Toast.makeText(this@AudioPlayerActivity,
+                                "스트림 추출 타임아웃 → 다음 곡", Toast.LENGTH_SHORT).show()
+                        }
+                        loadingNext = false
+                        bgScope.launch { delay(300); trySkipToNextInQueue(videoId) }
+                        return@launch
+                    }
+                    diag("⏪ extractAudioOnly 종료: $videoId")
+                    r
                 } finally {
                     extractInProgress = false
                 }
