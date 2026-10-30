@@ -59,20 +59,7 @@ object InnerTubeExtractor {
             userAgent = "Mozilla/5.0 (PlayStation; PlayStation 5/2.26) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0 Safari/605.1.15",
             clientNameHeader = "7"
         ),
-        // 3순위: WEB (일반 웹)
-        ClientInfo(
-            name = "WEB",
-            version = "2.20250101.00.00",
-            userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-            clientNameHeader = "1"
-        ),
-        // 4순위: ANDROID_VR (오큘러스)
-        ClientInfo(
-            name = "ANDROID_VR",
-            version = "1.60.19",
-            userAgent = "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12; en_US; Quest 3) gzip",
-            clientNameHeader = "28"
-        )
+        // (WEB, ANDROID_VR 제거 — LOGIN_REQUIRED 확인)
     )
 
     /**
@@ -142,8 +129,8 @@ object InnerTubeExtractor {
             } catch (_: Exception) {}
             
             conn.doOutput = true
-            conn.connectTimeout = 5000
-            conn.readTimeout = 8000
+            conn.connectTimeout = 3000
+            conn.readTimeout = 5000
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
 
             val code = conn.responseCode
