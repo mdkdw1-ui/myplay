@@ -556,7 +556,12 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
 
-        prefetchJob?.cancel()
+        // ★ 이미 실행 중이면 skip (중복 방지)
+        if (prefetchJob?.isActive == true) {
+            diag("prefetch: 이미 실행 중 → skip")
+            return
+        }
+        
         prefetchJob = bgScope.launch {
             try {
                 if (extractInProgress) {
@@ -605,8 +610,8 @@ class AudioPlayerActivity : AppCompatActivity() {
                                     diag("prefetch 중단 (캐시 가득: ${prefetchedStreams.size})")
                                     break
                                 }
-                                // ★ 첫 곡은 최우선으로 빠르게, 나머지는 짧은 대기
-                                if (idx > 0) delay(300)
+                                // ★ 첫 곡은 빠르게, 나머지는 Piped 부하 고려 (1초 간격)
+                                if (idx > 0) delay(1000)
                                 
                                 diag("prefetch 시작[$idx]: ${item.videoId}")
                                 val result = kotlinx.coroutines.withTimeoutOrNull(20_000) {
@@ -2451,10 +2456,10 @@ class AudioPlayerActivity : AppCompatActivity() {
                 isDragging = false
                 val dur = mc.duration
                 if (dur > 0) mc.seekTo((dur * (sb?.progress ?: 0) / 1000))
-                // ★ 프리페치 트리거 (90% 또는 30초 이상 남았을 때)
+                // ★ 프리페치 트리거: 캐시가 2곡 미만일 때만 (중복 방지)
                 val pos = sb?.progress ?: 0
-                if (pos >= 500) {
-                    diag("seekbar 50%+ → prefetch 즉시 시작")
+                if (pos >= 500 && prefetchedStreams.size < 2 && prefetchJob?.isActive != true) {
+                    diag("seekbar 50%+ & 캐시 부족(${prefetchedStreams.size}) → prefetch 시작")
                     try { prefetchNext() } catch (_: Exception) {}
                 }
             }
