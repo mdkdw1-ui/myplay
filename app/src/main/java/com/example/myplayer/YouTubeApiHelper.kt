@@ -12,6 +12,38 @@ import java.net.URLEncoder
 
 object YouTubeApiHelper {
 
+    /** JSON 응답 내부를 재귀 탐색하여 nextpage/continuation 토큰을 찾습니다 */
+    private fun findContinuationDeep(node: Any?): String? {
+        when (node) {
+            is JSONObject -> {
+                val direct = node.optString("nextpage", "")
+                    .ifBlank { node.optString("continuation", "") }
+                if (direct.isNotBlank() && !direct.startsWith("{")) return direct
+                
+                node.optJSONObject("continuationItemRenderer")?.let { cir ->
+                    val token = cir.optJSONObject("continuationEndpoint")
+                        ?.optJSONObject("continuationCommand")
+                        ?.optString("token")
+                    if (!token.isNullOrBlank() && !token.startsWith("{")) return token
+                }
+                
+                val keys = node.keys()
+                while (keys.hasNext()) {
+                    val result = findContinuationDeep(node.opt(keys.next()))
+                    if (result != null) return result
+                }
+            }
+            is JSONArray -> {
+                for (i in 0 until node.length()) {
+                    val result = findContinuationDeep(node.opt(i))
+                    if (result != null) return result
+                }
+            }
+        }
+        return null
+    }
+
+
     /** WebP 썸네일 주소를 Glide가 읽을 수 있는 JPG 주소로 변환 */
     fun normalizeThumb(url: String, videoId: String): String {
         if (url.isBlank()) return "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
