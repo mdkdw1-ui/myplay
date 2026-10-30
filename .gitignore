@@ -42,3 +42,10 @@ __pycache__/
 /mweb.json
 /vr.json
 /vr2.json
+
+# 테스트 JSON (curl 응답)
+*.json
+!app/src/main/**/*.json
+/mweb.json
+/vr.json
+/vr2.json
