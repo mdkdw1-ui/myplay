@@ -166,6 +166,10 @@ object YouTubeStream {
     // Piped: muxed(itag=18) 우선 반환
     // ─────────────────────────────────────────
     private suspend fun tryPiped(videoId: String, sb: StringBuilder): StreamResult? {
+        val prefs = MyApp.instance.getSharedPreferences(
+            "server_priority", android.content.Context.MODE_PRIVATE
+        )
+
         val aliveServers = try {
             ServerHealthChecker.getAlivePiped(MyApp.instance)
         } catch (_: Exception) {
