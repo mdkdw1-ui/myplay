@@ -164,13 +164,18 @@ object InnerTubeExtractor {
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("Origin", "https://www.youtube.com")
             conn.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9")
-            try {
-                val vd = com.example.myplayer.YouTubeVisitorData.load(MyApp.instance)
-                if (vd.isNotBlank()) {
-                    conn.setRequestProperty("X-Goog-Visitor-Id", vd)
-                    sb.append("  visitorData: ${vd.take(20)}\n")
-                }
-            } catch (_: Exception) {}
+            // ★ ANDROID_VR은 visitorData 안 보냄 (curl 성공 케이스와 일치 — 오히려 봇 판정 방지)
+            if (client.name != "ANDROID_VR") {
+                try {
+                    val vd = com.example.myplayer.YouTubeVisitorData.load(MyApp.instance)
+                    if (vd.isNotBlank()) {
+                        conn.setRequestProperty("X-Goog-Visitor-Id", vd)
+                        sb.append("  visitorData: ${vd.take(20)}\n")
+                    }
+                } catch (_: Exception) {}
+            } else {
+                sb.append("  visitorData: (skip for ANDROID_VR)\n")
+            }
             sb.append("  UA: ${client.userAgent.take(50)}\n")
             
             conn.doOutput = true
