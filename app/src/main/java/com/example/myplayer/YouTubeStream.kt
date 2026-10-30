@@ -109,9 +109,33 @@ object YouTubeStream {
         }
 
         val sb = StringBuilder()
-        sb.append("parallel extract (piped-first)\n")
+        sb.append("extract with InnerTube priority\n")
 
-        // ★ 속도 우선순위: Piped → Invidious → NewPipe
+        // ★★★ 1순위: InnerTube (ydpy 방식) - 직접 googlevideo URL
+        try {
+            val innerTube = InnerTubeExtractor.extract(videoId)
+            if (innerTube.hasAny) {
+                sb.append("→ InnerTube OK (itag=${innerTube.audioItag})\n")
+                Log.d(TAG, "InnerTube 성공: audio=${innerTube.audioUrl?.take(50)}")
+                val result = StreamResult(
+                    videoUrl = null,
+                    audioUrl = innerTube.audioUrl,
+                    muxedUrl = innerTube.muxedUrl,
+                    title = innerTube.title,
+                    channelName = innerTube.channel,
+                    description = "",
+                    debug = sb.toString(),
+                    audioUrlBest = innerTube.audioUrl
+                )
+                putCache(videoId, result)
+                return@withContext result
+            }
+            sb.append("InnerTube 실패 → fallback\n")
+        } catch (e: Exception) {
+            sb.append("InnerTube err: ${e.message?.take(60)}\n")
+        }
+
+        // ★ 2순위: NewPipe (기존)
         val result = coroutineScope {
             val pipedDeferred = async<StreamResult?>(Dispatchers.IO) {
                 // ★ Piped 완전 skip (8개 서버 timeout 방지)
