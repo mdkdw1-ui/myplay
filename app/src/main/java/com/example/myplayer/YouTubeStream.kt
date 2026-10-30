@@ -125,7 +125,7 @@ object YouTubeStream {
             }
             val npDeferred = async(Dispatchers.IO) {
                 try {
-                    withTimeoutOrNull(8000) { tryNewPipe(videoId, sb) }
+                    withTimeoutOrNull(25000) { tryNewPipe(videoId, sb) }
                 } catch (e: Exception) { null }
             }
 
@@ -173,15 +173,11 @@ object YouTubeStream {
         }
         if (aliveServers.isEmpty()) return null
 
-        val prefs = MyApp.instance.getSharedPreferences(
-            "server_priority", android.content.Context.MODE_PRIVATE
-        )
-        val topServer = prefs.getString("piped_top", null)
-        val servers = mutableListOf<String>()
-        if (topServer != null && topServer in aliveServers) {
-            servers.add(topServer)
-        }
-        servers.addAll(aliveServers.filter { it != topServer })
+        // ★ videoId 해시로 서버 로테이션 (부하 분산)
+        val hashIdx = kotlin.math.abs(videoId.hashCode()) % aliveServers.size
+        val rotated = aliveServers.drop(hashIdx) + aliveServers.take(hashIdx)
+        val servers = rotated
+        sb.append("piped rotation: idx=$hashIdx, first=${servers.firstOrNull()?.take(40)}\n")
 
         for (inst in servers) {
             try {
