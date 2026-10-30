@@ -111,12 +111,12 @@ object YouTubeStream {
         val result = coroutineScope {
             val invDeferred = async(Dispatchers.IO) {
                 try {
-                    withTimeoutOrNull(4000) { tryInvidious(videoId, sb) }
+                    withTimeoutOrNull(3000) { tryInvidious(videoId, sb) }
                 } catch (e: Exception) { null }
             }
             val pipedDeferred = async(Dispatchers.IO) {
                 try {
-                    withTimeoutOrNull(4000) { tryPiped(videoId, sb) }
+                    withTimeoutOrNull(5000) { tryPiped(videoId, sb) }
                 } catch (e: Exception) { null }
             }
             val npDeferred = async(Dispatchers.IO) {
