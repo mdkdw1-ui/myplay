@@ -93,6 +93,7 @@ object InnerTubeExtractor {
     }
 
     private fun tryClient(videoId: String, client: ClientInfo, sb: StringBuilder): StreamData? {
+        sb.append("--- tryClient ${client.name} ---\n")
         return try {
             val clientContext = JSONObject().apply {
                 put("clientName", client.name)
@@ -138,10 +139,11 @@ object InnerTubeExtractor {
             } catch (_: Exception) {}
             
             conn.doOutput = true
-            conn.connectTimeout = 3000
-            conn.readTimeout = 5000
+            conn.connectTimeout = 2500
+            conn.readTimeout = 4000
+            sb.append("  writing request...\n")
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
-
+            sb.append("  request sent, awaiting response...\n")
             val code = conn.responseCode
             sb.append("  HTTP $code\n")
             if (code !in 200..299) return null
