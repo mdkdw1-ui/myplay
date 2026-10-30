@@ -515,6 +515,37 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** ★ 다음 1곡만 즉시 캐시 (최우선) */
+    private fun prefetchImmediateNext() {
+        if (isLocalMode) return
+        bgScope.launch {
+            try {
+                val queue = QueueManager.get(this@AudioPlayerActivity)
+                val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+                if (curIdx < 0 || curIdx >= queue.size - 1) return@launch
+                
+                val next = queue[curIdx + 1]
+                if (prefetchedStreams.containsKey(next.videoId)) {
+                    diag("immediate prefetch skip (이미 캐시): ${next.videoId}")
+                    return@launch
+                }
+                
+                diag("immediate prefetch 시작: ${next.videoId}")
+                val result = kotlinx.coroutines.withTimeoutOrNull(20_000) {
+                    YouTubeStream.extractAudioOnly(next.videoId)
+                }
+                if (result != null && result.hasAny) {
+                    prefetchedStreams[next.videoId] = result
+                    diag("immediate prefetch 완료: ${next.videoId} (cache=${prefetchedStreams.size})")
+                } else {
+                    diag("immediate prefetch 실패: ${next.videoId}")
+                }
+            } catch (e: Exception) {
+                diag("immediate prefetch err: ${e.message}")
+            }
+        }
+    }
+    
     private fun prefetchNext() {
         if (isLocalMode) {
             diag("prefetch: local 모드 → skip")
@@ -559,33 +590,40 @@ class AudioPlayerActivity : AppCompatActivity() {
                     }
                 }
                 
-                // ★ 큐의 다음 곡들 병렬 캐시
+                // ★ 큐의 다음 곡들 순차 캐시 (Piped 동시 요청 부담 회피)
                 diag("prefetch: toPrefetch.size=${toPrefetch.size}, ids=${toPrefetch.map { it.videoId.take(11) }}")
                 if (toPrefetch.isNotEmpty()) {
-                    diag("prefetch: ${toPrefetch.size}곡 병렬 캐시 시작")
-                    toPrefetch.forEach { item ->
-                        bgScope.launch {
+                    diag("prefetch: ${toPrefetch.size}곡 순차 캐시 시작")
+                    bgScope.launch {
+                        for ((idx, item) in toPrefetch.withIndex()) {
                             try {
                                 if (prefetchedStreams.containsKey(item.videoId)) {
                                     diag("prefetch skip (이미 캐시): ${item.videoId}")
-                                    return@launch
+                                    continue
                                 }
-                                diag("prefetch 시작: ${item.videoId}")
-                                val result = kotlinx.coroutines.withTimeoutOrNull(15_000) {
+                                if (prefetchedStreams.size >= 5) {
+                                    diag("prefetch 중단 (캐시 가득: ${prefetchedStreams.size})")
+                                    break
+                                }
+                                // ★ 첫 곡은 최우선으로 빠르게, 나머지는 짧은 대기
+                                if (idx > 0) delay(300)
+                                
+                                diag("prefetch 시작[$idx]: ${item.videoId}")
+                                val result = kotlinx.coroutines.withTimeoutOrNull(20_000) {
                                     YouTubeStream.extractAudioOnly(item.videoId)
                                 }
                                 if (result == null) {
-                                    diag("prefetch timeout: ${item.videoId}")
-                                    return@launch
+                                    diag("prefetch timeout[$idx]: ${item.videoId}")
+                                    continue
                                 }
                                 if (result.hasAny) {
                                     prefetchedStreams[item.videoId] = result
-                                    diag("prefetch 완료: ${item.videoId} (cache size=${prefetchedStreams.size})")
+                                    diag("prefetch 완료[$idx]: ${item.videoId} (cache=${prefetchedStreams.size})")
                                 } else {
-                                    diag("prefetch 실패 (hasAny=false): ${item.videoId}")
+                                    diag("prefetch 실패[$idx]: ${item.videoId} (hasAny=false)")
                                 }
                             } catch (e: Exception) {
-                                diag("prefetch err: ${item.videoId} - ${e.message}")
+                                diag("prefetch err[$idx]: ${item.videoId} - ${e.message}")
                             }
                         }
                     }
@@ -1286,12 +1324,16 @@ class AudioPlayerActivity : AppCompatActivity() {
             addToHistory(videoId, currentTitle, currentChannel, currentThumb)
             failedIds.remove(videoId)
 
-            // ★★★ extract 완료 직후 prefetch 시작 (재생 여부 무관)
+            // ★★★ extract 완료 직후: 다음 1곡만 최우선 캐시
             attachEqualizer()
             loadingNext = false
-            // 1초 후 (ExoPlayer 준비 완료 시점) prefetch
             bgScope.launch {
-                delay(1000)
+                delay(1500)  // ExoPlayer 준비 완료 대기
+                try { prefetchImmediateNext() } catch (_: Exception) {}
+            }
+            // 나머지는 백그라운드로 천천히 (seekbar 50% 이후)
+            bgScope.launch {
+                delay(5000)  // 5초 후부터 나머지 캐시
                 try { prefetchNext() } catch (_: Exception) {}
             }
         }
