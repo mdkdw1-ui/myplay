@@ -29,176 +29,182 @@ object YouTubeChannel {
     private const val API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
     private const val BROWSE = "https://www.youtube.com/youtubei/v1/browse"
 
+    // ★ "동영상" 탭 params (2026년 검증됨)
+    private const val VIDEOS_TAB_PARAMS = "EgZ2aWRlb3PyBgQKAjoA"
+    private const val CLIENT_VERSION = "2.20250101.00.00"
+
     var lastDebug: String = ""
 
+    // ─────────────────────────────────────────
+    // 채널 첫 페이지 (동영상 탭)
+    // ─────────────────────────────────────────
     suspend fun fetch(
         channelId: String,
         channelName: String = ""
     ): Pair<ChannelInfo?, ChannelVideosPage> = withContext(Dispatchers.IO) {
-        // 1차: Invidious/Piped
-        val page = YouTubeApiHelper.channelVideos(channelId)
-        if (page.videos.isNotEmpty()) {
-            return@withContext Pair(null, page)
-        }
-
-        // 2차: 기존 (봇 차단) 로직
-        // (기존 fetch 코드를 그대로 두고 여기서 호출)
-        Pair(null, ChannelVideosPage(emptyList(), null))
-    }
-    suspend fun fetchMore(continuation: String): ChannelVideosPage = withContext(Dispatchers.IO) {
-        Log.d(TAG, "fetchMore: token=${continuation.take(60)}")
-
-        // 1) Invidious 토큰 ("inv:<channelId>|<token>")
-        if (continuation.startsWith("inv:")) {
-            val rest = continuation.removePrefix("inv:")
-            val idx = rest.indexOf('|')
-            if (idx > 0) {
-                val channelId = rest.substring(0, idx)
-                val contToken = rest.substring(idx + 1)
-                Log.d(TAG, "Invidious fetchMore: channelId=$channelId")
-                return@withContext YouTubeApiHelper.channelVideos(channelId, contToken)
+        try {
+            val body = JSONObject().apply {
+                put("context", JSONObject().apply {
+                    put("client", JSONObject().apply {
+                        put("clientName", "WEB")
+                        put("clientVersion", CLIENT_VERSION)
+                        put("hl", "ko")
+                        put("gl", "KR")
+                    })
+                })
+                put("browseId", channelId)
+                put("params", VIDEOS_TAB_PARAMS)
             }
-        }
 
-        // 2) Piped 토큰 ("piped:<channelId>|<token>" 또는 "piped:<token>")
-        if (continuation.startsWith("piped:")) {
-            val rest = continuation.removePrefix("piped:")
-            val channelId = if (rest.contains("|")) rest.substringBefore("|") else ""
-            val nextpage = if (rest.contains("|")) rest.substringAfter("|") else rest
-            Log.d(TAG, "Piped fetchMore: channelId=$channelId")
-            // Piped 채널은 channelVideos에서 처리
-            if (channelId.isNotBlank()) {
-                return@withContext YouTubeApiHelper.channelVideos(channelId, nextpage)
-            }
-        }
-
-        // 3) 그 외 (JSON 등) → 실패 처리
-        Log.d(TAG, "알 수 없는 토큰: ${continuation.take(40)}")
-        ChannelVideosPage(emptyList(), null)
-    }
-
-    private fun post(urlStr: String, bodyStr: String): String? {
-        val fullUrl = "$urlStr?key=$API_KEY&prettyPrint=false"
-        // ★ IPv4 강제
-        val conn = try {
-            val parsedUrl = java.net.URL(fullUrl)
-            val host = parsedUrl.host
-            val port = if (parsedUrl.port > 0) parsedUrl.port
-                       else if (parsedUrl.protocol == "https") 443 else 80
-            val ipv4 = java.net.InetAddress.getAllByName(host)
-                .filterIsInstance<java.net.Inet4Address>()
-                .firstOrNull()
-            if (ipv4 != null) {
-                val newUrl = java.net.URL(parsedUrl.protocol, ipv4.hostAddress, port, parsedUrl.file)
-                val c = newUrl.openConnection() as HttpURLConnection
-                c.setRequestProperty("Host", host)
-                c
-            } else {
-                java.net.URL(fullUrl).openConnection() as HttpURLConnection
-            }
-        } catch (e: Exception) {
-            java.net.URL(fullUrl).openConnection() as HttpURLConnection
-        }
-            CookieUtil.apply(conn)
-        conn.requestMethod = "POST"
-        conn.setRequestProperty("Content-Type", "application/json")
-        conn.setRequestProperty(
-            "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
-        conn.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9")
-        conn.setRequestProperty("Origin", "https://www.youtube.com")
-        conn.doOutput = true
-        conn.connectTimeout = 15000
-        conn.readTimeout = 15000
-        conn.outputStream.use { it.write(bodyStr.toByteArray()) }
-        val code = conn.responseCode
-        if (code !in 200..299) return null
-        return conn.inputStream.bufferedReader().use(BufferedReader::readText)
-    }
-
-    private fun extractText(obj: JSONObject?): String {
-        if (obj == null) return ""
-        val simple = obj.optString("simpleText")
-        if (simple.isNotBlank()) return simple
-        return obj.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: ""
-    }
-
-    private fun parseHeader(root: JSONObject, channelId: String): ChannelInfo? {
-        val header = root.optJSONObject("header") ?: root.optJSONObject("headerRenderer")
-
-        header?.optJSONObject("c4TabbedHeaderRenderer")?.let { c4 ->
-            val name = extractText(c4.optJSONObject("title"))
-            val avatar = c4.optJSONObject("avatar")?.optJSONObject("thumbnails")
-                ?.optJSONArray("thumbnails")
-                ?.let { it.optJSONObject(it.length() - 1)?.optString("url") } ?: ""
-            val subs = extractText(c4.optJSONObject("subscriberCountText"))
-            return ChannelInfo(channelId, name, avatar, subs)
-        }
-
-        header?.optJSONObject("pageHeaderRenderer")?.let { ph ->
-            val vm = ph.optJSONObject("pageHeaderViewModel") ?: return@let
-            val name = extractText(
-                vm.optJSONObject("title")?.optJSONObject("dynamicTextViewModel")
-                    ?.optJSONObject("text")
+            val response = post(BROWSE, body.toString()) ?: return@withContext Pair(
+                null, ChannelVideosPage(emptyList(), null)
             )
-            val avatar = vm.optJSONObject("image")
-                ?.optJSONObject("decoratedAvatarViewModel")
-                ?.optJSONObject("avatar")
-                ?.optJSONObject("avatarViewModel")
-                ?.optJSONObject("image")
-                ?.optJSONArray("sources")
-                ?.let { it.optJSONObject(it.length() - 1)?.optString("url") } ?: ""
-            val subs = vm.optJSONObject("metadata")
-                ?.optJSONObject("contentMetadataViewModel")
-                ?.optJSONArray("metadataRows")?.optJSONObject(0)
-                ?.optJSONArray("metadataParts")?.optJSONObject(0)
-                ?.optJSONObject("text")?.optString("content") ?: ""
-            return ChannelInfo(channelId, name, avatar, subs)
-        }
 
-        root.optJSONObject("metadata")?.optJSONObject("channelMetadataRenderer")?.let { cm ->
-            val name = cm.optString("title")
-            val avatar = cm.optJSONObject("avatar")
-                ?.optJSONObject("thumbnails")
+            val json = JSONObject(response)
+
+            // 채널 정보 추출
+            val metadata = json.optJSONObject("metadata")
+                ?.optJSONObject("channelMetadataRenderer")
+            val name = metadata?.optString("title") ?: channelName
+            val avatar = metadata?.optJSONObject("avatar")
                 ?.optJSONArray("thumbnails")
-                ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
-                ?: cm.optJSONObject("avatar")
-                    ?.optJSONArray("thumbnails")
-                    ?.let { it.optJSONObject(it.length() - 1)?.optString("url") } ?: ""
-            val desc = cm.optString("description")
-            return ChannelInfo(channelId, name, avatar, "", "", desc)
-        }
+                ?.let { it.optJSONObject(it.length() - 1)?.optString("url") } ?: ""
 
-        return null
+            val chInfo = ChannelInfo(
+                channelId = channelId,
+                name = name,
+                avatar = avatar,
+                subscribers = "",
+                videoCount = ""
+            )
+
+            // 영상 + continuation 추출
+            val videos = mutableListOf<VideoItem>()
+            extractVideos(json, videos)
+            val continuation = findContinuation(json)
+
+            lastDebug = "fetch: videos=${videos.size}, cont=${continuation?.take(20)}"
+            Log.d(TAG, lastDebug)
+
+            Pair(chInfo, ChannelVideosPage(videos, continuation))
+        } catch (e: Exception) {
+            Log.e(TAG, "fetch err: ${e.message}", e)
+            Pair(null, ChannelVideosPage(emptyList(), null))
+        }
     }
 
-    private fun collectVideos(node: Any?, out: MutableList<VideoItem>) {
+    // ─────────────────────────────────────────
+    // 다음 페이지
+    // ─────────────────────────────────────────
+    suspend fun fetchMore(continuation: String): ChannelVideosPage = withContext(Dispatchers.IO) {
+        try {
+            val body = JSONObject().apply {
+                put("context", JSONObject().apply {
+                    put("client", JSONObject().apply {
+                        put("clientName", "WEB")
+                        put("clientVersion", CLIENT_VERSION)
+                        put("hl", "ko")
+                        put("gl", "KR")
+                    })
+                })
+                put("continuation", continuation)
+            }
+
+            val response = post(BROWSE, body.toString())
+                ?: return@withContext ChannelVideosPage(emptyList(), null)
+
+            val json = JSONObject(response)
+            val videos = mutableListOf<VideoItem>()
+            extractVideos(json, videos)
+            val next = findContinuation(json)
+
+            lastDebug = "fetchMore: videos=${videos.size}, next=${next?.take(20)}"
+            Log.d(TAG, lastDebug)
+
+            ChannelVideosPage(videos, next)
+        } catch (e: Exception) {
+            Log.e(TAG, "fetchMore err: ${e.message}", e)
+            ChannelVideosPage(emptyList(), null)
+        }
+    }
+
+    // ─────────────────────────────────────────
+    // 영상 추출 (videoRenderer + lockupViewModel 모두)
+    // ─────────────────────────────────────────
+    private fun extractVideos(node: Any?, out: MutableList<VideoItem>) {
         when (node) {
             is JSONObject -> {
-                node.optJSONObject("videoRenderer")?.let { parseVideo(it)?.let { v -> out.add(v) } }
-                node.optJSONObject("gridVideoRenderer")?.let { parseVideo(it)?.let { v -> out.add(v) } }
-                node.optJSONObject("richItemRenderer")?.let { ri ->
-                    ri.optJSONObject("content")?.let { collectVideos(it, out) }
+                // 1) videoRenderer (구형)
+                node.optJSONObject("videoRenderer")?.let { v ->
+                    val vid = v.optString("videoId", "")
+                    if (vid.isNotBlank() && out.none { it.videoId == vid }) {
+                        val title = v.optJSONObject("title")?.let { t ->
+                            t.optString("simpleText").ifBlank {
+                                t.optJSONArray("runs")?.optJSONObject(0)?.optString("text", "") ?: ""
+                            }
+                        } ?: ""
+                        val channel = v.optJSONObject("ownerText")?.let { o ->
+                            o.optJSONArray("runs")?.optJSONObject(0)?.optString("text", "") ?: ""
+                        } ?: ""
+                        val thumb = v.optJSONObject("thumbnail")
+                            ?.optJSONArray("thumbnails")
+                            ?.let { it.optJSONObject(it.length() - 1)?.optString("url", "") } ?: ""
+                        val dur = v.optJSONObject("lengthText")?.optString("simpleText", "") ?: ""
+                        out.add(VideoItem(vid, title, channel, thumb, dur))
+                    }
                 }
+
+                // 2) gridVideoRenderer (구형)
+                node.optJSONObject("gridVideoRenderer")?.let { v ->
+                    val vid = v.optString("videoId", "")
+                    if (vid.isNotBlank() && out.none { it.videoId == vid }) {
+                        val title = v.optJSONObject("title")?.optString("simpleText", "") ?: ""
+                        out.add(VideoItem(vid, title, "", "https://i.ytimg.com/vi/$vid/mqdefault.jpg"))
+                    }
+                }
+
+                // 3) lockupViewModel (2026년 신형)
+                node.optJSONObject("lockupViewModel")?.let { lv ->
+                    val vid = lv.optString("contentId", "")
+                    if (vid.length == 11 && out.none { it.videoId == vid }) {
+                        val meta = lv.optJSONObject("metadata")?.optJSONObject("lockupMetadataViewModel")
+                        val title = meta?.optJSONObject("title")?.optString("content", "") ?: ""
+                        val channel = meta?.optJSONObject("metadata")
+                            ?.optJSONObject("contentMetadataViewModel")
+                            ?.optJSONArray("metadataRows")?.optJSONObject(0)
+                            ?.optJSONArray("metadataParts")?.optJSONObject(0)
+                            ?.optJSONObject("text")?.optString("content", "") ?: ""
+                        val thumb = lv.optJSONObject("contentImage")
+                            ?.optJSONObject("thumbnailViewModel")
+                            ?.optJSONObject("image")
+                            ?.optJSONArray("sources")
+                            ?.let { it.optJSONObject(it.length() - 1)?.optString("url", "") }
+                            ?: "https://i.ytimg.com/vi/$vid/mqdefault.jpg"
+                        out.add(VideoItem(vid, title, channel, thumb))
+                    }
+                }
+
+                // 재귀
                 val keys = node.keys()
                 while (keys.hasNext()) {
-                    val key = keys.next()
-                    if (key == "videoRenderer" || key == "gridVideoRenderer" || key == "richItemRenderer") continue
-                    collectVideos(node.opt(key), out)
+                    extractVideos(node.opt(keys.next()), out)
                 }
             }
-            is JSONArray -> for (i in 0 until node.length()) collectVideos(node.opt(i), out)
+            is JSONArray -> for (i in 0 until node.length()) extractVideos(node.opt(i), out)
         }
     }
 
+    // ─────────────────────────────────────────
+    // continuation 추출
+    // ─────────────────────────────────────────
     private fun findContinuation(node: Any?): String? {
         when (node) {
             is JSONObject -> {
                 node.optJSONObject("continuationItemRenderer")?.let { cir ->
                     val token = cir.optJSONObject("continuationEndpoint")
-                        ?.optJSONObject("continuationCommand")?.optString("token")
-                    if (!token.isNullOrEmpty()) return token
+                        ?.optJSONObject("continuationCommand")
+                        ?.optString("token")
+                    if (!token.isNullOrBlank()) return token
                 }
                 val keys = node.keys()
                 while (keys.hasNext()) {
@@ -214,19 +220,23 @@ object YouTubeChannel {
         return null
     }
 
-    private fun parseVideo(v: JSONObject): VideoItem? {
-        val videoId = v.optString("videoId").takeIf { it.isNotEmpty() } ?: return null
-        val title = extractText(v.optJSONObject("title"))
-        val channel = extractText(v.optJSONObject("ownerText"))
-            .ifBlank { extractText(v.optJSONObject("longBylineText")) }
-            .ifBlank { extractText(v.optJSONObject("shortBylineText")) }
-        val thumbnail = v.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
-            ?.let { it.optJSONObject(it.length() - 1)?.optString("url") }
-            ?: "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
-        val duration = extractText(v.optJSONObject("lengthText"))
-        val viewCount = extractText(v.optJSONObject("viewCountText"))
-            .ifBlank { extractText(v.optJSONObject("shortViewCountText")) }
-        val uploadDate = extractText(v.optJSONObject("publishedTimeText"))
-        return VideoItem(videoId, title, channel, thumbnail, duration, viewCount, uploadDate)
+    private fun post(urlStr: String, bodyStr: String): String? {
+        val fullUrl = "$urlStr?key=$API_KEY&prettyPrint=false"
+        val conn = URL(fullUrl).openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
+        conn.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9")
+        conn.setRequestProperty("Origin", "https://www.youtube.com")
+        conn.doOutput = true
+        conn.connectTimeout = 15000
+        conn.readTimeout = 15000
+        conn.outputStream.use { it.write(bodyStr.toByteArray()) }
+        val code = conn.responseCode
+        Log.d(TAG, "HTTP $code")
+        if (code !in 200..299) return null
+        return conn.inputStream.bufferedReader().use(BufferedReader::readText)
     }
 }

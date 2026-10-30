@@ -139,9 +139,7 @@ class ChannelActivity : AppCompatActivity() {
                 }
             }
 
-            nextContinuation = page.continuation?.takeIf {
-                it.isNotBlank() && !it.startsWith("{") && !it.contains("youtubei")
-            }
+            nextContinuation = page.continuation
             cdiag("첫 페이지 저장: next=${nextContinuation?.take(50) ?: "null"}")
             // ★ 로그: 첫 페이지 결과 + continuation 유무
             android.util.Log.d("Channel", "fetch: videos=${page.videos.size} cont=${page.continuation?.take(40)} debug=${YouTubeChannel.lastDebug}")
@@ -238,9 +236,7 @@ class ChannelActivity : AppCompatActivity() {
             android.util.Log.d("Channel", "loadMore: token=${token.take(60)}...")
             val page = YouTubeChannel.fetchMore(token)
                 cdiag("fetchMore 응답: videos=${page.videos.size}, next=${page.continuation?.take(50)}")
-            nextContinuation = page.continuation?.takeIf {
-                it.isNotBlank() && !it.startsWith("{") && !it.contains("youtubei")
-            }
+            nextContinuation = page.continuation
 
             // ★ 중복 제거 (같은 영상 여러 번 로드 방지)
             val existingIds = loadedVideos.map { it.videoId }.toSet()
