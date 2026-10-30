@@ -1169,14 +1169,12 @@ class AudioPlayerActivity : AppCompatActivity() {
                 }
             }
 
-            // ★ extract 전 stop + clear + playWhenReady=false (자동재생 방지)
+            // ★ extract 전 stop (clearMediaItems 제거 — 16초 지연 원인)
             runOnUiThread {
                 try {
                     val mc = mediaController
-                    mc?.playWhenReady = false    // ★ 먼저 재생 중지
-                    mc?.stop()
-                    mc?.clearMediaItems()         // ★ 큐 완전 비우기
-                    diag("extract 전 ExoPlayer 정지+clear")
+                    mc?.playWhenReady = false
+                    diag("extract 전 ExoPlayer playWhenReady=false")
                 } catch (_: Exception) {}
             }
 
@@ -1269,14 +1267,11 @@ class AudioPlayerActivity : AppCompatActivity() {
                 try {
                     val mc = mediaController
                     if (mc != null) {
-                        // setMediaItem 전에 반드시 clear
-                        mc.stop()
-                        mc.clearMediaItems()
-                        // 확실히 반영되도록 잠깐 대기 X (동기라 OK)
-                        diag("ExoPlayer 큐 비움 (itemCount=${mc.mediaItemCount})")
+                        // ★ clear/stop 제거 (setMediaItems가 자동 교체, 16초 지연 원인)
+                        diag("ExoPlayer 상태: itemCount=${mc.mediaItemCount}")
                     }
                 } catch (e: Exception) {
-                    diag("clear err: ${e.message}")
+                    diag("clear skip err: ${e.message}")
                 }
                 // ★ setMediaItems(단일)로 큐 확실히 리셋
                 // ★ 이어듣기 시작 위치 (클래스 필드)
