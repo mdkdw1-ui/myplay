@@ -19,6 +19,17 @@ import kotlinx.coroutines.withContext
 
 class ChannelActivity : AppCompatActivity() {
 
+    private fun cdiag(msg: String) {
+        android.util.Log.d("ChannelDiag", msg)
+        try {
+            val f = java.io.File(applicationContext.filesDir, "channel_diag.log")
+            if (f.exists() && f.length() > 200_000) f.writeText("")
+            val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+            f.appendText("[$ts] $msg\n")
+        } catch (_: Exception) {}
+    }
+
+
     private lateinit var adapter: SearchAdapter
     private val loadedVideos = mutableListOf<VideoItem>()
     private var nextContinuation: String? = null
@@ -44,6 +55,20 @@ class ChannelActivity : AppCompatActivity() {
         val btnSubscribe = findViewById<MaterialButton>(R.id.btnSubscribe)
 
         tvChannelName.text = channelName
+        
+        // ★ 롱프레스 → 진단 로그 보기
+        tvChannelName.setOnLongClickListener {
+            val f = java.io.File(applicationContext.filesDir, "channel_diag.log")
+            val content = if (f.exists()) f.readText() else "(로그 없음)"
+            val lines = content.lines().takeLast(100).joinToString("\n")
+            androidx.appcompat.app.AlertDialog.Builder(this@ChannelActivity)
+                .setTitle("채널 진단 로그 (마지막 100줄)")
+                .setMessage(lines)
+                .setPositiveButton("닫기", null)
+                .setNeutralButton("🗑 지우기") { _, _ -> f.delete() }
+                .show()
+            true
+        }
 
         adapter = SearchAdapter { item ->
             startActivity(Intent(this, PlayerActivity::class.java).apply {
@@ -197,10 +222,12 @@ class ChannelActivity : AppCompatActivity() {
 
     private fun loadMore() {
         val token = nextContinuation ?: return
+        cdiag("loadMore 시작: token=${token.take(50)}")
         loadingMore = true
         lifecycleScope.launch {
             android.util.Log.d("Channel", "loadMore: token=${token.take(60)}...")
             val page = YouTubeChannel.fetchMore(token)
+                cdiag("fetchMore 응답: videos=${page.videos.size}, next=${page.continuation?.take(50)}")
             nextContinuation = page.continuation
 
             // ★ 중복 제거 (같은 영상 여러 번 로드 방지)
