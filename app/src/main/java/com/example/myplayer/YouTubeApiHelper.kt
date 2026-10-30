@@ -21,9 +21,9 @@ object YouTubeApiHelper {
     private const val TAG = "YtApi"
 
     val INVIDIOUS = listOf(
-        "https://invidious.f5.si",              // ✅ 한국, 실제 작동
-        "https://invidious.nerdvpn.de",         // ⚠️ 시도
-        "https://yewtu.be",                     // ⚠️ 시도
+        "https://invidious.nerdvpn.de",         // ✅ 200 (현재 살아있음)
+        "https://yewtu.be",                     // ✅ 200 (현재 살아있음)
+        "https://invidious.f5.si",              // ⚠️ 530 (다운 상태, 뒤로)
         "https://invidious.privacyredirect.com",
         "https://invidious.jing.rocks",
         "https://iv.datura.network",
@@ -91,6 +91,9 @@ object YouTubeApiHelper {
         continuation: String? = null
     ): SearchResultPage = withContext(Dispatchers.IO) {
         val q = URLEncoder.encode(query, "UTF-8")
+        // ★ 살아있는 서버만 사용
+        val livePiped = try { ServerHealthChecker.getAlivePiped(MyApp.instance) } catch (e: Exception) { PIPED }
+        val liveInvidious = try { ServerHealthChecker.getAliveInvidious(MyApp.instance) } catch (e: Exception) { INVIDIOUS }
 
         // ────────────────────────────────────
         // 이어받기 (continuation 기반)
@@ -344,6 +347,7 @@ object YouTubeApiHelper {
                 val nextCont = obj.optString("continuation", "")
                     .takeIf { it.isNotBlank() }
                 val nextToken = nextCont?.let { "inv:$realId|$it" }
+                android.util.Log.d(TAG, "INV 채널 응답: ${out.size}개, raw continuation='${nextCont?.take(40)}' (${nextCont?.length ?: 0}자)")
 
                 if (out.isNotEmpty()) {
                     Log.d(TAG, "inv channel: ${out.size}개, next=${nextToken?.take(60)}")
