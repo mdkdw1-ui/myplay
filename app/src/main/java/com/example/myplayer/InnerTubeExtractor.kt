@@ -130,6 +130,17 @@ object InnerTubeExtractor {
             conn.setRequestProperty("Origin", "https://www.youtube.com")
             conn.setRequestProperty("X-YouTube-Client-Name", client.clientNameHeader)
             conn.setRequestProperty("X-YouTube-Client-Version", client.version)
+            
+            // ★ 쿠키 + visitorData (ydpy와 동일)
+            try { CookieUtil.apply(conn) } catch (_: Exception) {}
+            try {
+                val vd = com.example.myplayer.YouTubeVisitorData.load(MyApp.instance)
+                if (vd.isNotBlank()) {
+                    conn.setRequestProperty("X-Goog-Visitor-Id", vd)
+                    sb.append("  visitorData: ${vd.take(20)}\n")
+                }
+            } catch (_: Exception) {}
+            
             conn.doOutput = true
             conn.connectTimeout = 5000
             conn.readTimeout = 8000
