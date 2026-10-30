@@ -1386,6 +1386,32 @@ class AudioPlayerActivity : AppCompatActivity() {
                         bufferingWatchJob?.cancel()
                         bufferingWatchJob = null
                         idleRepeatCount = 0
+
+                        // ★ pending resume 처리 (duration=0 회피)
+                        if (pendingResumeVideoId == currentVideoId && pendingResumePos > 3000L) {
+                            val mc2 = mediaController
+                            val realDur = mc2?.duration ?: 0L
+                            val canResume = realDur > 0 && pendingResumePos < realDur - 5000L
+                            diag("STATE_READY pendingResume: pos=${pendingResumePos/1000}초 realDur=${realDur/1000}초 canResume=$canResume")
+                            if (canResume) {
+                                runOnUiThread {
+                                    androidx.appcompat.app.AlertDialog.Builder(this@AudioPlayerActivity)
+                                        .setTitle("🎵 이어 듣기")
+                                        .setMessage("${formatTime(pendingResumePos)}부터 이어 들을까요?")
+                                        .setPositiveButton("이어 듣기") { _, _ ->
+                                            mediaController?.seekTo(pendingResumePos)
+                                            mediaController?.play()
+                                        }
+                                        .setNegativeButton("처음부터") { _, _ ->
+                                            mediaController?.seekTo(0)
+                                        }
+                                        .setCancelable(false)
+                                        .show()
+                                }
+                            }
+                            pendingResumePos = 0L
+                            pendingResumeVideoId = ""
+                        }
                     }
                     Player.STATE_IDLE -> {
                         if (extractInProgress) {
@@ -2576,7 +2602,6 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     /** ★ 이어듣기 다이얼로그 */
     private fun checkResumeAndPlayAudio(videoId: String) {
-        // 이미 재생 중이면 스킵
         if (mediaController?.currentMediaItem?.mediaId == videoId &&
             (mediaController?.isPlaying == true || mediaController?.playWhenReady == true)) {
             diag("checkResume: 이미 재생 중 → 스킵")
@@ -2584,6 +2609,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
 
+        // ★ duration=0 문제 회피: 저장된 duration이 0이면 일단 loadAudio 후 STATE_READY에서 resume 판정
         bgScope.launch {
             val saved = try {
                 withContext(Dispatchers.IO) {
@@ -2593,9 +2619,17 @@ class AudioPlayerActivity : AppCompatActivity() {
 
             val savedPos = saved?.positionMs ?: 0L
             val savedDur = saved?.durationMs ?: 0L
-            // ★ 3초 이상 + 끝까지 5초 이상 남음
-            val canResume = savedPos > 3000L && (savedDur == 0L || savedDur - savedPos > 5000L)
 
+            // ★ 저장된 duration이 0이면 resume 판정 불가 → pendingResumePos에 저장하고 loadAudio
+            if (savedDur == 0L && savedPos > 3000L) {
+                diag("checkResume: savedDur=0 → STATE_READY 대기 (pendingResume=${savedPos/1000}초)")
+                pendingResumePos = savedPos
+                pendingResumeVideoId = videoId
+                runOnUiThread { loadAudio(videoId, isInitial = true) }
+                return@launch
+            }
+
+            val canResume = savedPos > 3000L && savedDur > 0 && savedDur - savedPos > 5000L
             diag("checkResume: $videoId pos=${savedPos / 1000}초 dur=${savedDur / 1000}초 canResume=$canResume")
 
             if (canResume) {
@@ -2604,23 +2638,23 @@ class AudioPlayerActivity : AppCompatActivity() {
                         .setTitle("🎵 이어 듣기")
                         .setMessage("${formatTime(savedPos)}부터 이어 들을까요?")
                         .setPositiveButton("이어 듣기") { _, _ ->
-                            diag("checkResume: 이어 듣기 선택 (${savedPos / 1000}초)")
                             loadAudioWithStartPos(videoId, savedPos)
                         }
                         .setNegativeButton("처음부터") { _, _ ->
-                            diag("checkResume: 처음부터 선택")
                             loadAudioWithStartPos(videoId, 0L)
                         }
                         .setCancelable(false)
                         .show()
                 }
             } else {
-                runOnUiThread {
-                    loadAudio(videoId, isInitial = true)
-                }
+                runOnUiThread { loadAudio(videoId, isInitial = true) }
             }
         }
     }
+
+    // ★ pending resume state
+    private var pendingResumePos: Long = 0L
+    private var pendingResumeVideoId: String = ""
 
     /** ★ 시작 위치를 지정해서 loadAudio */
     private fun loadAudioWithStartPos(videoId: String, startPosMs: Long) {

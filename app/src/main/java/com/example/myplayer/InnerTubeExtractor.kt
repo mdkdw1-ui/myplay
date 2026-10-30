@@ -45,6 +45,13 @@ object InnerTubeExtractor {
     )
 
     private val CLIENTS = listOf(
+        // ★ 0순위: ANDROID_VR (Oculus) - 서명 해독 불필요, 직접 URL 반환 (가장 빠름)
+        ClientInfo(
+            name = "ANDROID_VR",
+            version = "1.62.27",
+            userAgent = "com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12; en_US; Quest 3; Build/SQ3A.220605.009.A1) gzip",
+            clientNameHeader = "28"
+        ),
         // 1순위: MWEB (모바일 웹) - ydpy에서 성공한 방식
         ClientInfo(
             name = "MWEB",
@@ -109,7 +116,9 @@ object InnerTubeExtractor {
                 put("racyCheckOk", true)
             }
 
-            val conn = URL("$PLAYER_ENDPOINT?key=$API_KEY&prettyPrint=false").openConnection() as HttpURLConnection
+            val useKeyless = client.name == "ANDROID_VR"
+            val endpoint = if (useKeyless) PLAYER_ENDPOINT else "$PLAYER_ENDPOINT?key=$API_KEY"
+            val conn = URL("$endpoint&prettyPrint=false").openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("User-Agent", client.userAgent)
