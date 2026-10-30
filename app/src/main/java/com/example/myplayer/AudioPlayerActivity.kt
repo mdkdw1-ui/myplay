@@ -515,7 +515,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
-        private fun prefetchNext() {
+    private fun prefetchNext() {
         if (isLocalMode) {
             diag("prefetch: local 모드 → skip")
             return
@@ -539,7 +539,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 // ★ 큐에 다음 3곡 미리 캐시 (병렬)
                 val toPrefetch = mutableListOf<HomeVideo>()
                 if (curIdx >= 0) {
-                    for (i in (curIdx + 1) until minOf(curIdx + 4, queue.size)) {
+                    for (i in (curIdx + 1) until minOf(curIdx + 6, queue.size)) {
                         val item = queue[i]
                         if (item.videoId !in failedIds && !prefetchedStreams.containsKey(item.videoId)) {
                             toPrefetch.add(item)
@@ -815,6 +815,10 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         // ★★★ prefetch 캐시 히트 시 즉시 재생 (extract 스킵) ★★★
         val cached = prefetchedStreams.remove(videoId)
+        diag("loadAudio 캐시 확인: videoId=$videoId, cached=${cached != null}, cacheSize=${prefetchedStreams.size + (if (cached != null) 1 else 0)}")
+        if (cached != null) {
+            diag("  cached.hasAny=${cached.hasAny}, muxed=${cached.muxedUrl?.take(50)}")
+        }
         if (cached != null && cached.hasAny) {
             val cachedUrl = cached.audioUrlBest ?: cached.audioUrl
                 ?: cached.muxedUrl ?: cached.videoUrl
@@ -1269,10 +1273,14 @@ class AudioPlayerActivity : AppCompatActivity() {
             addToHistory(videoId, currentTitle, currentChannel, currentThumb)
             failedIds.remove(videoId)
 
-            // ★★★ 재생 시작과 동시에 prefetch (지연 없이)
+            // ★★★ extract 완료 직후 prefetch 시작 (재생 여부 무관)
             attachEqualizer()
             loadingNext = false
-            try { prefetchNext() } catch (_: Exception) {}
+            // 1초 후 (ExoPlayer 준비 완료 시점) prefetch
+            bgScope.launch {
+                delay(1000)
+                try { prefetchNext() } catch (_: Exception) {}
+            }
         }
     }
 
@@ -2388,10 +2396,10 @@ class AudioPlayerActivity : AppCompatActivity() {
                 isDragging = false
                 val dur = mc.duration
                 if (dur > 0) mc.seekTo((dur * (sb?.progress ?: 0) / 1000))
-                // ★ 끝 90% 이상으로 이동 시 prefetch 즉시 시작
+                // ★ 프리페치 트리거 (90% 또는 30초 이상 남았을 때)
                 val pos = sb?.progress ?: 0
-                if (pos >= 900 && prefetchedStreams.isEmpty()) {
-                    diag("seekbar 90%+ → prefetch 즉시 시작")
+                if (pos >= 500) {
+                    diag("seekbar 50%+ → prefetch 즉시 시작")
                     try { prefetchNext() } catch (_: Exception) {}
                 }
             }
