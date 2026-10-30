@@ -220,25 +220,36 @@ object YouTubeStream {
                 json.optJSONArray("videoStreams")?.let { vStreams ->
                     for (i in 0 until vStreams.length()) {
                         val f = vStreams.getJSONObject(i)
-                        val h = f.optInt("height", 0)
                         val q = f.optString("quality", "")
                         val u = f.optString("url", "")
+                        val itag = f.optString("itag", "").toIntOrNull() ?: 0
                         val onlyVideo = f.optBoolean("videoOnly", false)
                         val mime = f.optString("mimeType", "")
+                        
+                        // ★ height: 숫자 우선, 없으면 quality("360p")에서 파싱, itag 폴백
+                        var h = f.optInt("height", 0)
+                        if (h <= 0) {
+                            // quality 문자열 "360p" → 360
+                            h = q.replace("p", "").filter { it.isDigit() }.toIntOrNull() ?: 0
+                        }
+                        if (h <= 0) {
+                            h = YouTubeApiHelper.itagToHeight(itag)
+                        }
+                        
                         if (u.isBlank()) continue
 
-                        // ★ LBRY (Odysee 미러) 제외 — YouTube 영상 아님
+                        // ★ LBRY (Odysee 미러) 제외
                         if (q.contains("LBRY", ignoreCase = true) ||
-                            u.contains("odycdn.com")) {
-                            continue
-                        }
-                        // HLS 스트림 제외 (불안정)
+                            u.contains("odycdn.com")) continue
+                        // ★ HLS 제외
                         if (mime.contains("mpegurl", ignoreCase = true)) continue
 
-                        // muxed (video+audio)
-                        if (!onlyVideo && h >= bestMuxedH) {
-                            bestMuxedH = h
-                            muxed = u
+                        // ★ itag=18 = muxed 확정 (height 무관)
+                        if (itag == 18 || !onlyVideo) {
+                            if (h >= bestMuxedH) {
+                                bestMuxedH = h
+                                muxed = u
+                            }
                         }
                         // video-only
                         if (h > videoHeight) {
