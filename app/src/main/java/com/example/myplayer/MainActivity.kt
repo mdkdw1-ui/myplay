@@ -36,9 +36,75 @@ class MainActivity : AppCompatActivity() {
     private lateinit var subAdapter: ChannelAdapter
     private lateinit var etHomeSearch: EditText
 
+    private fun ensureServerAuthGate(): Boolean {
+        val prefs = getSharedPreferences("server_auth", MODE_PRIVATE)
+        val existing = prefs.getString("jwt", null)
+        android.util.Log.d("MainAuth", "gate: existing jwt len=${existing?.length ?: 0}")
+        if (!existing.isNullOrBlank()) return true
+        showPinDialog()
+        return false
+    }
+
+    private fun showPinDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "서버 PIN 입력"
+            setPadding(40, 30, 40, 30)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("🔐 서버 인증")
+            .setMessage("WARP+POT 서버 PIN을 입력하세요")
+            .setView(input)
+            .setPositiveButton("확인") { _, _ ->
+                val pin = input.text.toString().trim()
+                if (pin.isEmpty()) {
+                    showPinDialog()
+                    return@setPositiveButton
+                }
+                lifecycleScope.launch {
+                    val ok = requestJwtForPin(pin)
+                    if (ok) {
+                        Toast.makeText(this@MainActivity, "✅ 인증 완료", Toast.LENGTH_SHORT).show()
+                        recreate()
+                    } else {
+                        Toast.makeText(this@MainActivity, "❌ PIN 오류", Toast.LENGTH_LONG).show()
+                        showPinDialog()
+                    }
+                }
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private suspend fun requestJwtForPin(pin: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val conn = java.net.URL("http://155.248.161.40:5000/auth").openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 10000
+            conn.readTimeout = 15000
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.outputStream.use { it.write(org.json.JSONObject().apply { put("pin", pin) }.toString().toByteArray()) }
+            if (conn.responseCode !in 200..299) {
+                android.util.Log.w("MainAuth", "auth HTTP ${conn.responseCode}")
+                return@withContext false
+            }
+            val token = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() }).optString("token", "")
+            if (token.isBlank()) return@withContext false
+            getSharedPreferences("server_auth", MODE_PRIVATE).edit().putString("jwt", token).apply()
+            android.util.Log.d("MainAuth", "jwt saved len=${token.length}")
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("MainAuth", "auth err: ${e.message}", e)
+            false
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        if (!ensureServerAuthGate()) return
+
         BottomNavHelper.setup(this, BottomNavHelper.TAB_VIDEO)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

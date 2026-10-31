@@ -11,6 +11,15 @@ class MyApp : Application() {
         instance = this
 
         try {
+            val pf = getSharedPreferences("app_prefs", MODE_PRIVATE)
+            if (!pf.getBoolean("jwt_reset_v2", false)) {
+                getSharedPreferences("server_auth", MODE_PRIVATE).edit().clear().apply()
+                pf.edit().putBoolean("jwt_reset_v2", true).apply()
+                android.util.Log.d("MyApp", "server_auth 강제 리셋 (1회)")
+            }
+        } catch (_: Exception) {}
+
+        try {
             System.setProperty("java.net.preferIPv4Stack", "true")
             System.setProperty("java.net.preferIPv6Addresses", "false")
             // ★ Android는 sun.net.spi.nameservice 지원 안 함
