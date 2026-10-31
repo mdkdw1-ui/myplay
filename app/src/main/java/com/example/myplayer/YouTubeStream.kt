@@ -70,6 +70,53 @@ object YouTubeStream {
         }
     }
 
+
+    /** 서버 /media_video_only URL 반환 (WARP 프록시) */
+    suspend fun fetchVideoOnlyFromServer(videoId: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val token = getJwtToken() ?: return@withContext null
+            val url = "$SERVER_API_URL/media_video_only?v=$videoId&token=$token"
+            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 5000
+            conn.readTimeout = 30000
+            conn.requestMethod = "HEAD"
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            conn.setRequestProperty("Range", "bytes=0-0")
+            val code = conn.responseCode
+            if (code !in listOf(200, 206)) {
+                flogServer("HEAD /media_video_only $code")
+                return@withContext null
+            }
+            url
+        } catch (e: Exception) {
+            flogServer("media_video_only err: ${e.message}")
+            null
+        }
+    }
+
+    /** 서버 /media_audio_only URL 반환 */
+    suspend fun fetchAudioOnlyFromServer(videoId: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val token = getJwtToken() ?: return@withContext null
+            val url = "$SERVER_API_URL/media_audio_only?v=$videoId&token=$token"
+            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 5000
+            conn.readTimeout = 30000
+            conn.requestMethod = "HEAD"
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            conn.setRequestProperty("Range", "bytes=0-0")
+            val code = conn.responseCode
+            if (code !in listOf(200, 206)) {
+                flogServer("HEAD /media_audio_only $code")
+                return@withContext null
+            }
+            url
+        } catch (e: Exception) {
+            flogServer("media_audio_only err: ${e.message}")
+            null
+        }
+    }
+
     private fun getJwtToken(): String? {
         return try {
             MyApp.instance.getSharedPreferences("server_auth", android.content.Context.MODE_PRIVATE)
