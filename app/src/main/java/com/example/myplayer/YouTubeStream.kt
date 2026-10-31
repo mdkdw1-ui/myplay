@@ -43,13 +43,15 @@ object YouTubeStream {
     private suspend fun fetchFromServer(videoId: String): String? = withContext(Dispatchers.IO) {
         try {
             flogServer("request: $videoId")
+            val token = getJwtToken() ?: run {
+                flogServer("no jwt token")
+                return@withContext null
+            }
             val conn = java.net.URL("$SERVER_API_URL/stream?v=$videoId").openConnection() as java.net.HttpURLConnection
             conn.connectTimeout = 5000
             conn.readTimeout = 45000
             conn.requestMethod = "GET"
-            val apiKey = BuildConfig.SERVER_API_KEY
-            if (apiKey.isNotBlank()) conn.setRequestProperty("X-API-Key", apiKey)
-            flogServer("apiKey len=${apiKey.length}")
+            conn.setRequestProperty("Authorization", "Bearer $token")
             if (conn.responseCode !in 200..299) {
                 flogServer("HTTP ${conn.responseCode}")
                 return@withContext null
@@ -67,6 +69,13 @@ object YouTubeStream {
             flogServer("err: ${e.message}")
             null
         }
+    }
+
+    private fun getJwtToken(): String? {
+        return try {
+            MyApp.instance.getSharedPreferences("server_auth", android.content.Context.MODE_PRIVATE)
+                .getString("jwt", null)?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) { null }
     }
 
     private fun flog(msg: String) {

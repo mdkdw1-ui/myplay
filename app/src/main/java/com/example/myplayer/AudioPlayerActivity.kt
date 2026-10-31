@@ -379,6 +379,66 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         // ★ 배터리 최적화 제외 요청 (첫 실행 시)
         try { checkBatteryOptimization() } catch (_: Exception) {}
+
+        // ★ 서버 JWT 토큰 확인 (없으면 PIN 입력 요청)
+        try { ensureServerAuth() } catch (_: Exception) {}
+    }
+
+    private fun ensureServerAuth() {
+        val prefs = getSharedPreferences("server_auth", MODE_PRIVATE)
+        val existing = prefs.getString("jwt", null)
+        if (!existing.isNullOrBlank()) return
+
+        val input = android.widget.EditText(this).apply {
+            hint = "서버 PIN 입력"
+            setPadding(40, 30, 40, 30)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("🔐 서버 인증")
+            .setMessage("WARP+POT 서버 PIN을 입력하세요")
+            .setView(input)
+            .setPositiveButton("확인") { _, _ ->
+                val pin = input.text.toString().trim()
+                if (pin.isEmpty()) return@setPositiveButton
+                lifecycleScope.launch {
+                    val ok = requestJwt(pin)
+                    if (ok) {
+                        Toast.makeText(this@AudioPlayerActivity, "✅ 인증 완료", Toast.LENGTH_SHORT).show()
+                        if (currentVideoId.isNotBlank() && currentVideoId !in failedIds) {
+                            checkResumeAndPlayAudio(currentVideoId)
+                        }
+                    } else {
+                        Toast.makeText(this@AudioPlayerActivity, "❌ PIN 오류", Toast.LENGTH_LONG).show()
+                        ensureServerAuth()
+                    }
+                }
+            }
+            .setNegativeButton("나중에", null)
+            .setCancelable(false)
+            .show()
+    }
+
+    private suspend fun requestJwt(pin: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val conn = java.net.URL("http://155.248.161.40:5000/auth").openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 10000
+            conn.readTimeout = 15000
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.outputStream.use { it.write(org.json.JSONObject().apply { put("pin", pin) }.toString().toByteArray()) }
+            if (conn.responseCode !in 200..299) {
+                android.util.Log.w("AudioPlayer", "auth HTTP ${conn.responseCode}")
+                return@withContext false
+            }
+            val token = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() }).optString("token", "")
+            if (token.isBlank()) return@withContext false
+            getSharedPreferences("server_auth", MODE_PRIVATE).edit().putString("jwt", token).apply()
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("AudioPlayer", "auth err: ${e.message}", e)
+            false
+        }
     }
 
     private fun checkBatteryOptimization() {
