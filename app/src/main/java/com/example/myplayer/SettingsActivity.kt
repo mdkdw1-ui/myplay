@@ -41,7 +41,75 @@ class SettingsActivity : AppCompatActivity() {
         } catch (_: Exception) {}
 
         refreshStatus()
+
+        try {
+            findViewById<View>(R.id.cardReauthPin)?.setOnClickListener {
+                showReauthDialog()
+            }
+        } catch (_: Exception) {}
     }
+
+    private fun showReauthDialog() {
+        val prefs = getSharedPreferences("server_auth", MODE_PRIVATE)
+        val existing = prefs.getString("jwt", null)
+        val status = if (existing.isNullOrBlank()) "현재: 인증 안 됨" else "현재: 인증됨 (토큰 ${existing.length}자)"
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("🔐 서버 PIN 재인증")
+            .setMessage("$status\n\nPIN을 다시 입력하면 새 토큰으로 갱신됩니다.")
+            .setPositiveButton("PIN 입력") { _, _ -> showPinInputDialog() }
+            .setNeutralButton("인증 초기화") { _, _ ->
+                prefs.edit().clear().apply()
+                Toast.makeText(this, "인증 초기화됨 (앱 재시작 시 PIN 요청)", Toast.LENGTH_LONG).show()
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun showPinInputDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "서버 PIN 입력"
+            setPadding(40, 30, 40, 30)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("PIN 입력")
+            .setView(input)
+            .setPositiveButton("확인") { _, _ ->
+                val pin = input.text.toString().trim()
+                if (pin.isEmpty()) return@setPositiveButton
+                lifecycleScope.launch {
+                    val ok = requestJwtFromSettings(pin)
+                    if (ok) {
+                        Toast.makeText(this@SettingsActivity, "✅ 인증 완료", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this@SettingsActivity, "❌ PIN 오류", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private suspend fun requestJwtFromSettings(pin: String): Boolean =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val conn = java.net.URL("http://155.248.161.40:5000/auth").openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 10000
+                conn.readTimeout = 15000
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.doOutput = true
+                conn.outputStream.use { it.write(org.json.JSONObject().apply { put("pin", pin) }.toString().toByteArray()) }
+                if (conn.responseCode !in 200..299) return@withContext false
+                val token = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() }).optString("token", "")
+                if (token.isBlank()) return@withContext false
+                getSharedPreferences("server_auth", MODE_PRIVATE).edit().putString("jwt", token).apply()
+                true
+            } catch (e: Exception) {
+                android.util.Log.e("SettingsAuth", "auth err: ${e.message}", e)
+                false
+            }
+        }
 
     private fun checkForUpdate() {
         val btn = findViewById<View>(R.id.cardUpdate)
