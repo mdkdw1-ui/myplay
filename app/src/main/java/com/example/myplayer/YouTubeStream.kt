@@ -47,6 +47,9 @@ object YouTubeStream {
             conn.connectTimeout = 5000
             conn.readTimeout = 45000
             conn.requestMethod = "GET"
+            val apiKey = BuildConfig.SERVER_API_KEY
+            if (apiKey.isNotBlank()) conn.setRequestProperty("X-API-Key", apiKey)
+            flogServer("apiKey len=${apiKey.length}")
             if (conn.responseCode !in 200..299) {
                 flogServer("HTTP ${conn.responseCode}")
                 return@withContext null

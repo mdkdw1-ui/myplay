@@ -108,6 +108,7 @@ jobs:
       - name: Build Release APK
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SERVER_API_KEY: ${{ secrets.SERVER_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           TEXTRA_CLIENT_ID: ${{ secrets.TEXTRA_CLIENT_ID }}
           TEXTRA_CLIENT_SECRET: ${{ secrets.TEXTRA_CLIENT_SECRET }}

@@ -26,6 +26,8 @@ android {
         buildConfigField("String", "TEXTRA_CLIENT_SECRET", "\"$textraSecret\"")
         val textraName = System.getenv("TEXTRA_NAME") ?: ""
         buildConfigField("String", "TEXTRA_NAME", "\"$textraName\"")
+        val serverApiKey = System.getenv("SERVER_API_KEY") ?: ""
+        buildConfigField("String", "SERVER_API_KEY", "\"$serverApiKey\"")
     }
 
     buildTypes {
