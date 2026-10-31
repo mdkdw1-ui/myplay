@@ -28,6 +28,44 @@ object YouTubeStream {
 
     private const val TAG = "YouTubeStream"
 
+    // ★★★ WARP+POT 서버 API (IP 봇 판정 우회)
+    private const val SERVER_API_URL = "http://155.248.161.40:5000"
+
+    private fun flogServer(msg: String) {
+        android.util.Log.d(TAG, "[SRV] $msg")
+        try {
+            val f = java.io.File(MyApp.instance.filesDir, "audio_diag.log")
+            val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+            f.appendText("[$ts] [SRV] $msg\n")
+        } catch (_: Exception) {}
+    }
+
+    private suspend fun fetchFromServer(videoId: String): String? = withContext(Dispatchers.IO) {
+        try {
+            flogServer("request: $videoId")
+            val conn = java.net.URL("$SERVER_API_URL/stream?v=$videoId").openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 5000
+            conn.readTimeout = 45000
+            conn.requestMethod = "GET"
+            if (conn.responseCode !in 200..299) {
+                flogServer("HTTP ${conn.responseCode}")
+                return@withContext null
+            }
+            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            val json = org.json.JSONObject(body)
+            val url = json.optString("url", "")
+            if (url.isBlank()) {
+                flogServer("no url: ${body.take(200)}")
+                return@withContext null
+            }
+            flogServer("OK url=${url.take(60)}")
+            url
+        } catch (e: Exception) {
+            flogServer("err: ${e.message}")
+            null
+        }
+    }
+
     private fun flog(msg: String) {
         android.util.Log.d(TAG, msg)
         try {
@@ -85,6 +123,25 @@ object YouTubeStream {
     /** ★ 오디오 모드 전용: muxed 대신 audio-only 스트림 우선 */
     suspend fun extractAudioOnly(videoId: String): StreamResult = withContext(Dispatchers.IO) {
         flog("A1 extractAudioOnly IO 진입: $videoId")
+
+        // ★★★ 1순위: 서버 API (WARP+POT)
+        val serverUrl = fetchFromServer(videoId)
+        if (!serverUrl.isNullOrBlank()) {
+            val r = StreamResult(
+                videoUrl = null,
+                audioUrl = serverUrl,
+                muxedUrl = null,
+                title = "",
+                channelName = "",
+                description = "",
+                debug = "server-api OK",
+                audioUrlBest = serverUrl
+            )
+            putCache(videoId, r)
+            return@withContext r
+        }
+        flogServer("fallback to local extract")
+
         getCached(videoId)?.let {
             Log.d(TAG, "audio-only cache hit: $videoId")
             return@withContext it

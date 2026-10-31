@@ -160,7 +160,7 @@ object InnerTubeExtractor {
             try {
                 val cookieHeader = conn.getRequestProperty("Cookie")
                 val authHeader = conn.getRequestProperty("Authorization")
-                sb.append("  cookie: ${if (cookieHeader.isNullOrBlank()) "(none)" else cookieHeader.take(50) + "..."}\n")
+                sb.append("  cookie: ${if (cookieHeader.isNullOrBlank()) "(none)" else cookieHeader}\n")
                 sb.append("  auth: ${if (authHeader.isNullOrBlank()) "(none)" else authHeader.take(40) + "..."}\n")
             } catch (_: Exception) {}
             // ★★★ CookieUtil.apply 이후 클라이언트 UA/헤더 재설정 (덮어쓰기 방지)
