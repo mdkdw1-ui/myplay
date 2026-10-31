@@ -1314,6 +1314,45 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** 서버 video_only + audio_only를 병합 재생 */
+    private suspend fun playServerMerged(
+        videoId: String, title: String, channel: String, thumb: String, startPosMs: Long
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            vdiag("playServerMerged: $videoId")
+            val videoUrl = YouTubeStream.fetchVideoOnlyFromServer(videoId) ?: run {
+                vdiag("  video_only null")
+                return@withContext false
+            }
+            val audioUrl = YouTubeStream.fetchAudioOnlyFromServer(videoId) ?: run {
+                vdiag("  audio_only null")
+                return@withContext false
+            }
+            vdiag("  video=${videoUrl.take(60)}")
+            vdiag("  audio=${audioUrl.take(60)}")
+
+            val ok = PlaybackService.playMergedVideoAudio(
+                videoUrl = videoUrl,
+                audioUrl = audioUrl,
+                title = title,
+                channel = channel,
+                videoId = videoId
+            )
+            vdiag("  playMergedVideoAudio=$ok")
+            if (ok) {
+                saveHistory(videoId, title, channel, thumb, startPosMs)
+                currentVideoId = videoId
+                currentTitle = title
+                currentChannel = channel
+                currentThumb = thumb
+            }
+            ok
+        } catch (e: Exception) {
+            vdiag("playServerMerged err: ${e.message}")
+            false
+        }
+    }
+
     private fun extractAndPlay(
         videoId: String, title: String, channel: String, thumb: String, startPosMs: Long = 0L
     ) {
@@ -1321,6 +1360,13 @@ class PlayerActivity : AppCompatActivity() {
         resetZoom()
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
+            // ★★★ 1순위: 서버 프록시 병합 재생 (WARP 우회)
+            if (playServerMerged(videoId, title, channel, thumb, startPosMs)) {
+                vdiag("서버 병합 재생 성공")
+                progress.visibility = View.GONE
+                return@launch
+            }
+            vdiag("서버 병합 실패 → 로컬 extract")
             vdiag("extract 시작: $videoId")
             val result = YouTubeStream.extract(videoId)
             vdiag("extract 완료: $videoId")
