@@ -43,6 +43,7 @@ object YouTubeChannel {
         channelName: String = ""
     ): Pair<ChannelInfo?, ChannelVideosPage> = withContext(Dispatchers.IO) {
         try {
+            Log.d(TAG, "fetch: browseId=$channelId params=$VIDEOS_TAB_PARAMS")
             val body = JSONObject().apply {
                 put("context", JSONObject().apply {
                     put("client", JSONObject().apply {
@@ -83,7 +84,13 @@ object YouTubeChannel {
             extractVideos(json, videos)
             val continuation = findContinuation(json)
 
-            lastDebug = "fetch: videos=${videos.size}, cont=${continuation?.take(20)}"
+            val respStr = response
+            val hasVideoRenderer = respStr.contains("\"videoRenderer\"")
+            val hasLockup = respStr.contains("\"lockupViewModel\"")
+            val hasRichItem = respStr.contains("\"richItemRenderer\"")
+            val hasGridVideo = respStr.contains("\"gridVideoRenderer\"")
+            lastDebug = "fetch: videos=${videos.size} cont=${continuation?.take(20)} " +
+                "| keys: videoRenderer=$hasVideoRenderer lockup=$hasLockup richItem=$hasRichItem grid=$hasGridVideo"
             Log.d(TAG, lastDebug)
 
             Pair(chInfo, ChannelVideosPage(videos, continuation))

@@ -46,6 +46,7 @@ class ChannelActivity : AppCompatActivity() {
         channelId = intent.getStringExtra("CHANNEL_ID") ?: ""
         channelName = intent.getStringExtra("CHANNEL_NAME") ?: ""
 
+        cdiag("ChannelActivity onCreate: id=$channelId name=$channelName")
         val ivAvatar = findViewById<ImageView>(R.id.ivAvatar)
         val tvChannelName = findViewById<TextView>(R.id.tvChannelName)
         val tvSubscribers = findViewById<TextView>(R.id.tvSubscribers)
@@ -139,8 +140,10 @@ class ChannelActivity : AppCompatActivity() {
             cdiag("첫 페이지 저장: next=${nextContinuation?.take(50) ?: "null"}")
             // ★ 로그: 첫 페이지 결과 + continuation 유무
             android.util.Log.d("Channel", "fetch: videos=${page.videos.size} cont=${page.continuation?.take(40)} debug=${YouTubeChannel.lastDebug}")
-            tvStatus.text = if (page.videos.isEmpty()) "영상 없음"
-                             else "${page.videos.size}개 (더: ${page.continuation != null})"
+            val status = if (page.videos.isEmpty()) "영상 없음"
+                         else "${page.videos.size}개 (더: ${page.continuation != null})"
+            tvStatus.text = status
+            cdiag("fetch 결과: id=$channelId videos=${page.videos.size} cont=${page.continuation != null} debug=${YouTubeChannel.lastDebug}")
             adapter.submit(page.videos)
             loadedVideos.clear()
             loadedVideos.addAll(page.videos)
