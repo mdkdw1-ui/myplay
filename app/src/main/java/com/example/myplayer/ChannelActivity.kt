@@ -47,6 +47,29 @@ class ChannelActivity : AppCompatActivity() {
         channelName = intent.getStringExtra("CHANNEL_NAME") ?: ""
 
         cdiag("ChannelActivity onCreate: id=$channelId name=$channelName")
+
+        if (channelId.isNotBlank() && !channelId.startsWith("UC")) {
+            cdiag("channelId가 이름 형식 → resolve 필요")
+            lifecycleScope.launch {
+                try {
+                    cdiag("YouTubeChannels.search 호출: $channelName")
+                    val results = YouTubeChannels.search(channelName.ifBlank { channelId })
+                    cdiag("search 결과: ${results.size}개 ids=${results.map { it.channelId.take(12) }}")
+                    val match = results.firstOrNull { it.name == channelName || it.name == channelId }
+                        ?: results.firstOrNull()
+                    if (match != null && match.channelId.startsWith("UC")) {
+                        cdiag("resolve 성공: ${match.channelId}")
+                        val intent = intent.apply { putExtra("CHANNEL_ID", match.channelId) }
+                        finish()
+                        startActivity(intent)
+                    } else {
+                        cdiag("resolve 실패")
+                    }
+                } catch (e: Exception) {
+                    cdiag("resolve err: ${e.message}")
+                }
+            }
+        }
         val ivAvatar = findViewById<ImageView>(R.id.ivAvatar)
         val tvChannelName = findViewById<TextView>(R.id.tvChannelName)
         val tvSubscribers = findViewById<TextView>(R.id.tvSubscribers)
