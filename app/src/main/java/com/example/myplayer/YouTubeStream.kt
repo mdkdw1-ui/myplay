@@ -53,7 +53,7 @@ object YouTubeStream {
             // 토큰 검증 겸 1바이트 Range 요청 (ExoPlayer 전에 401 조기 감지)
             val conn = java.net.URL(mediaUrl).openConnection() as java.net.HttpURLConnection
             conn.connectTimeout = 5000
-            conn.readTimeout = 10000
+            conn.readTimeout = 30000
             conn.requestMethod = "HEAD"
             conn.setRequestProperty("Authorization", "Bearer $token")
             conn.setRequestProperty("Range", "bytes=0-0")

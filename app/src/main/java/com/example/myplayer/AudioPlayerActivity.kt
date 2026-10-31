@@ -659,16 +659,17 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
             diag("라디오 ${combined.size}곡 큐 추가")
             
-            // ★ 추가된 곡 즉시 병렬 캐시
-            combined.take(3).forEach { v ->
-                bgScope.launch {
+            // ★ 추가된 곡 순차 캐시 (서버 부하 방지)
+            bgScope.launch {
+                for ((i, v) in combined.take(3).withIndex()) {
                     try {
-                        val result = kotlinx.coroutines.withTimeoutOrNull(15_000) {
+                        if (i > 0) delay(1500)   // 간격
+                        val result = kotlinx.coroutines.withTimeoutOrNull(30_000) {
                             YouTubeStream.extractAudioOnly(v.videoId)
-                        } ?: return@launch
+                        } ?: continue
                         if (result.hasAny) {
                             prefetchedStreams[v.videoId] = result
-                            diag("라디오 prefetch: ${v.videoId} (${v.title.take(20)})")
+                            diag("prefetch: 순차 ${i+1}/3 ${v.videoId}")
                         }
                     } catch (_: Exception) {}
                 }
