@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.myplayer"
         minSdk = 26
         targetSdk = 34
-        versionCode = 355
-        versionName = "1.355"
+        versionCode = 356
+        versionName = "1.356"
 
         // Gemini API 키 (GitHub Actions에서 환경변수로 주입)
         val geminiKey = System.getenv("GEMINI_API_KEY") ?: ""
