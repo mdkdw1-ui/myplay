@@ -284,6 +284,13 @@ class AudioPlayerActivity : AppCompatActivity() {
                 val channel = currentChannel.ifBlank { "YouTube" }
                 QueueManager.add(this, HomeVideo(currentVideoId, title, channel, currentThumb))
                 diag("onCreate: fresh selection → 큐 즉시 추가 $currentVideoId")
+                // ★ prefs도 즉시 갱신 (fresh selection이 prefs에 덮이지 않게)
+                pref?.edit()
+                    ?.putString("current_video_id", currentVideoId)
+                    ?.putString("current_title", currentTitle)
+                    ?.putString("current_channel", currentChannel)
+                    ?.putString("current_thumbnail", currentThumb)
+                    ?.apply()
             }
         }
 
@@ -705,17 +712,21 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun updateUI() {
-        // ★★★ prefs와 현재 상태 재확인 (동기화 보장)
-        try {
-            val prefId = pref?.getString("current_video_id", null)
-            if (prefId != null && prefId.isNotBlank() && prefId != currentVideoId) {
-                diag("updateUI: prefs와 현재 상태 불일치 → prefs 우선 ($prefId vs $currentVideoId)")
-                currentVideoId = prefId
-                currentTitle = pref?.getString("current_title", "") ?: currentTitle
-                currentChannel = pref?.getString("current_channel", "") ?: currentChannel
-                currentThumb = pref?.getString("current_thumbnail", "") ?: currentThumb
-            }
-        } catch (_: Exception) {}
+        // ★ intent에 곡이 명시됐으면 prefs 우선 로직 skip
+        // (fresh selection이 prefs로 덮어씌워지는 버그 방지)
+        val intentHasTrack = intent.getStringExtra("VIDEO_ID")?.isNotBlank() == true
+        if (!intentHasTrack) {
+            try {
+                val prefId = pref?.getString("current_video_id", null)
+                if (prefId != null && prefId.isNotBlank() && prefId != currentVideoId) {
+                    diag("updateUI: prefs 복원 ($prefId vs $currentVideoId)")
+                    currentVideoId = prefId
+                    currentTitle = pref?.getString("current_title", "") ?: currentTitle
+                    currentChannel = pref?.getString("current_channel", "") ?: currentChannel
+                    currentThumb = pref?.getString("current_thumbnail", "") ?: currentThumb
+                }
+            } catch (_: Exception) {}
+        }
 
         val isLocal = currentVideoId.startsWith("local:") || currentVideoId.isBlank()
         findViewById<View>(R.id.btnVideoMode)?.visibility = if (isLocal) View.GONE else View.VISIBLE
