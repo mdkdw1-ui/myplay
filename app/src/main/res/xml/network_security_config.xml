@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- WARP+POT 서버 (특정 IP만 HTTP 허용) -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">155.248.161.40</domain>
+    </domain-config>
+    <!-- 나머지는 HTTPS 강제 (기본) -->
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>
