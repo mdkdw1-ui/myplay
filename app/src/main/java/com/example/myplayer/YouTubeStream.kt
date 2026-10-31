@@ -47,24 +47,23 @@ object YouTubeStream {
                 flogServer("no jwt token")
                 return@withContext null
             }
-            val conn = java.net.URL("$SERVER_API_URL/stream?v=$videoId").openConnection() as java.net.HttpURLConnection
+            // ★★★ /media (스트림 프록시) URL을 반환 — WARP IP 바인딩 문제 회피
+            // 실제 재생은 ExoPlayer가 이 URL로 요청 → 서버가 WARP 통해 googlevideo 중계
+            val mediaUrl = "$SERVER_API_URL/media?v=$videoId&token=$token"
+            // 토큰 검증 겸 1바이트 Range 요청 (ExoPlayer 전에 401 조기 감지)
+            val conn = java.net.URL(mediaUrl).openConnection() as java.net.HttpURLConnection
             conn.connectTimeout = 5000
-            conn.readTimeout = 45000
-            conn.requestMethod = "GET"
+            conn.readTimeout = 10000
+            conn.requestMethod = "HEAD"
             conn.setRequestProperty("Authorization", "Bearer $token")
-            if (conn.responseCode !in 200..299) {
-                flogServer("HTTP ${conn.responseCode}")
+            conn.setRequestProperty("Range", "bytes=0-0")
+            val code = conn.responseCode
+            if (code !in listOf(200, 206)) {
+                flogServer("HEAD HTTP $code")
                 return@withContext null
             }
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
-            val json = org.json.JSONObject(body)
-            val url = json.optString("url", "")
-            if (url.isBlank()) {
-                flogServer("no url: ${body.take(200)}")
-                return@withContext null
-            }
-            flogServer("OK url=${url.take(60)}")
-            url
+            flogServer("OK mediaUrl=$mediaUrl")
+            mediaUrl
         } catch (e: Exception) {
             flogServer("err: ${e.message}")
             null
