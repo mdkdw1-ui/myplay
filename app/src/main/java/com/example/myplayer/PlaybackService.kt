@@ -111,7 +111,14 @@ class PlaybackService : MediaSessionService() {
             .setTargetBufferBytes(200 * 1024 * 1024)   // 100MB → 200MB
             .build()
 
-        val player = ExoPlayer.Builder(this)
+        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(this)
+            .setDataSourceFactory(
+                androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                    .setUserAgent("com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12) gzip")
+                    .setAllowCrossProtocolRedirects(true)
+            )
+
+        val player = ExoPlayer.Builder(this, mediaSourceFactory)
             .setAudioAttributes(audioAttributes, false)
             .setHandleAudioBecomingNoisy(false)
             .setLoadControl(loadControl)
@@ -671,7 +678,7 @@ class PlaybackService : MediaSessionService() {
             val player = exoPlayer ?: return false
             return try {
                 val dataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
-                    .setUserAgent("Mozilla/5.0")
+                    .setUserAgent("com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12) gzip")
                     .setAllowCrossProtocolRedirects(true)
 
                 val videoSource = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(dataSourceFactory)
