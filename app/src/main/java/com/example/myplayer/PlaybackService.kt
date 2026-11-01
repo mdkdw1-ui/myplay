@@ -114,15 +114,9 @@ class PlaybackService : MediaSessionService() {
         // ★ content:// (로컬 파일), http:// (스트리밍) 모두 지원하는 DataSource
         // ★ newpipe-local URL은 폰 IP로 재생 (WARP 프록시 우회)
         // ★ WARP 프록시 (서버 40001) 경유 - 이 앱만 WARP 통과
-        val warpProxy = java.net.Proxy(
-            java.net.Proxy.Type.SOCKS,
-            java.net.InetSocketAddress("155.248.161.40", 40001)
-        )
-        val okHttpClient = okhttp3.OkHttpClient.Builder()
-            .proxy(warpProxy)
-            .build()
-        val httpDataSourceFactory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(okHttpClient)
+        val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
             .setUserAgent("com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12) gzip")
+            .setAllowCrossProtocolRedirects(true)
 
         val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(this, httpDataSourceFactory)
 

@@ -48,8 +48,8 @@ object YouTubeStream {
                 return@withContext null
             }
 
-            // ★ 1순위: /media_live (다운로드 대기 없이 즉시 스트리밍 중계)
-            val liveUrl = "$SERVER_API_URL/media_live?v=$videoId&token=$token"
+            // ★ 1순위: /media (파일 캐시 폴링)
+            val liveUrl = "$SERVER_API_URL/media?v=$videoId&token=$token"
             try {
                 val lConn = java.net.URL(liveUrl).openConnection() as java.net.HttpURLConnection
                 lConn.connectTimeout = 3000
