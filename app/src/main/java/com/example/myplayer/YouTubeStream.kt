@@ -48,28 +48,7 @@ object YouTubeStream {
                 return@withContext null
             }
 
-            // ★ 1순위: /stream_direct (다운로드 없이 visionos URL 즉시 반환, 0.3초)
-            try {
-                val directUrl = "$SERVER_API_URL/stream_direct?v=$videoId&token=$token"
-                val dConn = java.net.URL(directUrl).openConnection() as java.net.HttpURLConnection
-                dConn.connectTimeout = 3000
-                dConn.readTimeout = 5000
-                dConn.setRequestProperty("Authorization", "Bearer $token")
-                if (dConn.responseCode in 200..299) {
-                    val body = dConn.inputStream.bufferedReader().use { it.readText() }
-                    val directMediaUrl = org.json.JSONObject(body).optString("url", "")
-                    if (directMediaUrl.isNotBlank()) {
-                        flogServer("OK stream_direct=$directMediaUrl")
-                        return@withContext directMediaUrl
-                    }
-                }
-                flogServer("stream_direct HTTP ${dConn.responseCode}")
-            } catch (e: Exception) {
-                flogServer("stream_direct err: ${e.message}")
-            }
-
-            // ★ 2순위: /media (다운로드 캐시) — stream_direct 실패 시 폴백
-            flogServer("fallback to /media")
+            // ★★★ 스트리밍 대신 무조건 파일 캐시(/media) 사용
             val mediaUrl = "$SERVER_API_URL/media?v=$videoId&token=$token"
             val conn = java.net.URL(mediaUrl).openConnection() as java.net.HttpURLConnection
             conn.connectTimeout = 5000
