@@ -1,6 +1,9 @@
 package com.example.myplayer
 
 import android.os.Bundle
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -109,7 +112,7 @@ class YouTubeLoginActivity : AppCompatActivity() {
         try {
             val token = getSharedPreferences("server_auth", MODE_PRIVATE).getString("jwt", "") ?: ""
             if (token.isNotBlank()) {
-                kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                GlobalScope.launch(Dispatchers.IO) {
                     try {
                         val conn = java.net.URL("http://155.248.161.40:5000/update_cookie").openConnection() as java.net.HttpURLConnection
                         conn.requestMethod = "POST"
