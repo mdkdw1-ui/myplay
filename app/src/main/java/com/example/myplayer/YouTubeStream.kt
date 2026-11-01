@@ -48,21 +48,33 @@ object YouTubeStream {
                 return@withContext null
             }
 
-            // ★★★ 스트리밍 대신 무조건 파일 캐시(/media) 사용
+            // ★★★ 비동기 다운로드 폴링 (Flask 타임아웃 우회)
             val mediaUrl = "$SERVER_API_URL/media?v=$videoId&token=$token"
-            val conn = java.net.URL(mediaUrl).openConnection() as java.net.HttpURLConnection
-            conn.connectTimeout = 5000
-            conn.readTimeout = 90000
-            conn.requestMethod = "HEAD"
-            conn.setRequestProperty("Authorization", "Bearer $token")
-            conn.setRequestProperty("Range", "bytes=0-0")
-            val code = conn.responseCode
-            if (code !in listOf(200, 206)) {
-                flogServer("HEAD HTTP $code")
-                return@withContext null
+            var attempts = 0
+            while (attempts < 90) { // 최대 90초 대기
+                val conn = java.net.URL(mediaUrl).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 5000
+                conn.readTimeout = 10000
+                conn.requestMethod = "HEAD"
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                conn.setRequestProperty("Range", "bytes=0-0")
+                val code = conn.responseCode
+
+                if (code in listOf(200, 206)) {
+                    flogServer("OK mediaUrl=$mediaUrl (ready after ${attempts}s)")
+                    return@withContext mediaUrl
+                } else if (code == 202) {
+                    // 다운로드 중 -> 1초 대기 후 재시도
+                    if (attempts % 5 == 0) flogServer("media downloading... (${attempts}s)")
+                    kotlinx.coroutines.delay(1000)
+                    attempts++
+                } else {
+                    flogServer("HEAD HTTP $code")
+                    return@withContext null
+                }
             }
-            flogServer("OK mediaUrl=$mediaUrl")
-            mediaUrl
+            flogServer("media timeout after 90s")
+            return@withContext null
         } catch (e: Exception) {
             flogServer("err: ${e.message}")
             null
