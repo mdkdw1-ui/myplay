@@ -104,5 +104,30 @@ class YouTubeLoginActivity : AppCompatActivity() {
         saved = true
         tvStatus.text = "✅ 쿠키 저장됨 (${essential.size}개)"
         Toast.makeText(this, "로그인 완료 · 쿠키 저장됨", Toast.LENGTH_LONG).show()
+
+        // ★ 서버로 쿠키 전송 (봇 차단 우회용)
+        try {
+            val token = getSharedPreferences("server_auth", MODE_PRIVATE).getString("jwt", "") ?: ""
+            if (token.isNotBlank()) {
+                kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    try {
+                        val conn = java.net.URL("http://155.248.161.40:5000/update_cookie").openConnection() as java.net.HttpURLConnection
+                        conn.requestMethod = "POST"
+                        conn.setRequestProperty("Content-Type", "application/json")
+                        conn.setRequestProperty("Authorization", "Bearer $token")
+                        conn.doOutput = true
+                        val body = org.json.JSONObject().apply { put("cookie", cookieStr) }.toString()
+                        conn.outputStream.use { it.write(body.toByteArray()) }
+                        if (conn.responseCode in 200..299) {
+                            android.util.Log.d("YouTubeLogin", "서버에 쿠키 전송 성공")
+                        } else {
+                            android.util.Log.e("YouTubeLogin", "서버 쿠키 전송 실패 HTTP ${conn.responseCode}")
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("YouTubeLogin", "쿠키 전송 에러: ${e.message}")
+                    }
+                }
+            }
+        } catch (_: Exception) {}
     }
 }
