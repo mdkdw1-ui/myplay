@@ -38,8 +38,9 @@ class NewPipePotProvider(private val ctx: Context) : PoTokenProvider {
             return null
         }
         return PoTokenResult(
-            "$integrityToken|$videoId",
-            "$integrityToken|$visitorData"
+            "$integrityToken|$videoId", // playerPot
+            "$integrityToken|$visitorData", // streamingPot
+            visitorData // p2 (visitorData)
         )
     }
 
