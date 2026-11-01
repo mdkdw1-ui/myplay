@@ -1511,7 +1511,35 @@ class AudioPlayerActivity : AppCompatActivity() {
                     val curUrl = curItem?.localConfiguration?.uri?.toString() ?: "(null)"
                     diag("❌ ERR ${error.errorCodeName}: ${error.message?.take(80)}")
                     diag("   url=${curUrl.take(80)}")
+
+                    // ★ stream_direct 403 에러 시 /media 캐시로 폴백
+                    if (curUrl.contains("googlevideo.com") && error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS) {
+                        diag("⚠️ stream_direct 403 → /media 캐시로 폴백")
+                        val vid = currentVideoId
+                        if (vid.isNotBlank()) {
+                            bgScope.launch {
+                                try {
+                                    val token = getSharedPreferences("server_auth", MODE_PRIVATE).getString("jwt", "") ?: ""
+                                    val mediaUrl = "http://155.248.161.40:5000/media?v=$vid&token=$token"
+                                    diag("폴백 URL: $mediaUrl")
+                                    withContext(Dispatchers.Main) {
+                                        val mi = androidx.media3.common.MediaItem.Builder()
+                                            .setUri(mediaUrl)
+                                            .setMediaId(vid)
+                                            .build()
+                                        mediaController?.setMediaItem(mi)
+                                        mediaController?.prepare()
+                                        mediaController?.playWhenReady = true
+                                    }
+                                } catch (e: Exception) {
+                                    diag("폴백 실패: ${e.message}")
+                                }
+                            }
+                        }
+                        return
+                    }
                 } catch (_: Exception) {}
+                
                 val mc = mediaController
                 if (mc != null && mc.hasNextMediaItem()) {
                     mc.seekToNextMediaItem()
