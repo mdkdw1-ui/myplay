@@ -48,7 +48,25 @@ object YouTubeStream {
                 return@withContext null
             }
 
-            // ★★★ 비동기 다운로드 폴링 (Flask 타임아웃 우회)
+            // ★ 1순위: /media_live (다운로드 대기 없이 즉시 스트리밍 중계)
+            val liveUrl = "$SERVER_API_URL/media_live?v=$videoId&token=$token"
+            try {
+                val lConn = java.net.URL(liveUrl).openConnection() as java.net.HttpURLConnection
+                lConn.connectTimeout = 3000
+                lConn.readTimeout = 5000
+                lConn.requestMethod = "HEAD"
+                lConn.setRequestProperty("Authorization", "Bearer $token")
+                lConn.setRequestProperty("Range", "bytes=0-0")
+                if (lConn.responseCode in listOf(200, 206)) {
+                    flogServer("OK media_live=$liveUrl")
+                    return@withContext liveUrl
+                }
+            } catch (e: Exception) {
+                flogServer("media_live err: ${e.message}")
+            }
+
+            // ★ 2순위: /media (비동기 다운로드 폴링)
+            flogServer("fallback to /media (polling)")
             val mediaUrl = "$SERVER_API_URL/media?v=$videoId&token=$token"
             var attempts = 0
             while (attempts < 90) { // 최대 90초 대기
