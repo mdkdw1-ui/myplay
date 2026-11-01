@@ -52,7 +52,7 @@ object YouTubeStream {
             val mediaUrl = "$SERVER_API_URL/media?v=$videoId&token=$token"
             val conn = java.net.URL(mediaUrl).openConnection() as java.net.HttpURLConnection
             conn.connectTimeout = 5000
-            conn.readTimeout = 30000
+            conn.readTimeout = 90000
             conn.requestMethod = "HEAD"
             conn.setRequestProperty("Authorization", "Bearer $token")
             conn.setRequestProperty("Range", "bytes=0-0")
@@ -77,7 +77,7 @@ object YouTubeStream {
             val url = "$SERVER_API_URL/media_video_only?v=$videoId&token=$token"
             val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
             conn.connectTimeout = 5000
-            conn.readTimeout = 30000
+            conn.readTimeout = 90000
             conn.requestMethod = "HEAD"
             conn.setRequestProperty("Authorization", "Bearer $token")
             conn.setRequestProperty("Range", "bytes=0-0")
@@ -100,7 +100,7 @@ object YouTubeStream {
             val url = "$SERVER_API_URL/media_audio_only?v=$videoId&token=$token"
             val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
             conn.connectTimeout = 5000
-            conn.readTimeout = 30000
+            conn.readTimeout = 90000
             conn.requestMethod = "HEAD"
             conn.setRequestProperty("Authorization", "Bearer $token")
             conn.setRequestProperty("Range", "bytes=0-0")
