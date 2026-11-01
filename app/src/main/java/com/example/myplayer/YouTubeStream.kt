@@ -677,23 +677,29 @@ object YouTubeStream {
     }
 
     /** 폰에서 NewPipe POT(WARP)로 비디오(muxed) 스트림 추출 */
+    /** 폰에서 NewPipe POT(WARP)로 비디오(muxed) 스트림 추출 */
     suspend fun extractVideoLocal(videoId: String): StreamResult = withContext(Dispatchers.IO) {
         try {
             org.schabi.newpipe.extractor.NewPipe.init(DownloaderImpl())
             val service = org.schabi.newpipe.extractor.ServiceList.YouTube
             val info = org.schabi.newpipe.extractor.stream.StreamInfo.getInfo(service, "https://www.youtube.com/watch?v=$videoId")
-            if (muxed != null) {
-                flog("NewPipe Video POT 성공: $videoId")
+            val videos = info.videoStreams.filter { it.isUrl }
+            // muxed (video+audio) 우선
+            val muxedStream = videos.firstOrNull { !it.isVideoOnly }
+            if (muxedStream != null) {
+                flog("NewPipe Video POT 성공: $videoId (${muxedStream.resolution})")
                 return@withContext StreamResult(
-                    videoUrl = null, audioUrl = null, muxedUrl = muxed.content,
+                    videoUrl = null, audioUrl = null, muxedUrl = muxedStream.content,
                     title = info.name ?: "", channelName = info.uploaderName ?: "",
                     description = info.description?.content ?: "", debug = "newpipe-video OK",
                     qualities = emptyList(),
                     subtitles = emptyList()
                 )
             }
-            // muxed 없으면 videoOnly + audio 병합
-            val videoOnly = info.videoStreams.filter { it.isUrl && it.isVideoOnly }.maxByOrNull { it.averageBitrate }
+            // videoOnly + audio 병합
+            val videoOnly = videos.filter { it.isVideoOnly }.maxByOrNull {
+                it.resolution?.replace("p", "")?.toIntOrNull() ?: 0
+            }
             val audio = info.audioStreams.filter { it.isUrl }.maxByOrNull { it.averageBitrate }
             if (videoOnly != null && audio != null) {
                 flog("NewPipe Video POT 성공 (병합): $videoId")
