@@ -1483,11 +1483,38 @@ class AudioPlayerActivity : AppCompatActivity() {
                     }
                 }
 
-                // ★★★ STATE_ENDED는 Service가 처리 (Activity 중복 방지)
-                // Activity가 살아있으면 UI만 갱신, 다음 곡 로드는 Service 담당
+                // ★★★ STATE_ENDED: Activity가 직접 다음 곡 재생 (prefetch 캐시 활용)
                 if (playbackState == Player.STATE_ENDED) {
-                    diag("STATE_ENDED: Service가 다음 곡 처리 (Activity 스킵)")
-                    // Activity의 playNextRelatedBg 호출 제거
+                    diag("STATE_ENDED: Activity가 다음 곡 처리")
+                    bgScope.launch {
+                        delay(300)
+                        // prefetch 캐시에 있으면 즉시 재생, 없으면 playNextLocal/playNextRelated
+                        try {
+                            val queue = QueueManager.get(this@AudioPlayerActivity)
+                            val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+                            if (curIdx >= 0 && curIdx < queue.size - 1) {
+                                // 큐에 다음 곡이 있음
+                                val next = queue[curIdx + 1]
+                                diag("ENDED → 큐 다음 곡: ${next.videoId}")
+                                currentVideoId = next.videoId
+                                currentTitle = next.title
+                                currentChannel = next.channel
+                                currentThumb = next.thumbnail
+                                QueueManager.setCurrent(this@AudioPlayerActivity, next.videoId)
+                                runOnUiThread { updateUI() }
+                                loadAudio(next.videoId, isInitial = false)
+                            } else {
+                                // 큐에 없으면 라디오/로컬
+                                if (currentVideoId.startsWith("local:")) {
+                                    playNextLocal()
+                                } else {
+                                    playNextRelatedBg()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            diag("ENDED 처리 err: ${e.message}")
+                        }
+                    }
                 }
             }
 
