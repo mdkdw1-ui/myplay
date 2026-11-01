@@ -47,10 +47,30 @@ object YouTubeStream {
                 flogServer("no jwt token")
                 return@withContext null
             }
-            // ★★★ /media (스트림 프록시) URL을 반환 — WARP IP 바인딩 문제 회피
-            // 실제 재생은 ExoPlayer가 이 URL로 요청 → 서버가 WARP 통해 googlevideo 중계
+
+            // ★ 1순위: /stream_direct (다운로드 없이 visionos URL 즉시 반환, 0.3초)
+            try {
+                val directUrl = "$SERVER_API_URL/stream_direct?v=$videoId&token=$token"
+                val dConn = java.net.URL(directUrl).openConnection() as java.net.HttpURLConnection
+                dConn.connectTimeout = 3000
+                dConn.readTimeout = 5000
+                dConn.setRequestProperty("Authorization", "Bearer $token")
+                if (dConn.responseCode in 200..299) {
+                    val body = dConn.inputStream.bufferedReader().use { it.readText() }
+                    val directMediaUrl = org.json.JSONObject(body).optString("url", "")
+                    if (directMediaUrl.isNotBlank()) {
+                        flogServer("OK stream_direct=$directMediaUrl")
+                        return@withContext directMediaUrl
+                    }
+                }
+                flogServer("stream_direct HTTP ${dConn.responseCode}")
+            } catch (e: Exception) {
+                flogServer("stream_direct err: ${e.message}")
+            }
+
+            // ★ 2순위: /media (다운로드 캐시) — stream_direct 실패 시 폴백
+            flogServer("fallback to /media")
             val mediaUrl = "$SERVER_API_URL/media?v=$videoId&token=$token"
-            // 토큰 검증 겸 1바이트 Range 요청 (ExoPlayer 전에 401 조기 감지)
             val conn = java.net.URL(mediaUrl).openConnection() as java.net.HttpURLConnection
             conn.connectTimeout = 5000
             conn.readTimeout = 30000
