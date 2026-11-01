@@ -7,6 +7,8 @@ import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 import java.io.BufferedReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.Proxy
+import java.net.InetSocketAddress
 
 class DownloaderImpl : Downloader() {
 
@@ -41,7 +43,8 @@ class DownloaderImpl : Downloader() {
         val headers = request.headers()
         val dataToSend = request.dataToSend()
 
-        val connection = URL(url).openConnection() as HttpURLConnection
+        val warpProxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("155.248.161.40", 40001))
+        val connection = URL(url).openConnection(warpProxy) as HttpURLConnection
         connection.requestMethod = httpMethod
         connection.connectTimeout = 15000
         connection.readTimeout = 15000
