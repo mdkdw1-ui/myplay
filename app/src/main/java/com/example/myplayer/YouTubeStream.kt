@@ -53,7 +53,7 @@ object YouTubeStream {
             try {
                 val lConn = java.net.URL(liveUrl).openConnection() as java.net.HttpURLConnection
                 lConn.connectTimeout = 3000
-                lConn.readTimeout = 5000
+                lConn.readTimeout = 45000
                 lConn.requestMethod = "HEAD"
                 lConn.setRequestProperty("Authorization", "Bearer $token")
                 lConn.setRequestProperty("Range", "bytes=0-0")
@@ -72,7 +72,7 @@ object YouTubeStream {
             while (attempts < 90) { // 최대 90초 대기
                 val conn = java.net.URL(mediaUrl).openConnection() as java.net.HttpURLConnection
                 conn.connectTimeout = 5000
-                conn.readTimeout = 10000
+                conn.readTimeout = 45000
                 conn.requestMethod = "HEAD"
                 conn.setRequestProperty("Authorization", "Bearer $token")
                 conn.setRequestProperty("Range", "bytes=0-0")
