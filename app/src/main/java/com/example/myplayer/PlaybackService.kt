@@ -111,12 +111,14 @@ class PlaybackService : MediaSessionService() {
             .setTargetBufferBytes(200 * 1024 * 1024)   // 100MB → 200MB
             .build()
 
-        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(
-                androidx.media3.datasource.DefaultHttpDataSource.Factory()
-                    .setUserAgent("com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12) gzip")
-                    .setAllowCrossProtocolRedirects(true)
-            )
+        // ★ content:// (로컬 파일), http:// (스트리밍) 모두 지원하는 DataSource
+        val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            .setUserAgent("com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12) gzip")
+            .setAllowCrossProtocolRedirects(true)
+
+        val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(this, httpDataSourceFactory)
+
+        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
 
         val player = ExoPlayer.Builder(this, mediaSourceFactory)
             .setAudioAttributes(audioAttributes, false)
