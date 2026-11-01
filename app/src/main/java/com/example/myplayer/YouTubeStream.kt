@@ -211,6 +211,24 @@ object YouTubeStream {
     suspend fun extractAudioOnly(videoId: String): StreamResult = withContext(Dispatchers.IO) {
         flog("A1 extractAudioOnly IO 진입: $videoId")
 
+        // ★ 0순위: 폰에서 NewPipeExtractor로 직접 추출 (POT 생성)
+        try {
+            org.schabi.newpipe.extractor.NewPipe.init(DownloaderImpl())
+            val service = org.schabi.newpipe.extractor.ServiceList.YouTube
+            val info = org.schabi.newpipe.extractor.stream.StreamInfo.getInfo(service, "https://www.youtube.com/watch?v=$videoId")
+            val audio = info.audioStreams.filter { it.isUrl }.maxByOrNull { it.averageBitrate }
+            if (audio != null) {
+                flog("NewPipe POT 성공: $videoId")
+                return@withContext StreamResult(
+                    videoUrl = null, audioUrl = audio.content, muxedUrl = null,
+                    title = info.name ?: "", channelName = info.uploaderName ?: "",
+                    description = "", debug = "newpipe-local OK", audioUrlBest = audio.content
+                )
+            }
+        } catch (e: Exception) {
+            flog("NewPipe POT 실패: ${e.message}")
+        }
+
         // ★★★ 1순위: 서버 API (WARP+POT)
         val serverUrl = fetchFromServer(videoId)
         if (!serverUrl.isNullOrBlank()) {
