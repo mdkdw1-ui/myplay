@@ -675,4 +675,40 @@ object YouTubeStream {
             null
         } catch (e: Exception) { null }
     }
+
+    /** 폰에서 NewPipe POT(WARP)로 비디오(muxed) 스트림 추출 */
+    suspend fun extractVideoLocal(videoId: String): StreamResult = withContext(Dispatchers.IO) {
+        try {
+            org.schabi.newpipe.extractor.NewPipe.init(DownloaderImpl())
+            val service = org.schabi.newpipe.extractor.ServiceList.YouTube
+            val info = org.schabi.newpipe.extractor.stream.StreamInfo.getInfo(service, "https://www.youtube.com/watch?v=$videoId")
+            if (muxed != null) {
+                flog("NewPipe Video POT 성공: $videoId")
+                return@withContext StreamResult(
+                    videoUrl = null, audioUrl = null, muxedUrl = muxed.content,
+                    title = info.name ?: "", channelName = info.uploaderName ?: "",
+                    description = info.description?.content ?: "", debug = "newpipe-video OK",
+                    qualities = emptyList(),
+                    subtitles = emptyList()
+                )
+            }
+            // muxed 없으면 videoOnly + audio 병합
+            val videoOnly = info.videoStreams.filter { it.isUrl && it.isVideoOnly }.maxByOrNull { it.averageBitrate }
+            val audio = info.audioStreams.filter { it.isUrl }.maxByOrNull { it.averageBitrate }
+            if (videoOnly != null && audio != null) {
+                flog("NewPipe Video POT 성공 (병합): $videoId")
+                return@withContext StreamResult(
+                    videoUrl = videoOnly.content, audioUrl = audio.content, muxedUrl = null,
+                    title = info.name ?: "", channelName = info.uploaderName ?: "",
+                    description = info.description?.content ?: "", debug = "newpipe-video merge OK",
+                    qualities = emptyList(),
+                    subtitles = emptyList()
+                )
+            }
+        } catch (e: Exception) {
+            flog("NewPipe Video POT 실패: ${e.message}")
+        }
+        return@withContext StreamResult(null, null, null, "", "", "", "newpipe-video fail")
+    }
+
 }
