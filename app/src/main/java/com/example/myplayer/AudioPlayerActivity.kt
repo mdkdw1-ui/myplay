@@ -1211,7 +1211,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 prefetched
             } else {
                 try {
-                    val r = kotlinx.coroutines.withTimeoutOrNull(25_000) {
+                    val r = kotlinx.coroutines.withTimeoutOrNull(90_000) {
                         YouTubeStream.extractAudioOnly(videoId)
                     }
                     if (r == null) {
