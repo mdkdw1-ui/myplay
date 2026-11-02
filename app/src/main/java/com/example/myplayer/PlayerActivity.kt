@@ -1376,7 +1376,7 @@ class PlayerActivity : AppCompatActivity() {
                     progress.visibility = View.GONE
                     return@launch
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 vdiag("NewPipe Video POT 실패: ${e.message}")
             }
             // ★★★ 1순위: 서버 프록시 병합 재생 (WARP 우회)

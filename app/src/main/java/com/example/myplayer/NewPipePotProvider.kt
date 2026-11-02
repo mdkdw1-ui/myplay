@@ -23,12 +23,22 @@ class NewPipePotProvider(private val ctx: Context) : PoTokenProvider {
 
     private fun initWebView() {
         if (webView != null) return
-        webView = WebView(ctx).apply {
-            settings.javaScriptEnabled = true
-            settings.blockNetworkLoads = true
-            addJavascriptInterface(this@NewPipePotProvider, "PoToken")
-            loadUrl("file:///android_asset/po_token.html")
+        // ★ 1.478: Android 17 UI 스레드 + try-catch(Throwable)
+        val latch = java.util.concurrent.CountDownLatch(1)
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                webView = WebView(ctx).apply {
+                    settings.javaScriptEnabled = true
+                    settings.blockNetworkLoads = true
+                    addJavascriptInterface(this@NewPipePotProvider, "PoToken")
+                    loadUrl("file:///android_asset/po_token.html")
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "WebView init failed: ${e.message}")
+                webView = null
+            } finally { latch.countDown() }
         }
+        latch.await(5, java.util.concurrent.TimeUnit.SECONDS)
     }
 
     override fun getWebClientPoToken(videoId: String): PoTokenResult? {

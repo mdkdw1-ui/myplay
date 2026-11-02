@@ -37,10 +37,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etHomeSearch: EditText
 
     private fun ensureServerAuthGate(): Boolean {
-        val prefs = getSharedPreferences("server_auth", MODE_PRIVATE)
-        val existing = prefs.getString("jwt", null)
-        android.util.Log.d("MainAuth", "gate: existing jwt len=${existing?.length ?: 0}")
-        if (!existing.isNullOrBlank()) return true
+        // ★ 1.478: prefs 예외 대비 try-catch
+        try {
+            val prefs = getSharedPreferences("server_auth", MODE_PRIVATE)
+            val existing = prefs.getString("jwt", null)
+            android.util.Log.d("MainAuth", "gate: existing jwt len=${existing?.length ?: 0}")
+            if (!existing.isNullOrBlank()) return true
+        } catch (e: Throwable) {
+            android.util.Log.e("MainAuth", "gate err: ${e.message}")
+        }
         showPinDialog()
         return false
     }

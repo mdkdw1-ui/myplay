@@ -225,7 +225,7 @@ object YouTubeStream {
                     description = "", debug = "newpipe-local OK", audioUrlBest = audio.content
                 )
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             flog("NewPipe POT 실패: ${e.message}")
         }
 
