@@ -43,7 +43,7 @@ class DownloaderImpl : Downloader() {
         val headers = request.headers()
         val dataToSend = request.dataToSend()
 
-        val warpProxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("155.248.161.40", 40001))
+        val warpProxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("193.123.167.118", 40001))
         val connection = URL(url).openConnection(warpProxy) as HttpURLConnection
         connection.requestMethod = httpMethod
         connection.connectTimeout = 15000

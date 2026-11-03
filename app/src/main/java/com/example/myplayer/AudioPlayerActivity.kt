@@ -1547,7 +1547,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                             bgScope.launch {
                                 try {
                                     val token = getSharedPreferences("server_auth", MODE_PRIVATE).getString("jwt", "") ?: ""
-                                    val mediaUrl = "http://155.248.161.40:5000/media?v=$vid&token=$token"
+                                    val mediaUrl = "http://193.123.167.118:5000/media?v=$vid&token=$token"
                                     diag("폴백 URL: $mediaUrl")
                                     withContext(Dispatchers.Main) {
                                         val mi = androidx.media3.common.MediaItem.Builder()

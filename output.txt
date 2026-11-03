@@ -59,6 +59,7 @@ jobs:
       - name: Build SIGNED Release APK
         env:
           GEMINI_API_KEY:        ${{ secrets.GEMINI_API_KEY }}
+          SERVER_API_KEY: ${{ secrets.SERVER_API_KEY }}
           GROQ_API_KEY:          ${{ secrets.GROQ_API_KEY }}
           TEXTRA_CLIENT_ID:      ${{ secrets.TEXTRA_CLIENT_ID }}
           TEXTRA_CLIENT_SECRET:  ${{ secrets.TEXTRA_CLIENT_SECRET }}
@@ -243,6 +244,7 @@ jobs:
       - name: Build Release APK
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SERVER_API_KEY: ${{ secrets.SERVER_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           TEXTRA_CLIENT_ID: ${{ secrets.TEXTRA_CLIENT_ID }}
           TEXTRA_CLIENT_SECRET: ${{ secrets.TEXTRA_CLIENT_SECRET }}
@@ -318,8 +320,8 @@ android {
         applicationId = "com.example.myplayer"
         minSdk = 26
         targetSdk = 34
-        versionCode = 355
-        versionName = "1.355"
+        versionCode = 478
+        versionName = "1.478"
 
         // Gemini API 키 (GitHub Actions에서 환경변수로 주입)
         val geminiKey = System.getenv("GEMINI_API_KEY") ?: ""
@@ -332,6 +334,8 @@ android {
         buildConfigField("String", "TEXTRA_CLIENT_SECRET", "\"$textraSecret\"")
         val textraName = System.getenv("TEXTRA_NAME") ?: ""
         buildConfigField("String", "TEXTRA_NAME", "\"$textraName\"")
+        val serverApiKey = System.getenv("SERVER_API_KEY") ?: ""
+        buildConfigField("String", "SERVER_API_KEY", "\"$serverApiKey\"")
     }
 
     buildTypes {
@@ -382,12 +386,13 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-dash:1.4.1")
     implementation("androidx.media3:media3-ui:1.4.1")
     implementation("androidx.media3:media3-session:1.4.1")
+    implementation("androidx.media3:media3-datasource-okhttp:1.4.1")
     implementation("androidx.media3:media3-common:1.4.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("com.github.bumptech.glide:glide:4.16.0")
-    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.0")
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
@@ -419,6 +424,7 @@ dependencies {
     <application
         android:name=".MyApp"
         android:allowBackup="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
@@ -1580,6 +1586,13 @@ class AudioPlayerActivity : AppCompatActivity() {
                 val channel = currentChannel.ifBlank { "YouTube" }
                 QueueManager.add(this, HomeVideo(currentVideoId, title, channel, currentThumb))
                 diag("onCreate: fresh selection → 큐 즉시 추가 $currentVideoId")
+                // ★ prefs도 즉시 갱신 (fresh selection이 prefs에 덮이지 않게)
+                pref?.edit()
+                    ?.putString("current_video_id", currentVideoId)
+                    ?.putString("current_title", currentTitle)
+                    ?.putString("current_channel", currentChannel)
+                    ?.putString("current_thumbnail", currentThumb)
+                    ?.apply()
             }
         }
 
@@ -1675,7 +1688,11 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         // ★ 배터리 최적화 제외 요청 (첫 실행 시)
         try { checkBatteryOptimization() } catch (_: Exception) {}
+
+
     }
+
+
 
     private fun checkBatteryOptimization() {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M) return
@@ -1951,16 +1968,17 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
             diag("라디오 ${combined.size}곡 큐 추가")
             
-            // ★ 추가된 곡 즉시 병렬 캐시
-            combined.take(3).forEach { v ->
-                bgScope.launch {
+            // ★ 추가된 곡 순차 캐시 (서버 부하 방지)
+            bgScope.launch {
+                for ((i, v) in combined.take(3).withIndex()) {
                     try {
-                        val result = kotlinx.coroutines.withTimeoutOrNull(15_000) {
+                        if (i > 0) delay(1500)   // 간격
+                        val result = kotlinx.coroutines.withTimeoutOrNull(30_000) {
                             YouTubeStream.extractAudioOnly(v.videoId)
-                        } ?: return@launch
+                        } ?: continue
                         if (result.hasAny) {
                             prefetchedStreams[v.videoId] = result
-                            diag("라디오 prefetch: ${v.videoId} (${v.title.take(20)})")
+                            diag("prefetch: 순차 ${i+1}/3 ${v.videoId}")
                         }
                     } catch (_: Exception) {}
                 }
@@ -1996,17 +2014,21 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun updateUI() {
-        // ★★★ prefs와 현재 상태 재확인 (동기화 보장)
-        try {
-            val prefId = pref?.getString("current_video_id", null)
-            if (prefId != null && prefId.isNotBlank() && prefId != currentVideoId) {
-                diag("updateUI: prefs와 현재 상태 불일치 → prefs 우선 ($prefId vs $currentVideoId)")
-                currentVideoId = prefId
-                currentTitle = pref?.getString("current_title", "") ?: currentTitle
-                currentChannel = pref?.getString("current_channel", "") ?: currentChannel
-                currentThumb = pref?.getString("current_thumbnail", "") ?: currentThumb
-            }
-        } catch (_: Exception) {}
+        // ★ intent에 곡이 명시됐으면 prefs 우선 로직 skip
+        // (fresh selection이 prefs로 덮어씌워지는 버그 방지)
+        val intentHasTrack = intent.getStringExtra("VIDEO_ID")?.isNotBlank() == true
+        if (!intentHasTrack) {
+            try {
+                val prefId = pref?.getString("current_video_id", null)
+                if (prefId != null && prefId.isNotBlank() && prefId != currentVideoId) {
+                    diag("updateUI: prefs 복원 ($prefId vs $currentVideoId)")
+                    currentVideoId = prefId
+                    currentTitle = pref?.getString("current_title", "") ?: currentTitle
+                    currentChannel = pref?.getString("current_channel", "") ?: currentChannel
+                    currentThumb = pref?.getString("current_thumbnail", "") ?: currentThumb
+                }
+            } catch (_: Exception) {}
+        }
 
         val isLocal = currentVideoId.startsWith("local:") || currentVideoId.isBlank()
         findViewById<View>(R.id.btnVideoMode)?.visibility = if (isLocal) View.GONE else View.VISIBLE
@@ -2483,6 +2505,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 } catch (_: Exception) {}
             }
 
+            diag("⏩ extractAudioOnly 진입: $videoId (cacheSize=${prefetchedStreams.size})")
             extractInProgress = true
             val prefetched = prefetchedStreams.remove(videoId)
             val result = if (prefetched != null) {
@@ -2490,7 +2513,21 @@ class AudioPlayerActivity : AppCompatActivity() {
                 prefetched
             } else {
                 try {
-                    YouTubeStream.extractAudioOnly(videoId)
+                    val r = kotlinx.coroutines.withTimeoutOrNull(90_000) {
+                        YouTubeStream.extractAudioOnly(videoId)
+                    }
+                    if (r == null) {
+                        diag("❌ extract 25초 타임아웃: $videoId")
+                        runOnUiThread {
+                            Toast.makeText(this@AudioPlayerActivity,
+                                "스트림 추출 타임아웃 → 다음 곡", Toast.LENGTH_SHORT).show()
+                        }
+                        loadingNext = false
+                        bgScope.launch { delay(300); trySkipToNextInQueue(videoId) }
+                        return@launch
+                    }
+                    diag("⏪ extractAudioOnly 종료: $videoId")
+                    r
                 } finally {
                     extractInProgress = false
                 }
@@ -2682,6 +2719,32 @@ class AudioPlayerActivity : AppCompatActivity() {
                         bufferingWatchJob?.cancel()
                         bufferingWatchJob = null
                         idleRepeatCount = 0
+
+                        // ★ pending resume 처리 (duration=0 회피)
+                        if (pendingResumeVideoId == currentVideoId && pendingResumePos > 3000L) {
+                            val mc2 = mediaController
+                            val realDur = mc2?.duration ?: 0L
+                            val canResume = realDur > 0 && pendingResumePos < realDur - 5000L
+                            diag("STATE_READY pendingResume: pos=${pendingResumePos/1000}초 realDur=${realDur/1000}초 canResume=$canResume")
+                            if (canResume) {
+                                runOnUiThread {
+                                    androidx.appcompat.app.AlertDialog.Builder(this@AudioPlayerActivity)
+                                        .setTitle("🎵 이어 듣기")
+                                        .setMessage("${formatTime(pendingResumePos)}부터 이어 들을까요?")
+                                        .setPositiveButton("이어 듣기") { _, _ ->
+                                            mediaController?.seekTo(pendingResumePos)
+                                            mediaController?.play()
+                                        }
+                                        .setNegativeButton("처음부터") { _, _ ->
+                                            mediaController?.seekTo(0)
+                                        }
+                                        .setCancelable(false)
+                                        .show()
+                                }
+                            }
+                            pendingResumePos = 0L
+                            pendingResumeVideoId = ""
+                        }
                     }
                     Player.STATE_IDLE -> {
                         if (extractInProgress) {
@@ -2722,11 +2785,38 @@ class AudioPlayerActivity : AppCompatActivity() {
                     }
                 }
 
-                // ★★★ STATE_ENDED는 Service가 처리 (Activity 중복 방지)
-                // Activity가 살아있으면 UI만 갱신, 다음 곡 로드는 Service 담당
+                // ★★★ STATE_ENDED: Activity가 직접 다음 곡 재생 (prefetch 캐시 활용)
                 if (playbackState == Player.STATE_ENDED) {
-                    diag("STATE_ENDED: Service가 다음 곡 처리 (Activity 스킵)")
-                    // Activity의 playNextRelatedBg 호출 제거
+                    diag("STATE_ENDED: Activity가 다음 곡 처리")
+                    bgScope.launch {
+                        delay(300)
+                        // prefetch 캐시에 있으면 즉시 재생, 없으면 playNextLocal/playNextRelated
+                        try {
+                            val queue = QueueManager.get(this@AudioPlayerActivity)
+                            val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+                            if (curIdx >= 0 && curIdx < queue.size - 1) {
+                                // 큐에 다음 곡이 있음
+                                val next = queue[curIdx + 1]
+                                diag("ENDED → 큐 다음 곡: ${next.videoId}")
+                                currentVideoId = next.videoId
+                                currentTitle = next.title
+                                currentChannel = next.channel
+                                currentThumb = next.thumbnail
+                                QueueManager.setCurrent(this@AudioPlayerActivity, next.videoId)
+                                runOnUiThread { updateUI() }
+                                loadAudio(next.videoId, isInitial = false)
+                            } else {
+                                // 큐에 없으면 라디오/로컬
+                                if (currentVideoId.startsWith("local:")) {
+                                    playNextLocal()
+                                } else {
+                                    playNextRelatedBg()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            diag("ENDED 처리 err: ${e.message}")
+                        }
+                    }
                 }
             }
 
@@ -2750,7 +2840,35 @@ class AudioPlayerActivity : AppCompatActivity() {
                     val curUrl = curItem?.localConfiguration?.uri?.toString() ?: "(null)"
                     diag("❌ ERR ${error.errorCodeName}: ${error.message?.take(80)}")
                     diag("   url=${curUrl.take(80)}")
+
+                    // ★ stream_direct 403 에러 시 /media 캐시로 폴백
+                    if (curUrl.contains("googlevideo.com") && error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS) {
+                        diag("⚠️ stream_direct 403 → /media 캐시로 폴백")
+                        val vid = currentVideoId
+                        if (vid.isNotBlank()) {
+                            bgScope.launch {
+                                try {
+                                    val token = getSharedPreferences("server_auth", MODE_PRIVATE).getString("jwt", "") ?: ""
+                                    val mediaUrl = "http://155.248.161.40:5000/media?v=$vid&token=$token"
+                                    diag("폴백 URL: $mediaUrl")
+                                    withContext(Dispatchers.Main) {
+                                        val mi = androidx.media3.common.MediaItem.Builder()
+                                            .setUri(mediaUrl)
+                                            .setMediaId(vid)
+                                            .build()
+                                        mediaController?.setMediaItem(mi)
+                                        mediaController?.prepare()
+                                        mediaController?.playWhenReady = true
+                                    }
+                                } catch (e: Exception) {
+                                    diag("폴백 실패: ${e.message}")
+                                }
+                            }
+                        }
+                        return
+                    }
                 } catch (_: Exception) {}
+                
                 val mc = mediaController
                 if (mc != null && mc.hasNextMediaItem()) {
                     mc.seekToNextMediaItem()
@@ -3872,7 +3990,6 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     /** ★ 이어듣기 다이얼로그 */
     private fun checkResumeAndPlayAudio(videoId: String) {
-        // 이미 재생 중이면 스킵
         if (mediaController?.currentMediaItem?.mediaId == videoId &&
             (mediaController?.isPlaying == true || mediaController?.playWhenReady == true)) {
             diag("checkResume: 이미 재생 중 → 스킵")
@@ -3880,6 +3997,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             return
         }
 
+        // ★ duration=0 문제 회피: 저장된 duration이 0이면 일단 loadAudio 후 STATE_READY에서 resume 판정
         bgScope.launch {
             val saved = try {
                 withContext(Dispatchers.IO) {
@@ -3889,9 +4007,17 @@ class AudioPlayerActivity : AppCompatActivity() {
 
             val savedPos = saved?.positionMs ?: 0L
             val savedDur = saved?.durationMs ?: 0L
-            // ★ 3초 이상 + 끝까지 5초 이상 남음
-            val canResume = savedPos > 3000L && (savedDur == 0L || savedDur - savedPos > 5000L)
 
+            // ★ 저장된 duration이 0이면 resume 판정 불가 → pendingResumePos에 저장하고 loadAudio
+            if (savedDur == 0L && savedPos > 3000L) {
+                diag("checkResume: savedDur=0 → STATE_READY 대기 (pendingResume=${savedPos/1000}초)")
+                pendingResumePos = savedPos
+                pendingResumeVideoId = videoId
+                runOnUiThread { loadAudio(videoId, isInitial = true) }
+                return@launch
+            }
+
+            val canResume = savedPos > 3000L && savedDur > 0 && savedDur - savedPos > 5000L
             diag("checkResume: $videoId pos=${savedPos / 1000}초 dur=${savedDur / 1000}초 canResume=$canResume")
 
             if (canResume) {
@@ -3900,23 +4026,23 @@ class AudioPlayerActivity : AppCompatActivity() {
                         .setTitle("🎵 이어 듣기")
                         .setMessage("${formatTime(savedPos)}부터 이어 들을까요?")
                         .setPositiveButton("이어 듣기") { _, _ ->
-                            diag("checkResume: 이어 듣기 선택 (${savedPos / 1000}초)")
                             loadAudioWithStartPos(videoId, savedPos)
                         }
                         .setNegativeButton("처음부터") { _, _ ->
-                            diag("checkResume: 처음부터 선택")
                             loadAudioWithStartPos(videoId, 0L)
                         }
                         .setCancelable(false)
                         .show()
                 }
             } else {
-                runOnUiThread {
-                    loadAudio(videoId, isInitial = true)
-                }
+                runOnUiThread { loadAudio(videoId, isInitial = true) }
             }
         }
     }
+
+    // ★ pending resume state
+    private var pendingResumePos: Long = 0L
+    private var pendingResumeVideoId: String = ""
 
     /** ★ 시작 위치를 지정해서 loadAudio */
     private fun loadAudioWithStartPos(videoId: String, startPosMs: Long) {
@@ -4611,6 +4737,30 @@ class ChannelActivity : AppCompatActivity() {
         channelId = intent.getStringExtra("CHANNEL_ID") ?: ""
         channelName = intent.getStringExtra("CHANNEL_NAME") ?: ""
 
+        cdiag("ChannelActivity onCreate: id=$channelId name=$channelName")
+
+        if (channelId.isNotBlank() && !channelId.startsWith("UC")) {
+            cdiag("channelId가 이름 형식 → resolve 필요")
+            lifecycleScope.launch {
+                try {
+                    cdiag("YouTubeChannels.search 호출: $channelName")
+                    val results = YouTubeChannels.search(channelName.ifBlank { channelId })
+                    cdiag("search 결과: ${results.size}개 ids=${results.map { it.channelId.take(12) }}")
+                    val match = results.firstOrNull { it.name == channelName || it.name == channelId }
+                        ?: results.firstOrNull()
+                    if (match != null && match.channelId.startsWith("UC")) {
+                        cdiag("resolve 성공: ${match.channelId}")
+                        val intent = intent.apply { putExtra("CHANNEL_ID", match.channelId) }
+                        finish()
+                        startActivity(intent)
+                    } else {
+                        cdiag("resolve 실패")
+                    }
+                } catch (e: Exception) {
+                    cdiag("resolve err: ${e.message}")
+                }
+            }
+        }
         val ivAvatar = findViewById<ImageView>(R.id.ivAvatar)
         val tvChannelName = findViewById<TextView>(R.id.tvChannelName)
         val tvSubscribers = findViewById<TextView>(R.id.tvSubscribers)
@@ -4704,8 +4854,10 @@ class ChannelActivity : AppCompatActivity() {
             cdiag("첫 페이지 저장: next=${nextContinuation?.take(50) ?: "null"}")
             // ★ 로그: 첫 페이지 결과 + continuation 유무
             android.util.Log.d("Channel", "fetch: videos=${page.videos.size} cont=${page.continuation?.take(40)} debug=${YouTubeChannel.lastDebug}")
-            tvStatus.text = if (page.videos.isEmpty()) "영상 없음"
-                             else "${page.videos.size}개 (더: ${page.continuation != null})"
+            val status = if (page.videos.isEmpty()) "영상 없음"
+                         else "${page.videos.size}개 (더: ${page.continuation != null})"
+            tvStatus.text = status
+            cdiag("fetch 결과: id=$channelId videos=${page.videos.size} cont=${page.continuation != null} debug=${YouTubeChannel.lastDebug}")
             adapter.submit(page.videos)
             loadedVideos.clear()
             loadedVideos.addAll(page.videos)
@@ -4989,6 +5141,8 @@ import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 import java.io.BufferedReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.Proxy
+import java.net.InetSocketAddress
 
 class DownloaderImpl : Downloader() {
 
@@ -5023,7 +5177,8 @@ class DownloaderImpl : Downloader() {
         val headers = request.headers()
         val dataToSend = request.dataToSend()
 
-        val connection = URL(url).openConnection() as HttpURLConnection
+        val warpProxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("155.248.161.40", 40001))
+        val connection = URL(url).openConnection(warpProxy) as HttpURLConnection
         connection.requestMethod = httpMethod
         connection.connectTimeout = 15000
         connection.readTimeout = 15000
@@ -6350,6 +6505,16 @@ import java.net.URL
 object InnerTubeExtractor {
 
     private const val TAG = "InnerTube"
+
+    private fun flog(msg: String) {
+        android.util.Log.d(TAG, msg)
+        try {
+            val f = java.io.File(MyApp.instance.filesDir, "audio_diag.log")
+            if (f.exists() && f.length() > 500_000) f.writeText("")
+            val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+            f.appendText("[$ts] [IT] $msg\n")
+        } catch (_: Exception) {}
+    }
     private const val API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
     private const val PLAYER_ENDPOINT = "https://www.youtube.com/youtubei/v1/player"
 
@@ -6378,6 +6543,13 @@ object InnerTubeExtractor {
     )
 
     private val CLIENTS = listOf(
+        // ★ 0순위: ANDROID_VR (Oculus) - 서명 해독 불필요, 직접 URL 반환 (가장 빠름)
+        ClientInfo(
+            name = "ANDROID_VR",
+            version = "1.62.27",
+            userAgent = "com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12; en_US; Quest 3; Build/SQ3A.220605.009.A1) gzip",
+            clientNameHeader = "28"
+        ),
         // 1순위: MWEB (모바일 웹) - ydpy에서 성공한 방식
         ClientInfo(
             name = "MWEB",
@@ -6399,10 +6571,22 @@ object InnerTubeExtractor {
      * 여러 클라이언트 순환 시도
      */
     suspend fun extract(videoId: String): StreamData = withContext(Dispatchers.IO) {
+        flog("C1 InnerTube.extract IO 진입: $videoId")
         val sb = StringBuilder()
         for ((idx, client) in CLIENTS.withIndex()) {
             sb.append("try client[$idx]: ${client.name}\n")
+            flog("C2 tryClient[$idx] 시작: ${client.name}")
             val result = tryClient(videoId, client, sb)
+            flog("C3 tryClient[$idx] 복귀: ${client.name} hasAny=${result?.hasAny}")
+            if (result != null && result.debug.startsWith("HARD_FAIL:")) {
+                sb.append("⚡ ${client.name} → ${result.debug} (다른 클라이언트 skip)\n")
+                return@withContext StreamData(
+                    audioUrl = null, audioBitrate = 0, audioItag = 0,
+                    muxedUrl = null, muxedItag = 0,
+                    title = "", channel = "", durationMs = 0,
+                    debug = sb.toString()
+                )
+            }
             if (result != null && result.hasAny) {
                 Log.d(TAG, "✅ 성공: ${client.name} (${result.audioUrl != null || result.muxedUrl != null})")
                 return@withContext result
@@ -6419,6 +6603,7 @@ object InnerTubeExtractor {
     }
 
     private fun tryClient(videoId: String, client: ClientInfo, sb: StringBuilder): StreamData? {
+        sb.append("--- tryClient ${client.name} ---\n")
         return try {
             val clientContext = JSONObject().apply {
                 put("clientName", client.name)
@@ -6442,7 +6627,14 @@ object InnerTubeExtractor {
                 put("racyCheckOk", true)
             }
 
-            val conn = URL("$PLAYER_ENDPOINT?key=$API_KEY&prettyPrint=false").openConnection() as HttpURLConnection
+            val useKeyless = client.name == "ANDROID_VR"
+            val fullUrl = if (useKeyless) {
+                "$PLAYER_ENDPOINT?prettyPrint=false"
+            } else {
+                "$PLAYER_ENDPOINT?key=$API_KEY&prettyPrint=false"
+            }
+            sb.append("  url: ${fullUrl.take(80)}\n")
+            val conn = URL(fullUrl).openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("User-Agent", client.userAgent)
@@ -6451,21 +6643,41 @@ object InnerTubeExtractor {
             conn.setRequestProperty("X-YouTube-Client-Name", client.clientNameHeader)
             conn.setRequestProperty("X-YouTube-Client-Version", client.version)
             
-            // ★ 쿠키 + visitorData (ydpy와 동일)
+            // ★ 쿠키 + visitorData (CookieUtil이 UA를 덮어쓰므로 아래에서 다시 설정)
             try { CookieUtil.apply(conn) } catch (_: Exception) {}
             try {
-                val vd = com.example.myplayer.YouTubeVisitorData.load(MyApp.instance)
-                if (vd.isNotBlank()) {
-                    conn.setRequestProperty("X-Goog-Visitor-Id", vd)
-                    sb.append("  visitorData: ${vd.take(20)}\n")
-                }
+                val cookieHeader = conn.getRequestProperty("Cookie")
+                val authHeader = conn.getRequestProperty("Authorization")
+                sb.append("  cookie: ${if (cookieHeader.isNullOrBlank()) "(none)" else cookieHeader}\n")
+                sb.append("  auth: ${if (authHeader.isNullOrBlank()) "(none)" else authHeader.take(40) + "..."}\n")
             } catch (_: Exception) {}
+            // ★★★ CookieUtil.apply 이후 클라이언트 UA/헤더 재설정 (덮어쓰기 방지)
+            conn.setRequestProperty("User-Agent", client.userAgent)
+            conn.setRequestProperty("X-YouTube-Client-Name", client.clientNameHeader)
+            conn.setRequestProperty("X-YouTube-Client-Version", client.version)
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("Origin", "https://www.youtube.com")
+            conn.setRequestProperty("Accept-Language", "ko-KR,ko;q=0.9")
+            // ★ ANDROID_VR은 visitorData 안 보냄 (curl 성공 케이스와 일치 — 오히려 봇 판정 방지)
+            if (client.name != "ANDROID_VR") {
+                try {
+                    val vd = com.example.myplayer.YouTubeVisitorData.load(MyApp.instance)
+                    if (vd.isNotBlank()) {
+                        conn.setRequestProperty("X-Goog-Visitor-Id", vd)
+                        sb.append("  visitorData: ${vd.take(20)}\n")
+                    }
+                } catch (_: Exception) {}
+            } else {
+                sb.append("  visitorData: (skip for ANDROID_VR)\n")
+            }
+            sb.append("  UA: ${client.userAgent.take(50)}\n")
             
             conn.doOutput = true
-            conn.connectTimeout = 3000
-            conn.readTimeout = 5000
+            conn.connectTimeout = 2500
+            conn.readTimeout = 4000
+            sb.append("  writing request...\n")
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
-
+            sb.append("  request sent, awaiting response...\n")
             val code = conn.responseCode
             sb.append("  HTTP $code\n")
             if (code !in 200..299) return null
@@ -6478,6 +6690,14 @@ object InnerTubeExtractor {
             sb.append("  status: $status\n")
             if (status != "OK") {
                 sb.append("  reason: ${playability?.optString("reason")?.take(80)}\n")
+                if (status == "LOGIN_REQUIRED" || status == "UNPLAYABLE" || status == "ERROR") {
+                    return StreamData(
+                        audioUrl = null, audioBitrate = 0, audioItag = 0,
+                        muxedUrl = null, muxedItag = 0,
+                        title = "", channel = "", durationMs = 0,
+                        debug = "HARD_FAIL:$status"
+                    )
+                }
                 return null
             }
 
@@ -6549,7 +6769,8 @@ object InnerTubeExtractor {
                 debug = sb.toString()
             )
         } catch (e: Exception) {
-            sb.append("  err: ${e.message?.take(60)}\n")
+            sb.append("  ⚠ err: ${e.javaClass.simpleName}: ${e.message?.take(120)}\n")
+            android.util.Log.e(TAG, "${client.name} tryClient 예외", e)
             null
         }
     }
@@ -7942,9 +8163,80 @@ class MainActivity : AppCompatActivity() {
     private lateinit var subAdapter: ChannelAdapter
     private lateinit var etHomeSearch: EditText
 
+    private fun ensureServerAuthGate(): Boolean {
+        // ★ 1.478: prefs 예외 대비 try-catch
+        try {
+            val prefs = getSharedPreferences("server_auth", MODE_PRIVATE)
+            val existing = prefs.getString("jwt", null)
+            android.util.Log.d("MainAuth", "gate: existing jwt len=${existing?.length ?: 0}")
+            if (!existing.isNullOrBlank()) return true
+        } catch (e: Throwable) {
+            android.util.Log.e("MainAuth", "gate err: ${e.message}")
+        }
+        showPinDialog()
+        return false
+    }
+
+    private fun showPinDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "서버 PIN 입력"
+            setPadding(40, 30, 40, 30)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("🔐 서버 인증")
+            .setMessage("WARP+POT 서버 PIN을 입력하세요")
+            .setView(input)
+            .setPositiveButton("확인") { _, _ ->
+                val pin = input.text.toString().trim()
+                if (pin.isEmpty()) {
+                    showPinDialog()
+                    return@setPositiveButton
+                }
+                lifecycleScope.launch {
+                    val ok = requestJwtForPin(pin)
+                    if (ok) {
+                        Toast.makeText(this@MainActivity, "✅ 인증 완료", Toast.LENGTH_SHORT).show()
+                        recreate()
+                    } else {
+                        Toast.makeText(this@MainActivity, "❌ PIN 오류", Toast.LENGTH_LONG).show()
+                        showPinDialog()
+                    }
+                }
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private suspend fun requestJwtForPin(pin: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val conn = java.net.URL("http://155.248.161.40:5000/auth").openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 10000
+            conn.readTimeout = 15000
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.outputStream.use { it.write(org.json.JSONObject().apply { put("pin", pin) }.toString().toByteArray()) }
+            if (conn.responseCode !in 200..299) {
+                android.util.Log.w("MainAuth", "auth HTTP ${conn.responseCode}")
+                return@withContext false
+            }
+            val token = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() }).optString("token", "")
+            if (token.isBlank()) return@withContext false
+            getSharedPreferences("server_auth", MODE_PRIVATE).edit().putString("jwt", token).apply()
+            android.util.Log.d("MainAuth", "jwt saved len=${token.length}")
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("MainAuth", "auth err: ${e.message}", e)
+            false
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        if (!ensureServerAuthGate()) return
+
         BottomNavHelper.setup(this, BottomNavHelper.TAB_VIDEO)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -8608,10 +8900,31 @@ class MyApp : Application() {
         instance = this
 
         try {
+            val pf = getSharedPreferences("app_prefs", MODE_PRIVATE)
+            if (!pf.getBoolean("jwt_reset_v2", false)) {
+                getSharedPreferences("server_auth", MODE_PRIVATE).edit().clear().apply()
+                pf.edit().putBoolean("jwt_reset_v2", true).apply()
+                android.util.Log.d("MyApp", "server_auth 강제 리셋 (1회)")
+            }
+        } catch (_: Exception) {}
+
+        try {
             System.setProperty("java.net.preferIPv4Stack", "true")
             System.setProperty("java.net.preferIPv6Addresses", "false")
             // ★ Android는 sun.net.spi.nameservice 지원 안 함
             //   → 시스템 DNS 리졸버 사용 (제거)
+        } catch (_: Exception) {}
+
+        // ★★★ 진단: visitorData 강제 리셋 (1회)
+        try {
+            val pref = getSharedPreferences("app_prefs", MODE_PRIVATE)
+            val version = pref.getInt("vd_reset_version", 0)
+            if (version < 1) {
+                YouTubeVisitorData.save(applicationContext, "")
+                getSharedPreferences("yt_cookie_pref", MODE_PRIVATE).edit().clear().apply()
+                pref.edit().putInt("vd_reset_version", 1).apply()
+                android.util.Log.d("MyApp", "visitorData + cookie 강제 리셋")
+            }
         } catch (_: Exception) {}
 
         // ★ visitorData 미리 획득
@@ -8759,6 +9072,69 @@ class MyPlaylistsActivity : AppCompatActivity() {
             val tv2: TextView = v.findViewById(android.R.id.text2)
         }
     }
+}
+-e 
+
+===== ./app/src/main/java/com/example/myplayer/NewPipePotProvider.kt =====
+package com.example.myplayer
+
+import android.content.Context
+import android.util.Log
+import android.webkit.JavascriptInterface
+import android.webkit.WebView
+import org.schabi.newpipe.extractor.services.youtube.PoTokenProvider
+import org.schabi.newpipe.extractor.services.youtube.PoTokenResult
+
+class NewPipePotProvider(private val ctx: Context) : PoTokenProvider {
+    private val TAG = "NewPipePot"
+    private var webView: WebView? = null
+    private var visitorData: String = ""
+    private var integrityToken: String = ""
+    private var tokenExpiry: Long = 0L
+
+    @JavascriptInterface
+    fun onBotguardResponse(response: String) {
+        Log.d(TAG, "botguard response received")
+        integrityToken = response
+        tokenExpiry = System.currentTimeMillis() + 3600_000L
+    }
+
+    private fun initWebView() {
+        if (webView != null) return
+        // ★ 1.478: Android 17 UI 스레드 + try-catch(Throwable)
+        val latch = java.util.concurrent.CountDownLatch(1)
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                webView = WebView(ctx).apply {
+                    settings.javaScriptEnabled = true
+                    settings.blockNetworkLoads = true
+                    addJavascriptInterface(this@NewPipePotProvider, "PoToken")
+                    loadUrl("file:///android_asset/po_token.html")
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "WebView init failed: ${e.message}")
+                webView = null
+            } finally { latch.countDown() }
+        }
+        latch.await(5, java.util.concurrent.TimeUnit.SECONDS)
+    }
+
+    override fun getWebClientPoToken(videoId: String): PoTokenResult? {
+        initWebView()
+        if (integrityToken.isBlank() || System.currentTimeMillis() > tokenExpiry) {
+            Log.w(TAG, "POT not ready for $videoId")
+            return null
+        }
+        return PoTokenResult(
+            "$integrityToken|$videoId", // playerPot
+            "$integrityToken|$visitorData", // streamingPot
+            visitorData // p2 (visitorData)
+        )
+    }
+
+    override fun getWebEmbedClientPoToken(videoId: String): PoTokenResult? = getWebClientPoToken(videoId)
+    override fun getAndroidClientPoToken(videoId: String): PoTokenResult? = null
+    override fun getIosClientPoToken(videoId: String): PoTokenResult? = null
 }
 -e 
 
@@ -8950,7 +9326,18 @@ class PlaybackService : MediaSessionService() {
             .setTargetBufferBytes(200 * 1024 * 1024)   // 100MB → 200MB
             .build()
 
-        val player = ExoPlayer.Builder(this)
+        // ★ content:// (로컬 파일), http:// (스트리밍) 모두 지원하는 DataSource
+        // ★ newpipe-local URL은 폰 IP로 재생 (WARP 프록시 우회)
+        // ★ WARP 프록시 (서버 40001) 경유 - 이 앱만 WARP 통과
+        val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            .setUserAgent("com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12) gzip")
+            .setAllowCrossProtocolRedirects(true)
+
+        val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(this, httpDataSourceFactory)
+
+        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
+
+        val player = ExoPlayer.Builder(this, mediaSourceFactory)
             .setAudioAttributes(audioAttributes, false)
             .setHandleAudioBecomingNoisy(false)
             .setLoadControl(loadControl)
@@ -9510,7 +9897,7 @@ class PlaybackService : MediaSessionService() {
             val player = exoPlayer ?: return false
             return try {
                 val dataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
-                    .setUserAgent("Mozilla/5.0")
+                    .setUserAgent("com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12) gzip")
                     .setAllowCrossProtocolRedirects(true)
 
                 val videoSource = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(dataSourceFactory)
@@ -11009,6 +11396,45 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** 서버 video_only + audio_only를 병합 재생 */
+    private suspend fun playServerMerged(
+        videoId: String, title: String, channel: String, thumb: String, startPosMs: Long
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            vdiag("playServerMerged: $videoId")
+            val videoUrl = YouTubeStream.fetchVideoOnlyFromServer(videoId) ?: run {
+                vdiag("  video_only null")
+                return@withContext false
+            }
+            val audioUrl = YouTubeStream.fetchAudioOnlyFromServer(videoId) ?: run {
+                vdiag("  audio_only null")
+                return@withContext false
+            }
+            vdiag("  video=${videoUrl.take(60)}")
+            vdiag("  audio=${audioUrl.take(60)}")
+
+            val ok = PlaybackService.playMergedVideoAudio(
+                videoUrl = videoUrl,
+                audioUrl = audioUrl,
+                title = title,
+                channel = channel,
+                videoId = videoId
+            )
+            vdiag("  playMergedVideoAudio=$ok")
+            if (ok) {
+                saveHistory(videoId, title, channel, thumb, startPosMs)
+                currentVideoId = videoId
+                currentTitle = title
+                currentChannel = channel
+                currentThumb = thumb
+            }
+            ok
+        } catch (e: Exception) {
+            vdiag("playServerMerged err: ${e.message}")
+            false
+        }
+    }
+
     private fun extractAndPlay(
         videoId: String, title: String, channel: String, thumb: String, startPosMs: Long = 0L
     ) {
@@ -11016,6 +11442,32 @@ class PlayerActivity : AppCompatActivity() {
         resetZoom()
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
+            // ★ 0순위: 폰에서 NewPipe POT(WARP)로 비디오 추출
+            try {
+                val local = YouTubeStream.extractVideoLocal(videoId)
+                if (local.hasAny) {
+                    vdiag("NewPipe Video POT 성공")
+                    if (local.muxedUrl != null) {
+                        applyStreamWithSubtitle(local.muxedUrl, null, null, startPosMs)
+                    } else if (local.videoUrl != null && local.audioUrl != null) {
+                        PlaybackService.playMergedVideoAudio(
+                            videoUrl = local.videoUrl, audioUrl = local.audioUrl,
+                            title = title, channel = channel, videoId = videoId
+                        )
+                    }
+                    progress.visibility = View.GONE
+                    return@launch
+                }
+            } catch (e: Throwable) {
+                vdiag("NewPipe Video POT 실패: ${e.message}")
+            }
+            // ★★★ 1순위: 서버 프록시 병합 재생 (WARP 우회)
+            if (playServerMerged(videoId, title, channel, thumb, startPosMs)) {
+                vdiag("서버 병합 재생 성공")
+                progress.visibility = View.GONE
+                return@launch
+            }
+            vdiag("서버 병합 실패 → 로컬 extract")
             vdiag("extract 시작: $videoId")
             val result = YouTubeStream.extract(videoId)
             vdiag("extract 완료: $videoId")
@@ -14844,7 +15296,75 @@ class SettingsActivity : AppCompatActivity() {
         } catch (_: Exception) {}
 
         refreshStatus()
+
+        try {
+            findViewById<View>(R.id.cardReauthPin)?.setOnClickListener {
+                showReauthDialog()
+            }
+        } catch (_: Exception) {}
     }
+
+    private fun showReauthDialog() {
+        val prefs = getSharedPreferences("server_auth", MODE_PRIVATE)
+        val existing = prefs.getString("jwt", null)
+        val status = if (existing.isNullOrBlank()) "현재: 인증 안 됨" else "현재: 인증됨 (토큰 ${existing.length}자)"
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("🔐 서버 PIN 재인증")
+            .setMessage("$status\n\nPIN을 다시 입력하면 새 토큰으로 갱신됩니다.")
+            .setPositiveButton("PIN 입력") { _, _ -> showPinInputDialog() }
+            .setNeutralButton("인증 초기화") { _, _ ->
+                prefs.edit().clear().apply()
+                Toast.makeText(this, "인증 초기화됨 (앱 재시작 시 PIN 요청)", Toast.LENGTH_LONG).show()
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun showPinInputDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "서버 PIN 입력"
+            setPadding(40, 30, 40, 30)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("PIN 입력")
+            .setView(input)
+            .setPositiveButton("확인") { _, _ ->
+                val pin = input.text.toString().trim()
+                if (pin.isEmpty()) return@setPositiveButton
+                lifecycleScope.launch {
+                    val ok = requestJwtFromSettings(pin)
+                    if (ok) {
+                        Toast.makeText(this@SettingsActivity, "✅ 인증 완료", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this@SettingsActivity, "❌ PIN 오류", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private suspend fun requestJwtFromSettings(pin: String): Boolean =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val conn = java.net.URL("http://155.248.161.40:5000/auth").openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 10000
+                conn.readTimeout = 15000
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.doOutput = true
+                conn.outputStream.use { it.write(org.json.JSONObject().apply { put("pin", pin) }.toString().toByteArray()) }
+                if (conn.responseCode !in 200..299) return@withContext false
+                val token = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() }).optString("token", "")
+                if (token.isBlank()) return@withContext false
+                getSharedPreferences("server_auth", MODE_PRIVATE).edit().putString("jwt", token).apply()
+                true
+            } catch (e: Exception) {
+                android.util.Log.e("SettingsAuth", "auth err: ${e.message}", e)
+                false
+            }
+        }
 
     private fun checkForUpdate() {
         val btn = findViewById<View>(R.id.cardUpdate)
@@ -17741,6 +18261,7 @@ object YouTubeChannel {
         channelName: String = ""
     ): Pair<ChannelInfo?, ChannelVideosPage> = withContext(Dispatchers.IO) {
         try {
+            Log.d(TAG, "fetch: browseId=$channelId params=$VIDEOS_TAB_PARAMS")
             val body = JSONObject().apply {
                 put("context", JSONObject().apply {
                     put("client", JSONObject().apply {
@@ -17781,7 +18302,13 @@ object YouTubeChannel {
             extractVideos(json, videos)
             val continuation = findContinuation(json)
 
-            lastDebug = "fetch: videos=${videos.size}, cont=${continuation?.take(20)}"
+            val respStr = response
+            val hasVideoRenderer = respStr.contains("\"videoRenderer\"")
+            val hasLockup = respStr.contains("\"lockupViewModel\"")
+            val hasRichItem = respStr.contains("\"richItemRenderer\"")
+            val hasGridVideo = respStr.contains("\"gridVideoRenderer\"")
+            lastDebug = "fetch: videos=${videos.size} cont=${continuation?.take(20)} " +
+                "| keys: videoRenderer=$hasVideoRenderer lockup=$hasLockup richItem=$hasRichItem grid=$hasGridVideo"
             Log.d(TAG, lastDebug)
 
             Pair(chInfo, ChannelVideosPage(videos, continuation))
@@ -17967,12 +18494,54 @@ object YouTubeChannels {
     var lastDebug: String = ""
 
     suspend fun search(query: String): List<ChannelItem> = withContext(Dispatchers.IO) {
+        // ★ 1순위: InnerTube WEB 직접 검색 (channelId 확실)
+        try {
+            val direct = directSearch(query)
+            if (direct.isNotEmpty()) {
+                Log.d(TAG, "directSearch: ${direct.size}개 ids=${direct.map { it.channelId.take(12) }}")
+                return@withContext direct
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "directSearch err: ${e.message}")
+        }
+        // 2순위: YouTubeApiHelper (Invidious/Piped) — 폴백
         val fromApi = YouTubeApiHelper.searchChannels(query)
-        if (fromApi.isNotEmpty()) return@withContext fromApi
-        // 폴백: 원래 로직
-        val results = mutableListOf<ChannelItem>()
-        // (기존 코드 유지)
-        results
+        if (fromApi.isNotEmpty()) {
+            Log.d(TAG, "YouTubeApiHelper: ${fromApi.size}개")
+            return@withContext fromApi
+        }
+        emptyList()
+    }
+
+    /** InnerTube WEB 직접 채널 검색 (channelRenderer 파싱) */
+    private suspend fun directSearch(query: String): List<ChannelItem> = withContext(Dispatchers.IO) {
+        val body = JSONObject().apply {
+            put("context", JSONObject().apply {
+                put("client", JSONObject().apply {
+                    put("clientName", "WEB")
+                    put("clientVersion", "2.20250101.00.00")
+                    put("hl", "ko")
+                    put("gl", "KR")
+                })
+            })
+            put("query", query)
+        }
+        val conn = java.net.URL("https://www.youtube.com/youtubei/v1/search?prettyPrint=false").openConnection() as java.net.HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
+        conn.setRequestProperty("X-YouTube-Client-Name", "1")
+        conn.setRequestProperty("X-YouTube-Client-Version", "2.20250101.00.00")
+        conn.doOutput = true
+        conn.connectTimeout = 15000
+        conn.readTimeout = 15000
+        conn.outputStream.use { it.write(body.toString().toByteArray()) }
+        if (conn.responseCode !in 200..299) return@withContext emptyList()
+        val resp = conn.inputStream.bufferedReader().use { it.readText() }
+        val json = JSONObject(resp)
+        val out = mutableListOf<ChannelItem>()
+        collectChannels(json, out, query)
+        out
     }
     private fun collectChannels(node: Any?, out: MutableList<ChannelItem>, baseName: String) {
         when (node) {
@@ -18123,6 +18692,9 @@ object YouTubeCookieManager {
 package com.example.myplayer
 
 import android.os.Bundle
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -18226,6 +18798,31 @@ class YouTubeLoginActivity : AppCompatActivity() {
         saved = true
         tvStatus.text = "✅ 쿠키 저장됨 (${essential.size}개)"
         Toast.makeText(this, "로그인 완료 · 쿠키 저장됨", Toast.LENGTH_LONG).show()
+
+        // ★ 서버로 쿠키 전송 (봇 차단 우회용)
+        try {
+            val token = getSharedPreferences("server_auth", MODE_PRIVATE).getString("jwt", "") ?: ""
+            if (token.isNotBlank()) {
+                GlobalScope.launch(Dispatchers.IO) {
+                    try {
+                        val conn = java.net.URL("http://155.248.161.40:5000/update_cookie").openConnection() as java.net.HttpURLConnection
+                        conn.requestMethod = "POST"
+                        conn.setRequestProperty("Content-Type", "application/json")
+                        conn.setRequestProperty("Authorization", "Bearer $token")
+                        conn.doOutput = true
+                        val body = org.json.JSONObject().apply { put("cookie", cookieStr) }.toString()
+                        conn.outputStream.use { it.write(body.toByteArray()) }
+                        if (conn.responseCode in 200..299) {
+                            android.util.Log.d("YouTubeLogin", "서버에 쿠키 전송 성공")
+                        } else {
+                            android.util.Log.e("YouTubeLogin", "서버 쿠키 전송 실패 HTTP ${conn.responseCode}")
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("YouTubeLogin", "쿠키 전송 에러: ${e.message}")
+                    }
+                }
+            }
+        } catch (_: Exception) {}
     }
 }
 -e 
@@ -19118,6 +19715,141 @@ object YouTubeStream {
 
     private const val TAG = "YouTubeStream"
 
+    // ★★★ WARP+POT 서버 API (IP 봇 판정 우회)
+    private const val SERVER_API_URL = "http://155.248.161.40:5000"
+
+    private fun flogServer(msg: String) {
+        android.util.Log.d(TAG, "[SRV] $msg")
+        try {
+            val f = java.io.File(MyApp.instance.filesDir, "audio_diag.log")
+            val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+            f.appendText("[$ts] [SRV] $msg\n")
+        } catch (_: Exception) {}
+    }
+
+    private suspend fun fetchFromServer(videoId: String): String? = withContext(Dispatchers.IO) {
+        try {
+            flogServer("request: $videoId")
+            val token = getJwtToken() ?: run {
+                flogServer("no jwt token")
+                return@withContext null
+            }
+
+            // ★ 1순위: /media (파일 캐시 폴링)
+            val liveUrl = "$SERVER_API_URL/media?v=$videoId&token=$token"
+            try {
+                val lConn = java.net.URL(liveUrl).openConnection() as java.net.HttpURLConnection
+                lConn.connectTimeout = 3000
+                lConn.readTimeout = 45000
+                lConn.requestMethod = "HEAD"
+                lConn.setRequestProperty("Authorization", "Bearer $token")
+                lConn.setRequestProperty("Range", "bytes=0-0")
+                if (lConn.responseCode in listOf(200, 206)) {
+                    flogServer("OK media_live=$liveUrl")
+                    return@withContext liveUrl
+                }
+            } catch (e: Exception) {
+                flogServer("media_live err: ${e.message}")
+            }
+
+            // ★ 2순위: /media (비동기 다운로드 폴링)
+            flogServer("fallback to /media (polling)")
+            val mediaUrl = "$SERVER_API_URL/media?v=$videoId&token=$token"
+            var attempts = 0
+            while (attempts < 90) { // 최대 90초 대기
+                val conn = java.net.URL(mediaUrl).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 5000
+                conn.readTimeout = 45000
+                conn.requestMethod = "HEAD"
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                conn.setRequestProperty("Range", "bytes=0-0")
+                val code = conn.responseCode
+
+                if (code in listOf(200, 206)) {
+                    flogServer("OK mediaUrl=$mediaUrl (ready after ${attempts}s)")
+                    return@withContext mediaUrl
+                } else if (code == 202) {
+                    // 다운로드 중 -> 1초 대기 후 재시도
+                    if (attempts % 5 == 0) flogServer("media downloading... (${attempts}s)")
+                    kotlinx.coroutines.delay(1000)
+                    attempts++
+                } else {
+                    flogServer("HEAD HTTP $code")
+                    return@withContext null
+                }
+            }
+            flogServer("media timeout after 90s")
+            return@withContext null
+        } catch (e: Exception) {
+            flogServer("err: ${e.message}")
+            null
+        }
+    }
+
+
+    /** 서버 /media_video_only URL 반환 (WARP 프록시) */
+    suspend fun fetchVideoOnlyFromServer(videoId: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val token = getJwtToken() ?: return@withContext null
+            val url = "$SERVER_API_URL/media_video_only?v=$videoId&token=$token"
+            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 5000
+            conn.readTimeout = 90000
+            conn.requestMethod = "HEAD"
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            conn.setRequestProperty("Range", "bytes=0-0")
+            val code = conn.responseCode
+            if (code !in listOf(200, 206)) {
+                flogServer("HEAD /media_video_only $code")
+                return@withContext null
+            }
+            url
+        } catch (e: Exception) {
+            flogServer("media_video_only err: ${e.message}")
+            null
+        }
+    }
+
+    /** 서버 /media_audio_only URL 반환 */
+    suspend fun fetchAudioOnlyFromServer(videoId: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val token = getJwtToken() ?: return@withContext null
+            val url = "$SERVER_API_URL/media_audio_only?v=$videoId&token=$token"
+            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 5000
+            conn.readTimeout = 90000
+            conn.requestMethod = "HEAD"
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            conn.setRequestProperty("Range", "bytes=0-0")
+            val code = conn.responseCode
+            if (code !in listOf(200, 206)) {
+                flogServer("HEAD /media_audio_only $code")
+                return@withContext null
+            }
+            url
+        } catch (e: Exception) {
+            flogServer("media_audio_only err: ${e.message}")
+            null
+        }
+    }
+
+    private fun getJwtToken(): String? {
+        return try {
+            MyApp.instance.getSharedPreferences("server_auth", android.content.Context.MODE_PRIVATE)
+                .getString("jwt", null)?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) { null }
+    }
+
+    private fun flog(msg: String) {
+        android.util.Log.d(TAG, msg)
+        try {
+            val f = java.io.File(MyApp.instance.filesDir, "audio_diag.log")
+            if (f.exists() && f.length() > 500_000) f.writeText("")
+            val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+            f.appendText("[$ts] [YTS] $msg\n")
+        } catch (_: Exception) {}
+    }
+
     // ─────────────────────────────────────────
     // 캐시 (5분 TTL)
     // ─────────────────────────────────────────
@@ -19164,12 +19896,52 @@ object YouTubeStream {
 
     /** ★ 오디오 모드 전용: muxed 대신 audio-only 스트림 우선 */
     suspend fun extractAudioOnly(videoId: String): StreamResult = withContext(Dispatchers.IO) {
+        flog("A1 extractAudioOnly IO 진입: $videoId")
+
+        // ★ 0순위: 폰에서 NewPipeExtractor로 직접 추출 (POT 생성)
+        try {
+            org.schabi.newpipe.extractor.NewPipe.init(DownloaderImpl())
+            val service = org.schabi.newpipe.extractor.ServiceList.YouTube
+            val info = org.schabi.newpipe.extractor.stream.StreamInfo.getInfo(service, "https://www.youtube.com/watch?v=$videoId")
+            val audio = info.audioStreams.filter { it.isUrl }.maxByOrNull { it.averageBitrate }
+            if (audio != null) {
+                flog("NewPipe POT 성공: $videoId")
+                return@withContext StreamResult(
+                    videoUrl = null, audioUrl = audio.content, muxedUrl = null,
+                    title = info.name ?: "", channelName = info.uploaderName ?: "",
+                    description = "", debug = "newpipe-local OK", audioUrlBest = audio.content
+                )
+            }
+        } catch (e: Throwable) {
+            flog("NewPipe POT 실패: ${e.message}")
+        }
+
+        // ★★★ 1순위: 서버 API (WARP+POT)
+        val serverUrl = fetchFromServer(videoId)
+        if (!serverUrl.isNullOrBlank()) {
+            val r = StreamResult(
+                videoUrl = null,
+                audioUrl = serverUrl,
+                muxedUrl = null,
+                title = "",
+                channelName = "",
+                description = "",
+                debug = "server-api OK",
+                audioUrlBest = serverUrl
+            )
+            putCache(videoId, r)
+            return@withContext r
+        }
+        flogServer("fallback to local extract")
+
         getCached(videoId)?.let {
             Log.d(TAG, "audio-only cache hit: $videoId")
             return@withContext it
         }
+        flog("A2 extractAudioOnly → extract 호출: $videoId")
 
         val full = extract(videoId)
+        flog("A3 extractAudioOnly ← extract 복귀: hasAny=${full.hasAny}")
         val audioUrl = full.audioUrlBest ?: full.audioUrl
         if (audioUrl != null) {
             val audioOnly = full.copy(
@@ -19193,6 +19965,7 @@ object YouTubeStream {
      * Piped의 itag=18 muxed를 최우선으로 쓰고, 실패하면 NewPipe로.
      */
     suspend fun extract(videoId: String): StreamResult = withContext(Dispatchers.IO) {
+        flog("B1 extract IO 진입: $videoId")
         getCached(videoId)?.let {
             Log.d(TAG, "cache hit: $videoId")
             return@withContext it
@@ -19203,7 +19976,23 @@ object YouTubeStream {
 
         // ★★★ 1순위: InnerTube (ydpy 방식) - 직접 googlevideo URL
         try {
+            flog("B2 InnerTube 호출 직전: $videoId")
             val innerTube = InnerTubeExtractor.extract(videoId)
+            flog("B3 InnerTube 복귀: hasAny=${innerTube.hasAny}")
+            flog("B3-debug: ${innerTube.debug.take(1200)}")
+            if (!innerTube.hasAny &&
+                (innerTube.debug.contains("HARD_FAIL:") ||
+                 innerTube.debug.contains("LOGIN_REQUIRED") ||
+                 innerTube.debug.contains("UNPLAYABLE"))) {
+                flog("⚡ hard-fail 감지 → 폴백 스킵")
+                val r = StreamResult(
+                    videoUrl = null, audioUrl = null, muxedUrl = null,
+                    title = "", channelName = "", description = "",
+                    debug = innerTube.debug
+                )
+                putCache(videoId, r)
+                return@withContext r
+            }
             if (innerTube.hasAny) {
                 sb.append("→ InnerTube OK (itag=${innerTube.audioItag})\n")
                 Log.d(TAG, "InnerTube 성공: audio=${innerTube.audioUrl?.take(50)}")
@@ -19234,11 +20023,9 @@ object YouTubeStream {
             // ★ Invidious 현재 완전 다운 → skip (타입 명시)
             val invDeferred: kotlinx.coroutines.Deferred<StreamResult?> =
                 kotlinx.coroutines.CompletableDeferred(null)
-            val npDeferred = async(Dispatchers.IO) {
-                try {
-                    withTimeoutOrNull(18000) { tryNewPipe(videoId, sb) }
-                } catch (e: Exception) { null }
-            }
+            // ★ 진단용: NewPipe 폴백 임시 비활성화
+            val npDeferred: kotlinx.coroutines.Deferred<StreamResult?> =
+                kotlinx.coroutines.CompletableDeferred(null)
 
             // ★ Piped 우선 (빠름)
             val piped = pipedDeferred.await()
@@ -19575,6 +20362,48 @@ object YouTubeStream {
             null
         } catch (e: Exception) { null }
     }
+
+    /** 폰에서 NewPipe POT(WARP)로 비디오(muxed) 스트림 추출 */
+    /** 폰에서 NewPipe POT(WARP)로 비디오(muxed) 스트림 추출 */
+    suspend fun extractVideoLocal(videoId: String): StreamResult = withContext(Dispatchers.IO) {
+        try {
+            org.schabi.newpipe.extractor.NewPipe.init(DownloaderImpl())
+            val service = org.schabi.newpipe.extractor.ServiceList.YouTube
+            val info = org.schabi.newpipe.extractor.stream.StreamInfo.getInfo(service, "https://www.youtube.com/watch?v=$videoId")
+            val videos = info.videoStreams.filter { it.isUrl }
+            // muxed (video+audio) 우선
+            val muxedStream = videos.firstOrNull { !it.isVideoOnly }
+            if (muxedStream != null) {
+                flog("NewPipe Video POT 성공: $videoId (${muxedStream.resolution})")
+                return@withContext StreamResult(
+                    videoUrl = null, audioUrl = null, muxedUrl = muxedStream.content,
+                    title = info.name ?: "", channelName = info.uploaderName ?: "",
+                    description = info.description?.content ?: "", debug = "newpipe-video OK",
+                    qualities = emptyList(),
+                    subtitles = emptyList()
+                )
+            }
+            // videoOnly + audio 병합
+            val videoOnly = videos.filter { it.isVideoOnly }.maxByOrNull {
+                it.resolution?.replace("p", "")?.toIntOrNull() ?: 0
+            }
+            val audio = info.audioStreams.filter { it.isUrl }.maxByOrNull { it.averageBitrate }
+            if (videoOnly != null && audio != null) {
+                flog("NewPipe Video POT 성공 (병합): $videoId")
+                return@withContext StreamResult(
+                    videoUrl = videoOnly.content, audioUrl = audio.content, muxedUrl = null,
+                    title = info.name ?: "", channelName = info.uploaderName ?: "",
+                    description = info.description?.content ?: "", debug = "newpipe-video merge OK",
+                    qualities = emptyList(),
+                    subtitles = emptyList()
+                )
+            }
+        } catch (e: Exception) {
+            flog("NewPipe Video POT 실패: ${e.message}")
+        }
+        return@withContext StreamResult(null, null, null, "", "", "", "newpipe-video fail")
+    }
+
 }
 -e 
 
@@ -23461,6 +24290,45 @@ object YouTubeVisitorFetcher {
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
+
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cardReauthPin"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="10dp"
+        app:cardBackgroundColor="@color/bg_surface"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="0dp"
+        android:foreground="?android:attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔐 서버 PIN 재인증"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="PIN 변경 또는 인증 초기화"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
 </LinearLayout>
 -e 
 
@@ -24870,6 +25738,18 @@ object YouTubeVisitorFetcher {
     <external-path name="external_files" path="." />
     <files-path name="internal_files" path="." />
 </paths>
+-e 
+
+===== ./app/src/main/res/xml/network_security_config.xml =====
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- WARP+POT 서버 (특정 IP만 HTTP 허용) -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">155.248.161.40</domain>
+    </domain-config>
+    <!-- 나머지는 HTTPS 강제 (기본) -->
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>
 -e 
 
 ===== ./build.gradle.kts =====
