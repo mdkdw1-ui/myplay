@@ -431,7 +431,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             .show()
     }
 
-    private val diagLines = java.util.ArrayDeque<String>()
+    private val diagLines = java.util.concurrent.ConcurrentLinkedDeque<String>()
     private fun diag(msg: String) {
         android.util.Log.d("AudioPlayer", msg)
         try {
@@ -665,7 +665,11 @@ class AudioPlayerActivity : AppCompatActivity() {
                                     }
                                 }
                             }
-                            deferreds.forEach { runCatching { it.await() } }
+                            deferreds.forEach {
+                                try { it.await() } catch (e: Exception) {
+                                    android.util.Log.e("Prefetch", "batch await err", e)
+                                }
+                            }
                             diag("prefetch 배치[$batchIdx] 완료 (cache=${prefetchedStreams.size})")
                         }
                     }
