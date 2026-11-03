@@ -538,14 +538,18 @@ class AudioPlayerActivity : AppCompatActivity() {
             } catch (_: Exception) { null } ?: return@launch
             videoIds.take(5).forEach { vid ->
                 try {
-                    val url = "http://193.123.167.118:5000/media_audio_only?v=$vid&token=$token"
-                    val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-                    conn.requestMethod = "HEAD"
-                    conn.connectTimeout = 3000
-                    conn.readTimeout = 10000
-                    conn.setRequestProperty("Authorization", "Bearer $token")
-                    conn.responseCode
-                    diag("prefetchRadio5: $vid")
+                    for (ep in listOf("media_audio_only", "media_video_only")) {
+                        try {
+                            val url = "http://193.123.167.118:5000/$ep?v=$vid&token=$token"
+                            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                            conn.requestMethod = "HEAD"
+                            conn.connectTimeout = 3000
+                            conn.readTimeout = 10000
+                            conn.setRequestProperty("Authorization", "Bearer $token")
+                            conn.responseCode
+                            diag("prefetchRadio5: $ep $vid")
+                        } catch (_: Exception) {}
+                    }
                 } catch (_: Exception) {}
             }
         }
