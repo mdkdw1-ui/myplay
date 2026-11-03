@@ -3343,6 +3343,12 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // ★ audio_diag.log → Download/MyPlayer 복사 (크래시 진단용, 임시)
+        try {
+            copyDiagToDownload()
+        } catch (e: Exception) {
+            android.util.Log.e("AudioPlayer", "copyDiag err", e)
+        }
         // ★★★ 서비스로 다음 곡 관리 복귀
         PlaybackService.autoNextDisabled = false
         PlaybackService.nextTrackHandler = null
@@ -3374,4 +3380,44 @@ class AudioPlayerActivity : AppCompatActivity() {
             try { MediaController.releaseFuture(controllerFuture) } catch (_: Exception) {}
         }
     }
+
+    private fun copyDiagToDownload() {
+        try {
+            val src = java.io.File(filesDir, "audio_diag.log")
+            if (!src.exists()) {
+                android.util.Log.d("AudioPlayer", "audio_diag.log 없음")
+                return
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.Downloads.DISPLAY_NAME, "audio_diag.log")
+                    put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/plain")
+                    put(android.provider.MediaStore.Downloads.RELATIVE_PATH,
+                        android.os.Environment.DIRECTORY_DOWNLOADS + "/MyPlayer")
+                }
+                val coll = android.provider.MediaStore.Downloads.getContentUri(
+                    android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                try {
+                    contentResolver.delete(coll,
+                        "${android.provider.MediaStore.Downloads.DISPLAY_NAME}=?",
+                        arrayOf("audio_diag.log"))
+                } catch (_: Exception) {}
+                val uri = contentResolver.insert(coll, values) ?: return
+                contentResolver.openOutputStream(uri)?.use { out ->
+                    src.inputStream().use { it.copyTo(out) }
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                val dir = java.io.File(
+                    android.os.Environment.getExternalStoragePublicDirectory(
+                        android.os.Environment.DIRECTORY_DOWNLOADS), "MyPlayer")
+                dir.mkdirs()
+                src.copyTo(java.io.File(dir, "audio_diag.log"), overwrite = true)
+            }
+            android.util.Log.d("AudioPlayer", "audio_diag.log → Download/MyPlayer 복사 완료")
+        } catch (e: Exception) {
+            android.util.Log.e("AudioPlayer", "copyDiagToDownload err", e)
+        }
+    }
+
 }
