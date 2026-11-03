@@ -146,6 +146,32 @@ object YouTubeStream {
         }
     }
 
+
+    /** ★ 서버 /media_urls에서 video+audio URL을 한 번에 병렬로 획득 */
+    suspend fun fetchBothUrls(videoId: String): Pair<String?, String?> = withContext(Dispatchers.IO) {
+        try {
+            val token = getJwtToken() ?: return@withContext Pair(null, null)
+            val url = "$SERVER_API_URL/media_urls?v=$videoId&token=$token"
+            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 5000
+            conn.readTimeout = 60000
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            if (conn.responseCode !in 200..299) {
+                flogServer("/media_urls HTTP ${conn.responseCode}")
+                return@withContext Pair(null, null)
+            }
+            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            val json = org.json.JSONObject(body)
+            val v = if (json.optBoolean("video_ok")) json.optString("video_url") else null
+            val a = if (json.optBoolean("audio_ok")) json.optString("audio_url") else null
+            flogServer("/media_urls ok: video=${v != null}, audio=${a != null}")
+            Pair(v, a)
+        } catch (e: Exception) {
+            flogServer("/media_urls err: ${e.message}")
+            Pair(null, null)
+        }
+    }
+
     private fun getJwtToken(): String? {
         return try {
             MyApp.instance.getSharedPreferences("server_auth", android.content.Context.MODE_PRIVATE)
