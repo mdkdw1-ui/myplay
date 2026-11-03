@@ -88,7 +88,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var extractInProgress: Boolean = false
     private var playNextFailCount: Int = 0
     private var prefetchJob: kotlinx.coroutines.Job? = null
-    private val prefetchedStreams = mutableMapOf<String, YouTubeStream.StreamResult>()
+    private val prefetchedStreams = java.util.concurrent.ConcurrentHashMap<String, YouTubeStream.StreamResult>()
     private var lastRelatedCache: List<VideoItem> = emptyList()
     private var lastRelatedCacheTime: Long = 0L
     private var lastPlayNextFailMs: Long = 0L
@@ -630,36 +630,42 @@ class AudioPlayerActivity : AppCompatActivity() {
                 if (toPrefetch.isNotEmpty()) {
                     diag("prefetch: ${toPrefetch.size}곡 순차 캐시 시작")
                     bgScope.launch {
-                        for ((idx, item) in toPrefetch.withIndex()) {
-                            try {
-                                if (prefetchedStreams.containsKey(item.videoId)) {
-                                    diag("prefetch skip (이미 캐시): ${item.videoId}")
-                                    continue
+                        // ★ 3개 병렬 배치 (개별 timeout 30초)
+                        val chunks = toPrefetch.chunked(3)
+                        for ((batchIdx, batch) in chunks.withIndex()) {
+                            val deferreds = batch.mapIndexed { i, item ->
+                                bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
+                                    val idx = batchIdx * 3 + i
+                                    try {
+                                        if (prefetchedStreams.containsKey(item.videoId)) {
+                                            diag("prefetch skip (이미 캐시): ${item.videoId}")
+                                            return@async null
+                                        }
+                                        if (prefetchedStreams.size >= 5) return@async null
+                                        diag("prefetch 시작[$idx]: ${item.videoId}")
+                                        val result = kotlinx.coroutines.withTimeoutOrNull(30_000) {
+                                            YouTubeStream.extractAudioOnly(item.videoId)
+                                        }
+                                        if (result == null) {
+                                            diag("prefetch timeout[$idx]: ${item.videoId}")
+                                            return@async null
+                                        }
+                                        if (result.hasAny) {
+                                            prefetchedStreams[item.videoId] = result
+                                            diag("prefetch 완료[$idx]: ${item.videoId} (cache=${prefetchedStreams.size})")
+                                            result
+                                        } else {
+                                            diag("prefetch 실패[$idx]: ${item.videoId} (hasAny=false)")
+                                            null
+                                        }
+                                    } catch (e: Exception) {
+                                        diag("prefetch err[$idx]: ${item.videoId} - ${e.message}")
+                                        null
+                                    }
                                 }
-                                if (prefetchedStreams.size >= 5) {
-                                    diag("prefetch 중단 (캐시 가득: ${prefetchedStreams.size})")
-                                    break
-                                }
-                                // ★ 첫 곡은 빠르게, 나머지는 Piped 부하 고려 (1초 간격)
-                                if (idx > 0) delay(1000)
-                                
-                                diag("prefetch 시작[$idx]: ${item.videoId}")
-                                val result = kotlinx.coroutines.withTimeoutOrNull(60_000) {
-                                    YouTubeStream.extractAudioOnly(item.videoId)
-                                }
-                                if (result == null) {
-                                    diag("prefetch timeout[$idx]: ${item.videoId}")
-                                    continue
-                                }
-                                if (result.hasAny) {
-                                    prefetchedStreams[item.videoId] = result
-                                    diag("prefetch 완료[$idx]: ${item.videoId} (cache=${prefetchedStreams.size})")
-                                } else {
-                                    diag("prefetch 실패[$idx]: ${item.videoId} (hasAny=false)")
-                                }
-                            } catch (e: Exception) {
-                                diag("prefetch err[$idx]: ${item.videoId} - ${e.message}")
                             }
+                            deferreds.forEach { runCatching { it.await() } }
+                            diag("prefetch 배치[$batchIdx] 완료 (cache=${prefetchedStreams.size})")
                         }
                     }
                 }

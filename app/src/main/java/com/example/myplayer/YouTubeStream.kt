@@ -75,7 +75,7 @@ object YouTubeStream {
             flogServer("fallback to /media (polling)")
             val mediaUrl = "$SERVER_API_URL/media?v=$videoId&token=$token"
             var attempts = 0
-            while (attempts < 90) { // 최대 90초 대기
+            while (attempts < 30) { // ★ 30초 (prefetch 빨리 실패)
                 val conn = java.net.URL(mediaUrl).openConnection() as java.net.HttpURLConnection
                 conn.connectTimeout = 5000
                 conn.readTimeout = 45000
