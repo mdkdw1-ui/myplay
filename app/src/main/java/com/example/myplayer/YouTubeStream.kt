@@ -118,7 +118,7 @@ object YouTubeStream {
             conn.setRequestProperty("Authorization", "Bearer $token")
             conn.setRequestProperty("Range", "bytes=0-0")
             val code = conn.responseCode
-            if (code !in listOf(200, 206)) {
+            if (code !in listOf(200, 206, 202)) {   // ★ 202 = background 시작
                 flogServer("HEAD /media_video_only $code")
                 return@withContext null
             }
@@ -141,7 +141,7 @@ object YouTubeStream {
             conn.setRequestProperty("Authorization", "Bearer $token")
             conn.setRequestProperty("Range", "bytes=0-0")
             val code = conn.responseCode
-            if (code !in listOf(200, 206)) {
+            if (code !in listOf(200, 206, 202)) {   // ★ 202 = background 다운로드 시작됨 (성공)
                 flogServer("HEAD /media_audio_only $code")
                 return@withContext null
             }
@@ -284,7 +284,7 @@ object YouTubeStream {
         }
 
         // ★★★ 1순위: 서버 API (WARP+POT)
-        val serverUrl = fetchAudioOnlyFromServer(videoId) ?: fetchFromServer(videoId)
+        val serverUrl = fetchAudioOnlyFromServer(videoId)
         if (!serverUrl.isNullOrBlank()) {
             val r = StreamResult(
                 videoUrl = null,
