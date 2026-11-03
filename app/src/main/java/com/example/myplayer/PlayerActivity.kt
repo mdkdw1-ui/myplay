@@ -1713,12 +1713,84 @@ class PlayerActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun doDownload(audioOnly: Boolean) {
-        val streamUrl = if (audioOnly) {
-            currentAudioUrl ?: currentStreamUrl
-        } else {
-            currentStreamUrl
+
+    /** ★ 서버 /media_download에서 선택 화질로 다운로드 */
+    private fun doDownloadWithQuality(quality: String) {
+        if (currentVideoId.isBlank()) return
+        val token = try {
+            getSharedPreferences("server_auth", MODE_PRIVATE).getString("jwt", null)
+        } catch (_: Exception) { null }
+        if (token.isNullOrBlank()) {
+            Toast.makeText(this, "인증이 필요합니다", Toast.LENGTH_SHORT).show()
+            return
         }
+        val url = "http://193.123.167.118:5000/media_download?v=$currentVideoId&q=$quality&token=$token"
+        lifecycleScope.launch {
+            val exists = try {
+                HistoryDatabase.get(applicationContext).downloadDao().isDownloaded(currentVideoId)
+            } catch (e: Exception) { false }
+            if (exists) {
+                Toast.makeText(this@PlayerActivity, "이미 다운로드됨", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            isDownloading = true
+            btnDownload.text = "⏳ 0%"
+            val progressDialog = android.app.ProgressDialog(this@PlayerActivity).apply {
+                setTitle("다운로드 중 (${quality}p)")
+                setMessage(currentTitle)
+                setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
+                max = 100
+                setCancelable(false)
+                show()
+            }
+            val file = AppDownloader.download(
+                applicationContext, currentVideoId, url, audioOnly = false
+            ) { pct ->
+                runOnUiThread {
+                    progressDialog.progress = pct
+                    btnDownload.text = "⏳ $pct%"
+                }
+            }
+            progressDialog.dismiss()
+            isDownloading = false
+            btnDownload.text = "📥"
+            if (file != null) {
+                try { AppDownloader.exportToPublicDownload(applicationContext, file) } catch (_: Exception) {}
+                HistoryDatabase.get(applicationContext).downloadDao().insert(
+                    DownloadEntity(
+                        videoId = currentVideoId,
+                        title = "$currentTitle (${quality}p)",
+                        channel = currentChannel,
+                        thumbnail = currentThumb,
+                        filePath = file.absolutePath,
+                        sizeBytes = file.length(),
+                        downloadedAt = System.currentTimeMillis(),
+                        isAudioOnly = false
+                    )
+                )
+                Toast.makeText(this@PlayerActivity, "다운로드 완료 (${quality}p, ${file.length()/1024/1024}MB)", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this@PlayerActivity, "다운로드 실패", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun doDownload(audioOnly: Boolean) {
+        // ★ 영상 다운로드는 화질 선택 다이얼로그 (스트리밍 화질과 무관)
+        if (!audioOnly) {
+            val qualities = arrayOf("360p (가벼움)", "480p", "720p (권장)", "1080p (원본)")
+            val qValues = arrayOf("360", "480", "720", "1080")
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("다운로드 화질 선택")
+                .setItems(qualities) { _, which ->
+                    doDownloadWithQuality(qValues[which])
+                }
+                .setNegativeButton("취소", null)
+                .show()
+            return
+        }
+        // 오디오만 다운로드는 기존 로직
+        val streamUrl = currentAudioUrl ?: currentStreamUrl
         if (streamUrl.isNullOrBlank()) {
             Toast.makeText(this, "스트림이 없습니다", Toast.LENGTH_SHORT).show()
             return

@@ -536,7 +536,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 MyApp.instance.getSharedPreferences("server_auth", android.content.Context.MODE_PRIVATE)
                     .getString("jwt", null)
             } catch (_: Exception) { null } ?: return@launch
-            videoIds.take(5).forEach { vid ->
+            videoIds.take(10).forEach { vid ->
                 try {
                     for (ep in listOf("media_audio_only", "media_video_only")) {
                         try {
