@@ -1354,12 +1354,29 @@ class AudioPlayerActivity : AppCompatActivity() {
                 // ★ setMediaItems(단일)로 큐 확실히 리셋
                 // ★ 이어듣기 시작 위치 (클래스 필드)
                 val startPos = if (pendingStartPos > 0) pendingStartPos else 0L
-                mediaController?.setMediaItems(listOf(mediaItem), 0, startPos)
-                if (startPos > 0) {
-                    diag("loadAudio: 시작 위치 ${startPos / 1000}초")
-                    pendingStartPos = 0L   // ★ 사용 후 리셋
+                try {
+                    val mc2 = mediaController
+                    if (mc2 == null) {
+                        diag("loadAudio: mediaController null → skip")
+                        return@runOnUiThread
+                    }
+                    // ★ STATE_ENDED 방어: 끝난 상태에서 setMediaItems 전에 stop/seek
+                    if (mc2.playbackState == Player.STATE_ENDED) {
+                        diag("loadAudio: STATE_ENDED → stop() 선행")
+                        mc2.stop()
+                        mc2.seekTo(0)
+                    }
+                    // ★ startPos가 음수거나 duration 밖이면 0으로 강제
+                    val safeStart = if (startPos < 0) 0L else startPos
+                    mc2.setMediaItems(listOf(mediaItem), 0, safeStart)
+                    if (safeStart > 0) {
+                        diag("loadAudio: 시작 위치 ${safeStart / 1000}초")
+                        pendingStartPos = 0L
+                    }
+                    mc2.prepare()
+                } catch (e: Exception) {
+                    diag("loadAudio setMediaItems err: ${e.message}")
                 }
-                mediaController?.prepare()
                 try {
                     val mc = mediaController
                     if (mc != null) {
@@ -1456,28 +1473,46 @@ class AudioPlayerActivity : AppCompatActivity() {
 
                         // ★ pending resume 처리 (duration=0 회피)
                         if (pendingResumeVideoId == currentVideoId && pendingResumePos > 3000L) {
-                            val mc2 = mediaController
-                            val realDur = mc2?.duration ?: 0L
-                            val canResume = realDur > 0 && pendingResumePos < realDur - 5000L
-                            diag("STATE_READY pendingResume: pos=${pendingResumePos/1000}초 realDur=${realDur/1000}초 canResume=$canResume")
-                            if (canResume) {
-                                runOnUiThread {
-                                    androidx.appcompat.app.AlertDialog.Builder(this@AudioPlayerActivity)
-                                        .setTitle("🎵 이어 듣기")
-                                        .setMessage("${formatTime(pendingResumePos)}부터 이어 들을까요?")
-                                        .setPositiveButton("이어 듣기") { _, _ ->
-                                            mediaController?.seekTo(pendingResumePos)
-                                            mediaController?.play()
+                            try {
+                                val mc2 = mediaController
+                                val realDur = mc2?.duration ?: 0L
+                                val canResume = realDur > 0 && pendingResumePos < realDur - 5000L
+                                diag("STATE_READY pendingResume: pos=${pendingResumePos/1000}초 realDur=${realDur/1000}초 canResume=$canResume")
+                                if (canResume && !isFinishing && !isDestroyed) {
+                                    runOnUiThread {
+                                        try {
+                                            androidx.appcompat.app.AlertDialog.Builder(this@AudioPlayerActivity)
+                                                .setTitle("🎵 이어 듣기")
+                                                .setMessage("${formatTime(pendingResumePos)}부터 이어 들을까요?")
+                                                .setPositiveButton("이어 듣기") { _, _ ->
+                                                    try {
+                                                        val mc3 = mediaController ?: return@setPositiveButton
+                                                        if (pendingResumePos > 0 && (mc3.duration <= 0 || pendingResumePos < mc3.duration)) {
+                                                            mc3.seekTo(pendingResumePos)
+                                                            mc3.play()
+                                                        }
+                                                    } catch (e: Exception) {
+                                                        diag("이어듣기2 play err: ${e.message}")
+                                                    }
+                                                }
+                                                .setNegativeButton("처음부터") { _, _ ->
+                                                    try { mediaController?.seekTo(0) } catch (e: Exception) {
+                                                        diag("처음부터2 err: ${e.message}")
+                                                    }
+                                                }
+                                                .setCancelable(false)
+                                                .show()
+                                        } catch (e: Exception) {
+                                            diag("이어듣기2 dialog err: ${e.message}")
                                         }
-                                        .setNegativeButton("처음부터") { _, _ ->
-                                            mediaController?.seekTo(0)
-                                        }
-                                        .setCancelable(false)
-                                        .show()
+                                    }
                                 }
+                            } catch (e: Exception) {
+                                diag("pendingResume err: ${e.message}")
+                            } finally {
+                                pendingResumePos = 0L
+                                pendingResumeVideoId = ""
                             }
-                            pendingResumePos = 0L
-                            pendingResumeVideoId = ""
                         }
                     }
                     Player.STATE_IDLE -> {
@@ -1569,6 +1604,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                diag("❌ onPlayerError: ${error.errorCodeName} - ${error.message?.take(100)}")
                 try {
                     val curItem = mediaController?.currentMediaItem
                     val curUrl = curItem?.localConfiguration?.uri?.toString() ?: "(null)"
@@ -2756,17 +2792,35 @@ class AudioPlayerActivity : AppCompatActivity() {
 
             if (canResume) {
                 runOnUiThread {
-                    androidx.appcompat.app.AlertDialog.Builder(this@AudioPlayerActivity)
-                        .setTitle("🎵 이어 듣기")
-                        .setMessage("${formatTime(savedPos)}부터 이어 들을까요?")
-                        .setPositiveButton("이어 듣기") { _, _ ->
-                            loadAudioWithStartPos(videoId, savedPos)
-                        }
-                        .setNegativeButton("처음부터") { _, _ ->
-                            loadAudioWithStartPos(videoId, 0L)
-                        }
-                        .setCancelable(false)
-                        .show()
+                    try {
+                        androidx.appcompat.app.AlertDialog.Builder(this@AudioPlayerActivity)
+                            .setTitle("🎵 이어 듣기")
+                            .setMessage("${formatTime(savedPos)}부터 이어 들을까요?")
+                            .setPositiveButton("이어 듣기") { _, _ ->
+                                try {
+                                    // ★ 다이얼로그 닫은 직후 상태 확인
+                                    if (mediaController == null) {
+                                        diag("이어듣기: mc null → 무시")
+                                        return@setPositiveButton
+                                    }
+                                    loadAudioWithStartPos(videoId, savedPos)
+                                } catch (e: Exception) {
+                                    diag("이어듣기 positive err: ${e.message}")
+                                }
+                            }
+                            .setNegativeButton("처음부터") { _, _ ->
+                                try {
+                                    loadAudioWithStartPos(videoId, 0L)
+                                } catch (e: Exception) {
+                                    diag("처음부터 err: ${e.message}")
+                                }
+                            }
+                            .setCancelable(false)
+                            .show()
+                    } catch (e: Exception) {
+                        diag("이어듣기 dialog err: ${e.message}")
+                        loadAudio(videoId, isInitial = true)
+                    }
                 }
             } else {
                 runOnUiThread { loadAudio(videoId, isInitial = true) }
@@ -2780,13 +2834,17 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     /** ★ 시작 위치를 지정해서 loadAudio */
     private fun loadAudioWithStartPos(videoId: String, startPosMs: Long) {
-        // ★ 클래스 필드에 저장 (스코프 무관)
-        pendingStartPos = startPosMs
-        diag("loadAudioWithStartPos: $videoId, pos=${startPosMs / 1000}초")
-        // intent에도 저장
-        intent.putExtra("START_POS_MS", startPosMs)
-        intent.putExtra("FORCE_START_POS", true)
-        loadAudio(videoId, isInitial = true)
+        try {
+            // ★ 음수/과대 방어
+            val safePos = if (startPosMs < 0) 0L else startPosMs
+            pendingStartPos = safePos
+            diag("loadAudioWithStartPos: $videoId, pos=${safePos / 1000}초")
+            intent.putExtra("START_POS_MS", safePos)
+            intent.putExtra("FORCE_START_POS", true)
+            loadAudio(videoId, isInitial = true)
+        } catch (e: Exception) {
+            diag("loadAudioWithStartPos err: ${e.message}")
+        }
     }
 
     private fun formatTime(ms: Long): String {
