@@ -43,14 +43,35 @@ class NewPipePotProvider(private val ctx: Context) : PoTokenProvider {
 
     override fun getWebClientPoToken(videoId: String): PoTokenResult? {
         initWebView()
-        if (integrityToken.isBlank() || System.currentTimeMillis() > tokenExpiry) {
-            Log.w(TAG, "POT not ready for $videoId")
+        // ★ visitorData 강제 로드
+        if (visitorData.isBlank()) {
+            visitorData = YouTubeVisitorData.load(ctx)
+            if (visitorData.isBlank()) {
+                try {
+                    kotlinx.coroutines.runBlocking {
+                        kotlinx.coroutines.withTimeoutOrNull(2000) {
+                            YouTubeVisitorFetcher.ensure(ctx)
+                        }
+                    }
+                    visitorData = YouTubeVisitorData.load(ctx)
+                } catch (_: Exception) {}
+            }
+        }
+        // ★ visitorData 있으면 integrityToken 없어도 POT 반환
+        if (visitorData.isBlank()) {
+            Log.w(TAG, "POT: visitorData 없음, skip")
             return null
         }
+        val token = if (integrityToken.isNotBlank() && System.currentTimeMillis() < tokenExpiry) {
+            integrityToken
+        } else {
+            "visitor_only"   // ★ 가짜 토큰 (NewPipe가 visitorData 사용하도록 유도)
+        }
+        Log.d(TAG, "POT 반환: token=${token.take(20)}, visitor=${visitorData.take(20)}")
         return PoTokenResult(
-            "$integrityToken|$videoId", // playerPot
-            "$integrityToken|$visitorData", // streamingPot
-            visitorData // p2 (visitorData)
+            "$token|$videoId",
+            "$token|$visitorData",
+            visitorData
         )
     }
 
