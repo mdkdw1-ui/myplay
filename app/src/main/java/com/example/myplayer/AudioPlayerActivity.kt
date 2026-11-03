@@ -606,13 +606,23 @@ class AudioPlayerActivity : AppCompatActivity() {
                 // ★ 큐가 부족하면 라디오 검색을 병렬로 (곡 끝나기 전에 준비)
                 if (toPrefetch.isEmpty() || curIdx >= queue.size - 2) {
                     diag("prefetch: 큐 부족 → 라디오 병렬 검색 시작")
-                    bgScope.launch {
-                        try {
-                            fillQueueFromRadio()
-                        } catch (e: Exception) {
-                            diag("fillQueue err: ${e.message}")
+                    try {
+                        fillQueueFromRadio()
+                    } catch (e: Exception) {
+                        diag("fillQueue err: ${e.message}")
+                    }
+                    // ★ await 후 큐 재계산해서 toPrefetch를 실제로 채움
+                    val newQ = QueueManager.get(this@AudioPlayerActivity)
+                    val newCur = newQ.indexOfFirst { it.videoId == currentVideoId }
+                    if (newCur >= 0) {
+                        for (i in (newCur + 1) until minOf(newCur + 6, newQ.size)) {
+                            val it2 = newQ[i]
+                            if (it2.videoId !in failedIds && !prefetchedStreams.containsKey(it2.videoId)) {
+                                toPrefetch.add(it2)
+                            }
                         }
                     }
+                    diag("prefetch: 라디오 후 toPrefetch.size=${toPrefetch.size}")
                 }
                 
                 // ★ 큐의 다음 곡들 순차 캐시 (Piped 동시 요청 부담 회피)
@@ -659,8 +669,16 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
     
+    private var fillQueueRunning = false
+
     /** 큐가 부족할 때 라디오에서 채우기 (병렬 소스) */
     private suspend fun fillQueueFromRadio() {
+        if (fillQueueRunning) {
+            diag("fillQueue: 이미 실행 중 → skip")
+            return
+        }
+        fillQueueRunning = true
+        try {
         val artistName = currentArtist.ifBlank { currentChannel }
         
         val radioDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
@@ -697,6 +715,9 @@ class AudioPlayerActivity : AppCompatActivity() {
             // ★ 5곡 병렬 HEAD → 서버 백그라운드 다운로드
             prefetchRadio5(combined.map { it.videoId })
         }
+        } finally {
+            fillQueueRunning = false
+        }
     }
 
 
@@ -712,18 +733,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             val savedGain = pref?.getInt("loudness_gain_mb", 0) ?: 0
             LoudnessManager.attach(session, savedGain)
         }
-        try {
-            val mc = mediaController
-            if (mc != null) {
-                mc.trackSelectionParameters = mc.trackSelectionParameters
-                    .buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
-                    .build()
-                diag("video 트랙 비활성화 재적용")
-            }
-        } catch (e: Exception) {
-            diag("track 재적용 err: ${e.message}")
-        }
+        // ★ video 트랙 비활성화는 loadAudio에서 이미 처리 → 중복 제거
     }
 
     private fun updateUI() {

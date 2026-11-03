@@ -28,6 +28,12 @@ object YouTubeStream {
 
     private const val TAG = "YouTubeStream"
 
+    // ★ NewPipe POT circuit breaker
+    private var npAudioFails = 0
+    private var npAudioSkipUntil = 0L
+    private var npVideoFails = 0
+    private var npVideoSkipUntil = 0L
+
     // ★★★ WARP+POT 서버 API (IP 봇 판정 우회)
     private const val SERVER_API_URL = "http://193.123.167.118:5000"
 
@@ -238,21 +244,43 @@ object YouTubeStream {
         flog("A1 extractAudioOnly IO 진입: $videoId")
 
         // ★ 0순위: 폰에서 NewPipeExtractor로 직접 추출 (POT 생성)
-        try {
-            org.schabi.newpipe.extractor.NewPipe.init(DownloaderImpl())
-            val service = org.schabi.newpipe.extractor.ServiceList.YouTube
-            val info = org.schabi.newpipe.extractor.stream.StreamInfo.getInfo(service, "https://www.youtube.com/watch?v=$videoId")
-            val audio = info.audioStreams.filter { it.isUrl }.maxByOrNull { it.averageBitrate }
-            if (audio != null) {
-                flog("NewPipe POT 성공: $videoId")
-                return@withContext StreamResult(
-                    videoUrl = null, audioUrl = audio.content, muxedUrl = null,
-                    title = info.name ?: "", channelName = info.uploaderName ?: "",
-                    description = "", debug = "newpipe-local OK", audioUrlBest = audio.content
-                )
+        // ★ circuit breaker: 500ms 타임아웃 + 3회 실패 시 5분 skip
+        if (System.currentTimeMillis() < npAudioSkipUntil) {
+            flog("NewPipe audio skip (circuit open)")
+        } else {
+            try {
+                org.schabi.newpipe.extractor.NewPipe.init(DownloaderImpl())
+                val service = org.schabi.newpipe.extractor.ServiceList.YouTube
+                val info = kotlinx.coroutines.withTimeoutOrNull(500) {
+                    withContext(Dispatchers.IO) {
+                        org.schabi.newpipe.extractor.stream.StreamInfo.getInfo(service, "https://www.youtube.com/watch?v=$videoId")
+                    }
+                }
+                if (info != null) {
+                    val audio = info.audioStreams.filter { it.isUrl }.maxByOrNull { it.averageBitrate }
+                    if (audio != null) {
+                        npAudioFails = 0
+                        flog("NewPipe POT 성공: $videoId")
+                        return@withContext StreamResult(
+                            videoUrl = null, audioUrl = audio.content, muxedUrl = null,
+                            title = info.name ?: "", channelName = info.uploaderName ?: "",
+                            description = "", debug = "newpipe-local OK", audioUrlBest = audio.content
+                        )
+                    }
+                }
+                npAudioFails++
+                if (npAudioFails >= 3) {
+                    npAudioSkipUntil = System.currentTimeMillis() + 5 * 60_000L
+                    flog("NewPipe audio circuit OPEN: 5분 skip")
+                }
+            } catch (e: Throwable) {
+                npAudioFails++
+                if (npAudioFails >= 3) {
+                    npAudioSkipUntil = System.currentTimeMillis() + 5 * 60_000L
+                    flog("NewPipe audio circuit OPEN: 5분 skip")
+                }
+                flog("NewPipe POT 실패: ${e.message}")
             }
-        } catch (e: Throwable) {
-            flog("NewPipe POT 실패: ${e.message}")
         }
 
         // ★★★ 1순위: 서버 API (WARP+POT)
@@ -705,39 +733,60 @@ object YouTubeStream {
     /** 폰에서 NewPipe POT(WARP)로 비디오(muxed) 스트림 추출 */
     /** 폰에서 NewPipe POT(WARP)로 비디오(muxed) 스트림 추출 */
     suspend fun extractVideoLocal(videoId: String): StreamResult = withContext(Dispatchers.IO) {
+        // ★ circuit breaker: 1500ms 타임아웃 + 3회 실패 시 5분 skip
+        if (System.currentTimeMillis() < npVideoSkipUntil) {
+            flog("NewPipe video skip (circuit open)")
+            return@withContext StreamResult(null, null, null, "", "", "", "newpipe-video circuit-open")
+        }
         try {
             org.schabi.newpipe.extractor.NewPipe.init(DownloaderImpl())
             val service = org.schabi.newpipe.extractor.ServiceList.YouTube
-            val info = org.schabi.newpipe.extractor.stream.StreamInfo.getInfo(service, "https://www.youtube.com/watch?v=$videoId")
-            val videos = info.videoStreams.filter { it.isUrl }
-            // muxed (video+audio) 우선
-            val muxedStream = videos.firstOrNull { !it.isVideoOnly }
-            if (muxedStream != null) {
-                flog("NewPipe Video POT 성공: $videoId (${muxedStream.resolution})")
-                return@withContext StreamResult(
-                    videoUrl = null, audioUrl = null, muxedUrl = muxedStream.content,
-                    title = info.name ?: "", channelName = info.uploaderName ?: "",
-                    description = info.description?.content ?: "", debug = "newpipe-video OK",
-                    qualities = emptyList(),
-                    subtitles = emptyList()
-                )
+            val info = kotlinx.coroutines.withTimeoutOrNull(1500) {
+                withContext(Dispatchers.IO) {
+                    org.schabi.newpipe.extractor.stream.StreamInfo.getInfo(service, "https://www.youtube.com/watch?v=$videoId")
+                }
             }
-            // videoOnly + audio 병합
-            val videoOnly = videos.filter { it.isVideoOnly }.maxByOrNull {
-                it.resolution?.replace("p", "")?.toIntOrNull() ?: 0
+            if (info != null) {
+                val videos = info.videoStreams.filter { it.isUrl }
+                val muxedStream = videos.firstOrNull { !it.isVideoOnly }
+                if (muxedStream != null) {
+                    npVideoFails = 0
+                    flog("NewPipe Video POT 성공: $videoId (${muxedStream.resolution})")
+                    return@withContext StreamResult(
+                        videoUrl = null, audioUrl = null, muxedUrl = muxedStream.content,
+                        title = info.name ?: "", channelName = info.uploaderName ?: "",
+                        description = info.description?.content ?: "", debug = "newpipe-video OK",
+                        qualities = emptyList(),
+                        subtitles = emptyList()
+                    )
+                }
+                val videoOnly = videos.filter { it.isVideoOnly }.maxByOrNull {
+                    it.resolution?.replace("p", "")?.toIntOrNull() ?: 0
+                }
+                val audio = info.audioStreams.filter { it.isUrl }.maxByOrNull { it.averageBitrate }
+                if (videoOnly != null && audio != null) {
+                    npVideoFails = 0
+                    flog("NewPipe Video POT 성공 (병합): $videoId")
+                    return@withContext StreamResult(
+                        videoUrl = videoOnly.content, audioUrl = audio.content, muxedUrl = null,
+                        title = info.name ?: "", channelName = info.uploaderName ?: "",
+                        description = info.description?.content ?: "", debug = "newpipe-video merge OK",
+                        qualities = emptyList(),
+                        subtitles = emptyList()
+                    )
+                }
             }
-            val audio = info.audioStreams.filter { it.isUrl }.maxByOrNull { it.averageBitrate }
-            if (videoOnly != null && audio != null) {
-                flog("NewPipe Video POT 성공 (병합): $videoId")
-                return@withContext StreamResult(
-                    videoUrl = videoOnly.content, audioUrl = audio.content, muxedUrl = null,
-                    title = info.name ?: "", channelName = info.uploaderName ?: "",
-                    description = info.description?.content ?: "", debug = "newpipe-video merge OK",
-                    qualities = emptyList(),
-                    subtitles = emptyList()
-                )
+            npVideoFails++
+            if (npVideoFails >= 3) {
+                npVideoSkipUntil = System.currentTimeMillis() + 5 * 60_000L
+                flog("NewPipe video circuit OPEN: 5분 skip")
             }
         } catch (e: Exception) {
+            npVideoFails++
+            if (npVideoFails >= 3) {
+                npVideoSkipUntil = System.currentTimeMillis() + 5 * 60_000L
+                flog("NewPipe video circuit OPEN: 5분 skip")
+            }
             flog("NewPipe Video POT 실패: ${e.message}")
         }
         return@withContext StreamResult(null, null, null, "", "", "", "newpipe-video fail")
