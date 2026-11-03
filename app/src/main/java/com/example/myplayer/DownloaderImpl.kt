@@ -61,9 +61,41 @@ class DownloaderImpl : Downloader() {
         // ★ 쿠키 + SAPISIDHASH + visitorData 완벽 적용
         CookieUtil.apply(connection)
 
-        if (dataToSend != null) {
+        // ★★★ ANDROID_VR 클라이언트 강제 (헤더 + 바디 변환) ★★★
+        var finalData = dataToSend
+        if (url.contains("youtubei/v1/")) {
+            // 헤더 강제 (CookieUtil 이후라 덮어쓰기 유지)
+            connection.setRequestProperty("X-YouTube-Client-Name", "28")
+            connection.setRequestProperty("X-YouTube-Client-Version", "1.62.27")
+            connection.setRequestProperty("User-Agent", "com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12; en_US; Quest 3; Build/SQ3A.220605.009.A1) gzip")
+            connection.setRequestProperty("Origin", "https://www.youtube.com")
+            // 바디 변환: context.client를 ANDROID_VR로
+            if (dataToSend != null) {
+                try {
+                    val bodyStr = String(dataToSend, Charsets.UTF_8)
+                    if (bodyStr.contains("\"client\"")) {
+                        val json = org.json.JSONObject(bodyStr)
+                        val context = json.optJSONObject("context") ?: org.json.JSONObject()
+                        val client = context.optJSONObject("client") ?: org.json.JSONObject()
+                        client.put("clientName", "ANDROID_VR")
+                        client.put("clientVersion", "1.62.27")
+                        client.put("androidSdkVersion", 30)
+                        client.put("osName", "Android")
+                        client.put("osVersion", "12")
+                        context.put("client", client)
+                        json.put("context", context)
+                        finalData = json.toString().toByteArray(Charsets.UTF_8)
+                        android.util.Log.d("DownloaderImpl", "ANDROID_VR 변환: ${url.take(50)}")
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("DownloaderImpl", "body 변환 실패", e)
+                }
+            }
+        }
+
+        if (finalData != null) {
             connection.doOutput = true
-            connection.outputStream.use { it.write(dataToSend) }
+            connection.outputStream.use { it.write(finalData) }
         }
 
         val responseCode = connection.responseCode
