@@ -1320,10 +1320,9 @@ class PlayerActivity : AppCompatActivity() {
     ): Boolean = withContext(Dispatchers.IO) {
         try {
             vdiag("playServerMerged: $videoId")
-            // ★ 통합 엔드포인트로 video+audio URL 한 번에 병렬 획득
             val (videoUrl, audioUrl) = YouTubeStream.fetchBothUrls(videoId)
             if (videoUrl == null || audioUrl == null) {
-                vdiag("  media_urls null (video=$videoUrl, audio=$audioUrl)")
+                vdiag("  media_urls null")
                 return@withContext false
             }
             vdiag("  video=${videoUrl.take(60)}")
@@ -1335,7 +1334,6 @@ class PlayerActivity : AppCompatActivity() {
                 channel = channel,
                 videoId = videoId
             )
-            vdiag("  playMergedVideoAudio=$ok")
             if (ok) {
                 saveHistory(videoId, title, channel, thumb, startPosMs)
                 currentVideoId = videoId
