@@ -29,7 +29,7 @@ object YouTubeStream {
     private const val TAG = "YouTubeStream"
 
     // ★★★ WARP+POT 서버 API (IP 봇 판정 우회)
-    private const val SERVER_API_URL = "http://155.248.161.40:5000"
+    private const val SERVER_API_URL = "http://193.123.167.118:5000"
 
     private fun flogServer(msg: String) {
         android.util.Log.d(TAG, "[SRV] $msg")
@@ -230,7 +230,7 @@ object YouTubeStream {
         }
 
         // ★★★ 1순위: 서버 API (WARP+POT)
-        val serverUrl = fetchFromServer(videoId)
+        val serverUrl = fetchAudioOnlyFromServer(videoId) ?: fetchFromServer(videoId)
         if (!serverUrl.isNullOrBlank()) {
             val r = StreamResult(
                 videoUrl = null,

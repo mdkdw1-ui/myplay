@@ -114,7 +114,7 @@ class YouTubeLoginActivity : AppCompatActivity() {
             if (token.isNotBlank()) {
                 GlobalScope.launch(Dispatchers.IO) {
                     try {
-                        val conn = java.net.URL("http://155.248.161.40:5000/update_cookie").openConnection() as java.net.HttpURLConnection
+                        val conn = java.net.URL("http://193.123.167.118:5000/update_cookie").openConnection() as java.net.HttpURLConnection
                         conn.requestMethod = "POST"
                         conn.setRequestProperty("Content-Type", "application/json")
                         conn.setRequestProperty("Authorization", "Bearer $token")
