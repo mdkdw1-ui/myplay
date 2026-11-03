@@ -121,7 +121,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        if (!ensureServerAuthGate()) return
+        val authed = ensureServerAuthGate()
+        // early return 제거 — lateinit 미초기화로 인한 onResume NPE 방지
+        // (authed=false여도 모든 adapter/뷰 초기화는 진행, 데이터 로드만 스킵)
 
         BottomNavHelper.setup(this, BottomNavHelper.TAB_VIDEO)
 
@@ -364,10 +366,19 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        loadRecentSearches()
-        loadBookmarks()
-        loadDownloads()
-        loadHistory()
+        // lateinit 초기화 전이면 스킵 (PIN 미인증 상태)
+        val jwt = try {
+            getSharedPreferences("server_auth", MODE_PRIVATE).getString("jwt", null)
+        } catch (_: Throwable) { null }
+        if (jwt.isNullOrBlank()) return
+        try {
+            loadRecentSearches()
+            loadBookmarks()
+            loadDownloads()
+            loadHistory()
+        } catch (t: Throwable) {
+            android.util.Log.e("MainAuth", "onResume load err", t)
+        }
     }
 
 
