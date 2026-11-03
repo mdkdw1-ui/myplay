@@ -46,38 +46,51 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             android.util.Log.e("MainAuth", "gate err: ${e.message}")
         }
-        showPinDialog()
+        android.os.Handler(android.os.Looper.getMainLooper()).post { if (!isFinishing && !isDestroyed) showPinDialog() }
         return false
     }
 
     private fun showPinDialog() {
+        if (isFinishing || isDestroyed) return
         val input = android.widget.EditText(this).apply {
             hint = "서버 PIN 입력"
             setPadding(40, 30, 40, 30)
         }
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("🔐 서버 인증")
             .setMessage("WARP+POT 서버 PIN을 입력하세요")
             .setView(input)
-            .setPositiveButton("확인") { _, _ ->
-                val pin = input.text.toString().trim()
-                if (pin.isEmpty()) {
-                    showPinDialog()
-                    return@setPositiveButton
-                }
-                lifecycleScope.launch {
-                    val ok = requestJwtForPin(pin)
+            .setCancelable(false)
+            .create()
+
+        dialog.setButton(
+            android.content.DialogInterface.BUTTON_POSITIVE, "확인"
+        ) { _, _ ->
+            val pin = input.text.toString().trim()
+            if (pin.isEmpty()) return@setButton
+            lifecycleScope.launch {
+                val ok = requestJwtForPin(pin)
+                runOnUiThread {
+                    try { dialog.dismiss() } catch (_: Throwable) {}
                     if (ok) {
                         Toast.makeText(this@MainActivity, "✅ 인증 완료", Toast.LENGTH_SHORT).show()
-                        recreate()
+                        // recreate() 대신 명시적 재시작 (생명주기 안전)
+                        val intent = this@MainActivity.intent
+                        finish()
+                        overridePendingTransition(0, 0)
+                        startActivity(intent)
+                        overridePendingTransition(0, 0)
                     } else {
                         Toast.makeText(this@MainActivity, "❌ PIN 오류", Toast.LENGTH_LONG).show()
-                        showPinDialog()
+                        // dialog 닫은 후 다음 프레임에서 새로 띄움
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            if (!isFinishing && !isDestroyed) showPinDialog()
+                        }, 300)
                     }
                 }
             }
-            .setCancelable(false)
-            .show()
+        }
+        dialog.show()
     }
 
     private suspend fun requestJwtForPin(pin: String): Boolean = withContext(Dispatchers.IO) {
