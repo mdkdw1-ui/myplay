@@ -48,7 +48,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var updateJob: Job? = null
     private var pulseAnimator: android.animation.ValueAnimator? = null
     private var isDragging = false
-    private val bgScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    // ★ Application 레벨 스코프 (onDestroy에서 취소 안 됨, prefetch 유지)
+    private val bgScope = MyApp.prefetchScope
     private var wakeLock: PowerManager.WakeLock? = null
 
     private var currentVideoId: String = ""
@@ -3285,7 +3286,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         PlaybackService.nextTrackHandler = null
         stopAnimation()
         updateJob?.cancel()
-        bgScope.cancel()
+        // bgScope.cancel()  // Application 스코프는 취소 X
         try { LoudnessManager.release() } catch (_: Exception) {}
 
         try {
