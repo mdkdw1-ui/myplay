@@ -527,6 +527,30 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     
+
+    /** 라디오 5곡 병렬 서버 prefetch (HEAD → 백그라운드 다운로드 트리거) */
+    private fun prefetchRadio5(videoIds: List<String>) {
+        if (videoIds.isEmpty()) return
+        bgScope.launch(Dispatchers.IO) {
+            val token = try {
+                MyApp.instance.getSharedPreferences("server_auth", android.content.Context.MODE_PRIVATE)
+                    .getString("jwt", null)
+            } catch (_: Exception) { null } ?: return@launch
+            videoIds.take(5).forEach { vid ->
+                try {
+                    val url = "http://193.123.167.118:5000/media_audio_only?v=$vid&token=$token"
+                    val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                    conn.requestMethod = "HEAD"
+                    conn.connectTimeout = 3000
+                    conn.readTimeout = 10000
+                    conn.setRequestProperty("Authorization", "Bearer $token")
+                    conn.responseCode
+                    diag("prefetchRadio5: $vid")
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
     private fun prefetchNext() {
         if (isLocalMode) {
             diag("prefetch: local 모드 → skip")
@@ -666,21 +690,8 @@ class AudioPlayerActivity : AppCompatActivity() {
             }
             diag("라디오 ${combined.size}곡 큐 추가")
             
-            // ★ 추가된 곡 순차 캐시 (서버 부하 방지)
-            bgScope.launch {
-                for ((i, v) in combined.take(3).withIndex()) {
-                    try {
-                        if (i > 0) delay(1500)   // 간격
-                        val result = kotlinx.coroutines.withTimeoutOrNull(30_000) {
-                            YouTubeStream.extractAudioOnly(v.videoId)
-                        } ?: continue
-                        if (result.hasAny) {
-                            prefetchedStreams[v.videoId] = result
-                            diag("prefetch: 순차 ${i+1}/3 ${v.videoId}")
-                        }
-                    } catch (_: Exception) {}
-                }
-            }
+            // ★ 5곡 병렬 HEAD → 서버 백그라운드 다운로드
+            prefetchRadio5(combined.map { it.videoId })
         }
     }
 
