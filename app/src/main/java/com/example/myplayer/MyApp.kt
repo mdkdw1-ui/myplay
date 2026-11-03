@@ -63,5 +63,9 @@ class MyApp : Application() {
     companion object {
         lateinit var instance: MyApp
             private set
+        // ★ prefetch 전용 (Activity 생명주기 무관)
+        val prefetchScope = kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob()
+        )
     }
 }

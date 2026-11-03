@@ -28,11 +28,11 @@ object YouTubeStream {
 
     private const val TAG = "YouTubeStream"
 
-    // ★ NewPipe POT circuit breaker
+    // ★ NewPipe POT 비활성화 (서버 visionos가 항상 성공하므로)
     private var npAudioFails = 0
-    private var npAudioSkipUntil = 0L
+    private var npAudioSkipUntil = Long.MAX_VALUE   // ★ 영구 스킵
     private var npVideoFails = 0
-    private var npVideoSkipUntil = 0L
+    private var npVideoSkipUntil = Long.MAX_VALUE   // ★ 영구 스킵
 
     // ★★★ WARP+POT 서버 API (IP 봇 판정 우회)
     private const val SERVER_API_URL = "http://193.123.167.118:5000"
