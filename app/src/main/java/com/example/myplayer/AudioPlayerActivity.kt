@@ -49,7 +49,12 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var pulseAnimator: android.animation.ValueAnimator? = null
     private var isDragging = false
     // ★ Application 레벨 스코프 (onDestroy에서 취소 안 됨, prefetch 유지)
-    private val bgScope = MyApp.prefetchScope
+    private val bgExceptionHandler = kotlinx.coroutines.CoroutineExceptionHandler { _, e ->
+        android.util.Log.e("AudioPlayer", "Coroutine error (caught): ${e.message}", e)
+    }
+    private val bgScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.Dispatchers.Main + kotlinx.coroutines.SupervisorJob() + bgExceptionHandler
+    )
     private var wakeLock: PowerManager.WakeLock? = null
 
     private var currentVideoId: String = ""
@@ -792,9 +797,12 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     private fun refreshMediaMetadata() {
         if (currentVideoId.startsWith("local:")) return
-        val mc = mediaController ?: return
-        val item = mc.currentMediaItem ?: return
-        val url = item.localConfiguration?.uri?.toString() ?: return
+        runOnUiThread {
+            try {
+                val mc = mediaController ?: return@runOnUiThread
+                val item = mc.currentMediaItem ?: return@runOnUiThread
+                val url = item.localConfiguration?.uri?.toString() ?: return@runOnUiThread
+
 
         val artist = currentArtist.ifBlank { currentChannel }
         val metadata = MediaMetadata.Builder()
@@ -820,8 +828,11 @@ class AudioPlayerActivity : AppCompatActivity() {
             mc.prepare()
             if (wasPlaying) mc.play()
         }
+            } catch (e: Exception) {
+                diag("refreshMetadata err: ${e.message}")
+            }
+        }
     }
-
     private fun trySkipToNextInQueue(failedVideoId: String) {
         try {
             // ★ local 실패 시 YouTube 검색 금지 (playNextLocal로)
@@ -2660,14 +2671,28 @@ class AudioPlayerActivity : AppCompatActivity() {
             while (isActive) {
                 val mc = mediaController
                 if (mc != null && !isDragging) {
-                    // ★ MediaController는 반드시 메인 스레드에서 호출해야 함 (백그라운드 크래시 방지)
-                    val pos = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { mc.currentPosition }
-                    val dur = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { mc.duration }
-                    // ★★★ 현재 재생 곡 확인 (mediaController vs currentVideoId 동기화)
-                    val mcId = mc.currentMediaItem?.mediaId
-                    if (mcId != null && mcId.isNotBlank() && mcId != currentVideoId
-                        && !mcId.endsWith("_video")) {
-                        // UI와 실제 재생 곡 불일치 → 즉시 갱신
+                    // ★ 모든 MediaController 접근을 메인 스레드로 통합
+                    val (pos, dur, mcId, isPlaying) = kotlinx.coroutines.withContext(
+                        kotlinx.coroutines.Dispatchers.Main
+                    ) {
+                        try {
+                            val p = mc.currentPosition
+                            val d = mc.duration
+                            val id = mc.currentMediaItem?.mediaId ?: ""
+                            val ip = mc.isPlaying
+                            listOf<Any>(p, d, id, ip)
+                        } catch (_: Exception) {
+                            listOf<Any>(0L, 0L, "", false)
+                        }
+                    }.let {
+                        Quad(
+                            it[0] as Long, it[1] as Long,
+                            it[2] as String, it[3] as Boolean
+                        )
+                    }
+
+                    // UI 동기화 (백그라운드에서 값만 갱신, UI는 runOnUiThread)
+                    if (mcId.isNotBlank() && mcId != currentVideoId && !mcId.endsWith("_video")) {
                         runOnUiThread {
                             try {
                                 currentVideoId = mcId
@@ -2693,15 +2718,18 @@ class AudioPlayerActivity : AppCompatActivity() {
                         tvDur.text = if (dur > 0) fmt(dur) else "0:00"
                         if (dur > 0) seekBar.progress = (pos * 1000 / dur).toInt()
                         btnPlay.setImageResource(
-                            if (mc.isPlaying) android.R.drawable.ic_media_pause
+                            if (isPlaying) android.R.drawable.ic_media_pause
                             else android.R.drawable.ic_media_play
                         )
                     }
                 }
-                delay(300)  // ★ 500ms → 300ms
+                delay(300)
             }
         }
     }
+
+    // ★ Quad 데이터 클래스 (내부 임시용)
+    private data class Quad(val a: Long, val b: Long, val c: String, val d: Boolean)
 
     private fun startAnimation() {
         if (pulseAnimator != null) return
