@@ -384,6 +384,7 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun loadSubscriptions() {
+        if (!::subAdapter.isInitialized) return
         lifecycleScope.launch {
             val section = findViewById<View>(R.id.sectionSubscriptions)
             try {
@@ -423,6 +424,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadDownloads() {
+        if (!::downloadsAdapter.isInitialized) return
         lifecycleScope.launch {
             val section = findViewById<View>(R.id.sectionDownloads)
             try {
@@ -559,6 +561,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadBookmarks() {
+        if (!::bookmarkAdapter.isInitialized) return
         lifecycleScope.launch {
             val section = findViewById<View>(R.id.sectionBookmarks)
             try {
@@ -581,6 +584,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadHistory() {
         lifecycleScope.launch {
             HistoryDatabase.get(applicationContext).historyDao().getAll().collect { list ->
+                if (!::historyAdapter.isInitialized) return@collect  // ★ 초기화 전 접근 방지
                 val section = findViewById<View>(R.id.sectionHistory)
                 val emptyState = findViewById<View>(R.id.emptyState)
 

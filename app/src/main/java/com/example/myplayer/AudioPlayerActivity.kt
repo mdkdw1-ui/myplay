@@ -2660,8 +2660,9 @@ class AudioPlayerActivity : AppCompatActivity() {
             while (isActive) {
                 val mc = mediaController
                 if (mc != null && !isDragging) {
-                    val pos = mc.currentPosition
-                    val dur = mc.duration
+                    // ★ MediaController는 반드시 메인 스레드에서 호출해야 함 (백그라운드 크래시 방지)
+                    val pos = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { mc.currentPosition }
+                    val dur = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { mc.duration }
                     // ★★★ 현재 재생 곡 확인 (mediaController vs currentVideoId 동기화)
                     val mcId = mc.currentMediaItem?.mediaId
                     if (mcId != null && mcId.isNotBlank() && mcId != currentVideoId

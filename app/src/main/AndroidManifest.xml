@@ -92,13 +92,7 @@
                 <action android:name="ACTION_STOP" />
             </intent-filter>
         </receiver>
-        <receiver
-            android:name="androidx.media.session.MediaButtonReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_BUTTON" />
-            </intent-filter>
-        </receiver>
+
 
         <!-- ★ APK 설치용 FileProvider -->
         <provider
