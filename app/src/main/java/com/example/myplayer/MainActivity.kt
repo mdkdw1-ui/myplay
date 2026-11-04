@@ -321,6 +321,9 @@ class MainActivity : AppCompatActivity() {
 
         // ★ #13: 이전 세션 복원 (마지막 오디오 재생)
         tryRestoreLastAudioSession()
+
+        // ★ 봇 감지 상태 확인 (앱 시작 시)
+        checkBotDetectionStatus()
     }
 
     // ★ #13: 이전 오디오 세션 복원 다이얼로그
@@ -353,6 +356,43 @@ class MainActivity : AppCompatActivity() {
                 .setNegativeButton("닫기", null)
                 .show()
         } catch (_: Exception) {}
+    }
+
+
+    private fun checkBotDetectionStatus() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val prefs = getSharedPreferences("server_auth", MODE_PRIVATE)
+                val token = prefs.getString("jwt", "") ?: ""
+                if (token.isBlank()) return@launch
+
+                val url = java.net.URL("http://193.123.167.118:5000/health_check")
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                conn.connectTimeout = 5000
+                conn.readTimeout = 15000
+                conn.doInput = true
+
+                if (conn.responseCode in 200..299) {
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
+                    val json = org.json.JSONObject(body)
+                    if (json.optBoolean("bot_detected", false)) {
+                        withContext(Dispatchers.Main) {
+                            android.app.AlertDialog.Builder(this@MainActivity)
+                                .setTitle("⚠️ YouTube 봇 감지됨")
+                                .setMessage("현재 서버 IP가 YouTube에 의해 일시적으로 차단되었습니다.\n\n" +
+                                            "잠시 후 다시 시도하거나, 서버의 WARP IP를 재시작해주세요.\n\n" +
+                                            "(재생은 백그라운드에서 계속 시도됩니다)")
+                                .setPositiveButton("확인", null)
+                                .show()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("BotCheck", "err: ${e.message}")
+            }
+        }
     }
 
     private fun formatTimeForRestore(ms: Long): String {
