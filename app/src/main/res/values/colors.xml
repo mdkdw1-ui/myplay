@@ -1,16 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg_dark">#0A0A0B</color>
-    <color name="bg_surface">#141416</color>
-    <color name="bg_elevated">#1C1C1F</color>
-    <color name="accent">#FF2D55</color>
-    <color name="accent_dark">#E01E45</color>
-    <color name="accent_glow">#33FF2D55</color>
-    <color name="text_primary">#F5F5F7</color>
-    <color name="text_secondary">#8E8E93</color>
-    <color name="text_tertiary">#5A5A5F</color>
-    <color name="divider">#26262A</color>
+    <!-- 배경: 눈이 편안한 다크 톤 -->
+    <color name="bg_dark">#0F0F12</color>
+    <color name="bg_surface">#1A1A20</color>
+    <color name="bg_elevated">#26262E</color>
+    
+    <!-- 포인트 컬러: 블루가 섞인 파스텔 핑크 & 라벤더 -->
+    <color name="accent">#FFA6C1</color>          <!-- 파스텔 블루핑크 -->
+    <color name="accent_dark">#C9A7EB</color>     <!-- 연한 라벤더 -->
+    <color name="accent_glow">#33FFA6C1</color>
+    <color name="accent_pink">#FFC0CB</color>
+    
+    <!-- 텍스트: 선명한 화이트 & 실버 -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#A0A0B0</color>
+    <color name="text_tertiary">#6A6A7A</color>
+    
+    <color name="divider">#2A2A35</color>
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
-    <color name="spinner">#E5E5E7</color>
+    <color name="spinner">#FFA6C1</color>
 </resources>
