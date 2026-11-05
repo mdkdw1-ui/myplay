@@ -16,7 +16,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_dark"
+    android:background="@drawable/bg_premium_dark"
     android:fillViewport="true">
 
     <LinearLayout
@@ -32,72 +32,74 @@
             android:orientation="horizontal"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
             android:gravity="center_vertical">
 
             <!-- 기존 앱 로고 -->
             <ImageView
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
                 android:layout_marginEnd="8dp"
                 android:src="@drawable/logo_main"
                 android:scaleType="centerCrop" />
 
-            <!-- ★ MyPlayer 로고 (왼쪽으로 당기기 위해 fitStart 유지) -->
-            <ImageView
-                android:layout_width="260dp"
-                android:layout_height="75dp"
-                android:src="@drawable/myplayer_logo"
-                android:scaleType="fitStart" />
+            <!-- ★ MyPlayer 텍스트 로고 (그라디에이션) -->
+            <TextView
+                android:id="@+id/tvMyPlayerTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="MyPlayer"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="-0.02"
+                android:textColor="#FFFFFF" />
 
-            <!-- ★ 우측 아이콘들을 오른쪽 끝으로 밀어내는 빈 공간 -->
+            <!-- 우측 정렬용 빈 공간 -->
             <View
                 android:layout_width="0dp"
                 android:layout_height="0dp"
                 android:layout_weight="1" />
 
-            <!-- ★ 우측 아이콘 그룹 (총 4개) -->
-            <!-- 1. 서버 상태 표시등 -->
+            <!-- ★ 우측 아이콘 4개 -->
             <TextView
                 android:id="@+id/tvServerStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🟢"
-                android:textSize="12sp"
+                android:text="⚪"
+                android:textSize="10sp"
                 android:padding="4dp"
-                android:layout_marginEnd="2dp"
-                android:contentDescription="서버 상태" />
+                android:layout_marginEnd="2dp" />
 
-            <!-- 2. 테마 변경 -->
             <TextView
                 android:id="@+id/btnTheme"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="🎨"
-                android:textSize="20sp"
+                android:textSize="18sp"
                 android:padding="6dp"
                 android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true" />
 
-            <!-- 3. 통계 -->
             <TextView
                 android:id="@+id/btnStats"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="📊"
-                android:textSize="20sp"
+                android:textSize="18sp"
                 android:padding="6dp"
                 android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true" />
 
-            <!-- 4. 설정 -->
             <TextView
                 android:id="@+id/btnSettings"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="⚙"
-                android:textSize="20sp"
+                android:textSize="18sp"
                 android:padding="6dp"
                 android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
@@ -109,10 +111,11 @@
             android:layout_height="52dp"
             android:layout_marginStart="20dp"
             android:layout_marginEnd="20dp"
-            android:layout_marginTop="18dp"
+            android:layout_marginTop="16dp"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:background="@drawable/bg_search_input">
+            android:background="@drawable/bg_search_inset"
+            android:elevation="4dp">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -127,8 +130,8 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:hint="동영상 검색"
-                android:textColorHint="@color/text_tertiary"
-                android:textColor="@color/text_primary"
+                android:textColorHint="#8E8E93"
+                android:textColor="#F5F5F7"
                 android:textSize="15sp"
                 android:paddingStart="10dp"
                 android:paddingEnd="18dp"
@@ -172,6 +175,8 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnPlaylist"
             style="@style/GhostButton"
+            android:background="@drawable/bg_menu_neumorph"
+            android:elevation="2dp"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_marginStart="20dp"
@@ -182,6 +187,8 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnMyPlaylists"
             style="@style/GhostButton"
+            android:background="@drawable/bg_menu_neumorph"
+            android:elevation="2dp"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_marginStart="20dp"
@@ -192,6 +199,8 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnLocalMedia"
             style="@style/GhostButton"
+            android:background="@drawable/bg_menu_neumorph"
+            android:elevation="2dp"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_marginStart="20dp"
@@ -202,6 +211,8 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnAudioHome"
             style="@style/GhostButton"
+            android:background="@drawable/bg_menu_neumorph"
+            android:elevation="2dp"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_marginStart="20dp"
@@ -212,6 +223,8 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSmartPlaylist"
             style="@style/GhostButton"
+            android:background="@drawable/bg_menu_neumorph"
+            android:elevation="2dp"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_marginStart="20dp"
