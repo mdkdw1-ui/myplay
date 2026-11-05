@@ -3,19 +3,14 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_dark">
+    android:background="@drawable/bg_main_gradient">
 
     <ImageView
         android:id="@+id/ivBackground"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:scaleType="centerCrop"
-        android:alpha="0.25" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#CC0A0A0B" />
+        android:alpha="0.15" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -24,39 +19,42 @@
         android:paddingStart="24dp"
         android:paddingEnd="24dp"
         android:paddingTop="24dp"
-        android:paddingBottom="96dp"
-        android:gravity="center">
+        android:paddingBottom="80dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
             android:text="🎵 오디오 모드"
             android:textSize="13sp"
-            android:textColor="@color/text_secondary" />
+            android:textColor="#B0A8C0" />
 
+        <!-- 앨범 아트 (그림자 효과) -->
         <androidx.cardview.widget.CardView
             android:layout_width="260dp"
             android:layout_height="260dp"
-            android:layout_marginTop="24dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="20dp"
             app:cardCornerRadius="24dp"
-            app:cardElevation="20dp">
+            app:cardElevation="12dp"
+            app:cardBackgroundColor="#00000000">
 
             <ImageView
                 android:id="@+id/ivArt"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:scaleType="centerCrop"
-                android:background="@color/bg_elevated" />
+                android:background="#1A1A1A" />
         </androidx.cardview.widget.CardView>
 
         <TextView
             android:id="@+id/tvTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:textSize="17sp"
+            android:layout_marginTop="24dp"
+            android:textSize="18sp"
             android:textStyle="bold"
-            android:textColor="@color/text_primary"
+            android:textColor="#F5F5F7"
             android:gravity="center"
             android:maxLines="2"
             android:ellipsize="end" />
@@ -65,125 +63,32 @@
             android:id="@+id/tvChannel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="6dp"
             android:textSize="13sp"
-            android:textColor="@color/text_secondary"
+            android:textColor="#8E8E93"
             android:gravity="center"
             android:maxLines="1"
             android:ellipsize="end" />
 
+        <!-- 재생 바 -->
         <SeekBar
             android:id="@+id/seekBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
             android:max="1000"
-            android:progressTint="@color/accent"
-            android:thumbTint="@color/accent" />
+            android:progressTint="#FFB6C1"
+            android:thumbTint="#FFB6C1" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/tvPos"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="0:00"
-                android:textSize="11sp"
-                android:textColor="@color/text_tertiary"
-                android:fontFamily="monospace" />
-
-            <TextView
-                android:id="@+id/tvDur"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="0:00"
-                android:textSize="11sp"
-                android:textColor="@color/text_tertiary"
-                android:fontFamily="monospace" />
+            <TextView android:id="@+id/tvPos" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="0:00" android:textSize="12sp" android:textColor="#6A6075" />
+            <TextView android:id="@+id/tvDur" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0:00" android:textSize="12sp" android:textColor="#6A6075" />
         </LinearLayout>
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:baselineAligned="false">
-
-            <ImageButton
-                android:id="@+id/btnPrev"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_media_previous"
-                android:tint="@color/text_primary" />
-
-            <ImageButton
-                android:id="@+id/btnRewind"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_media_rew"
-                android:tint="@color/text_primary" />
-
-            <ImageButton
-                android:id="@+id/btnPlay"
-                android:layout_width="68dp"
-                android:layout_height="68dp"
-                android:layout_marginStart="10dp"
-                android:layout_marginEnd="10dp"
-                android:background="@drawable/bg_play_button"
-                android:src="@android:drawable/ic_media_play"
-                android:tint="@color/white" />
-
-            <ImageButton
-                android:id="@+id/btnForward"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_media_ff"
-                android:tint="@color/text_primary" />
-
-            <ImageButton
-                android:id="@+id/btnNext"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_media_next"
-                android:tint="@color/text_primary" />
-        </LinearLayout>
-
-        <!-- ★ 다음 곡 미리보기 -->
-        <LinearLayout
-            android:visibility="gone"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="다음 곡"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:textColor="@color/text_secondary"
-                android:paddingStart="4dp"
-                android:paddingBottom="8dp" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvNextSongs"
-                android:layout_width="match_parent"
-                android:layout_height="90dp"
-                android:orientation="horizontal"
-                android:clipToPadding="false"
-                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
-        </LinearLayout>
-
+        <!-- 파스텔 입체 버튼 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -192,120 +97,50 @@
             android:gravity="center"
             android:baselineAligned="false">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnRepeat"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="🔁"
-                android:textColor="@color/text_secondary"
-                android:textSize="16sp"
-                android:minWidth="0dp" />
+            <ImageButton android:id="@+id/btnPrev" android:layout_width="56dp" android:layout_height="56dp" android:background="?android:attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_pastel_prev_new" android:padding="8dp"/>
+            <ImageButton android:id="@+id/btnRewind" android:layout_width="56dp" android:layout_height="56dp" android:layout_marginStart="8dp" android:background="?android:attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_pastel_rew_new" android:padding="8dp"/>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnLiveSub"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="🎙"
-                android:textColor="@color/text_secondary"
-                android:textSize="16sp"
-                android:minWidth="0dp" />
+            <ImageButton android:id="@+id/btnPlay" android:layout_width="88dp" android:layout_height="88dp" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:background="?android:attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_pastel_play_new" android:scaleType="fitCenter"/>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnLyrics"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="📜"
-                android:textColor="@color/text_secondary"
-                android:textSize="16sp"
-                android:minWidth="0dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnMoreAudio"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="⋯"
-                android:textColor="@color/text_secondary"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:minWidth="0dp" />
+            <ImageButton android:id="@+id/btnForward" android:layout_width="56dp" android:layout_height="56dp" android:layout_marginEnd="8dp" android:background="?android:attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_pastel_fwd_new" android:padding="8dp"/>
+            <ImageButton android:id="@+id/btnNext" android:layout_width="56dp" android:layout_height="56dp" android:background="?android:attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_pastel_next_new" android:padding="8dp"/>
         </LinearLayout>
 
-        <!-- 기존 버튼들 (숨김, 코드 호환용) -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSpeed"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:visibility="gone" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnEq"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:visibility="gone" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnDislike"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:visibility="gone" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnVideoMode"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:visibility="gone" />
-
-        <!-- 같은 가수 토글 (숨김, 필요시 노출) -->
-        <LinearLayout
+        <!-- 다음 곡 (글자식, 작게) -->
+        <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="다음 곡"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="#B0A8C0" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvNextSongs"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             android:layout_marginTop="8dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:clipToPadding="false" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🎤 같은 가수"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
-
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/swSameArtist"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                app:thumbTint="@color/switch_thumb"
-                app:trackTint="@color/switch_track"
-                app:useMaterialThemeColors="false" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:text="🎧 로컬 전용"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
-
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/swLocalOnly"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                app:thumbTint="@color/switch_thumb"
-                app:trackTint="@color/switch_track"
-                app:useMaterialThemeColors="false" />
+        <!-- 숨겨진 뷰들 (코드 호환용) -->
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnRepeat" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnLiveSub" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnLyrics" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnMoreAudio" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnSpeed" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnEq" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnDislike" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnVideoMode" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone"/>
+        
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone">
+            <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/swSameArtist" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/swLocalOnly" android:layout_width="wrap_content" android:layout_height="wrap_content" />
         </LinearLayout>
     </LinearLayout>
 
+    <!-- 하단 핸들 -->
     <LinearLayout
         android:id="@+id/bottomHandle"
         android:layout_width="match_parent"
@@ -315,22 +150,10 @@
         android:gravity="center"
         android:paddingTop="10dp"
         android:paddingBottom="16dp"
-        android:background="#CC0A0A0B"
+        android:background="#AA000000"
         android:clickable="true"
         android:focusable="true">
-
-        <View
-            android:layout_width="48dp"
-            android:layout_height="5dp"
-            android:background="@color/divider" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="▲ 재생목록"
-            android:textSize="10sp"
-            android:textColor="@color/text_secondary" />
+        <View android:layout_width="48dp" android:layout_height="5dp" android:background="#332E3D" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="▲ 재생목록" android:textSize="10sp" android:textColor="#8E8E93" />
     </LinearLayout>
-
 </FrameLayout>
