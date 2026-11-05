@@ -892,9 +892,15 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
-        // ★ 큐 위치 동기화
+        // ★★★ [수정] 큐 강제 동기화: 현재 재생할 곡을 무조건 큐에 넣고 current로 고정 ★★★
         try {
             QueueManager.setCurrent(this, videoId)
+            val queue = QueueManager.get(this)
+            if (queue.none { it.videoId == videoId } && !videoId.startsWith("local:")) {
+                val newItem = HomeVideo(videoId, currentTitle, currentChannel, currentThumb)
+                QueueManager.add(this, newItem)
+                diag("loadAudio: 큐에 곡 강제 추가 완료 ($videoId)")
+            }
             diag("loadAudio setCurrent: $videoId")
         } catch (_: Exception) {}
 
@@ -1604,10 +1610,10 @@ class AudioPlayerActivity : AppCompatActivity() {
                 bufferingWatchJob?.cancel()
                 bufferingWatchJob = bgScope.launch {
                     try {
-                        delay(15_000)
+                        delay(30_000)
                         if (bufferingStartMs > 0 &&
                             System.currentTimeMillis() - bufferingStartMs >= 15_000) {
-                            diag("BUFFERING 15초 초과 → 다음 곡")
+                            diag("BUFFERING 30초 초과 → 다음 곡")
                             trySkipToNextInQueue(currentVideoId)
                         }
                     } catch (_: Exception) {}
