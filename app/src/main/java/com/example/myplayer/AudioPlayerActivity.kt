@@ -2954,8 +2954,9 @@ class AudioPlayerActivity : AppCompatActivity() {
         fun currentItems(): List<HomeVideo> = items.toList()
 
         override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): VH {
+            // ★ 세로형 텍스트 리스트 레이아웃 (item_next_song_text.xml 새로 생성)
             val v = android.view.LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_next_song, parent, false)
+                .inflate(R.layout.item_next_song_text, parent, false)
             return VH(v)
         }
 
