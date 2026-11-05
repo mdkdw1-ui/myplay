@@ -224,7 +224,6 @@
                 app:trackTint="@color/switch_track"
                 app:useMaterialThemeColors="false" />
         </LinearLayout>
-    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/bottomHandle"
