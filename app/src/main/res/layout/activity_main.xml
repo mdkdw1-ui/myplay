@@ -16,7 +16,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_dark"
+    android:background="@drawable/bg_pastel_dream"
     android:fillViewport="true">
 
     <LinearLayout
@@ -34,33 +34,13 @@
             android:paddingEnd="20dp"
             android:gravity="center_vertical">
 
-            <LinearLayout
+            <ImageView
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="48dp"
                 android:layout_weight="1"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="▶"
-                    android:textSize="22sp"
-                    android:textColor="@color/accent"
-                    android:background="@drawable/bg_btn_premium"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp"
-                    android:paddingTop="2dp"
-                    android:paddingBottom="2dp" />
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:text="MyPlayer"
-                    android:textSize="22sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/text_primary"
-                    android:letterSpacing="-0.04" />
-            </LinearLayout>
+                android:src="@drawable/logo_custom"
+                android:scaleType="fitStart"
+                android:layout_gravity="center_vertical" />
 
             <TextView
                 android:id="@+id/btnTheme"
@@ -556,7 +536,7 @@
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:layout_gravity="bottom"
-        android:background="@color/bg_surface"
+        android:background="#EEFFFFFF"
         app:itemIconTint="@color/text_primary"
         app:itemTextColor="@color/text_primary"
         app:labelVisibilityMode="labeled"

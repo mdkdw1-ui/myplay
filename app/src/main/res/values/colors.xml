@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 유튜브 다크 테마 배경 -->
-    <color name="bg_dark">#0F0F0F</color>
-    <color name="bg_surface">#1A1A1A</color>
-    <color name="bg_elevated">#272727</color>
+    <!-- 배경: 크림 화이트 & 연한 라벤더 -->
+    <color name="bg_dark">#FCFAFF</color>
+    <color name="bg_surface">#F5F0FA</color>
+    <color name="bg_elevated">#FFFFFF</color>
     
-    <!-- 유튜브 레드 포인트 컬러 -->
-    <color name="accent">#FF0000</color>
-    <color name="accent_dark">#CC0000</color>
-    <color name="accent_glow">#33FF0000</color>
-    <color name="accent_pink">#FF2D55</color>
+    <!-- 포인트 컬러: 파스텔 핑크 & 라벤더 -->
+    <color name="accent">#FF9A9E</color>
+    <color name="accent_dark">#FECFEF</color>
+    <color name="accent_glow">#33FF9A9E</color>
+    <color name="accent_pink">#E0BBE4</color>
     
-    <!-- 텍스트 -->
-    <color name="text_primary">#FFFFFF</color>
-    <color name="text_secondary">#AAAAAA</color>
-    <color name="text_tertiary">#717171</color>
+    <!-- 텍스트: 부드러운 다크 그레이/퍼플 -->
+    <color name="text_primary">#4A4A5A</color>
+    <color name="text_secondary">#8E8E9E</color>
+    <color name="text_tertiary">#B0B0C0</color>
     
-    <color name="divider">#303030</color>
+    <color name="divider">#EAE5F2</color>
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
-    <color name="spinner">#FFFFFF</color>
+    <color name="spinner">#FF9A9E</color>
 </resources>
