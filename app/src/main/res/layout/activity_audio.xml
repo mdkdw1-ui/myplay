@@ -162,6 +162,31 @@
                 android:padding="8dp"/>
         </LinearLayout>
 
+        <!-- ★ 다음 곡 미리보기 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="다음 곡"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_secondary"
+                android:paddingStart="4dp"
+                android:paddingBottom="8dp" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvNextSongs"
+                android:layout_width="match_parent"
+                android:layout_height="90dp"
+                android:orientation="horizontal"
+                android:clipToPadding="false" />
+        </LinearLayout>
+
         <!-- 하단 보조 버튼들 -->
         <LinearLayout
             android:layout_width="match_parent"
