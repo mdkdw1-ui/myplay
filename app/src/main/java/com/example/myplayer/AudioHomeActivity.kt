@@ -217,7 +217,9 @@ class AudioHomeActivity : AppCompatActivity() {
         val startChannel = firstVideo?.channel ?: pl.videos[0].channel
         val startThumb = firstVideo?.thumbnail ?: pl.videos[0].thumbnail
 
-        val startIdx = pl.videos.indexOfFirst { it.videoId == startId }.coerceAtLeast(0)
+        PlaybackWarmup.warm(startId)
+        val startIdx = pl.videos.indexOfFirst { it.videoId == startId }
+            .coerceAtLeast(0)
 
         QueueManager.clear(this)
         for (i in (startIdx + 1) until pl.videos.size) {

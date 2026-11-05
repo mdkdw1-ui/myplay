@@ -55,6 +55,7 @@ object PlayModeChooser {
     }
 
     private fun openAudio(ctx: Context, video: VideoItem) {
+        PlaybackWarmup.warm(video.videoId)
         try {
             QueueManager.clear(ctx)
             ctx.startActivity(Intent(ctx, AudioPlayerActivity::class.java).apply {
