@@ -116,6 +116,7 @@ object YouTubeStream {
             conn.readTimeout = 90000
             conn.requestMethod = "HEAD"
             conn.setRequestProperty("Authorization", "Bearer $token")
+            // ★★★ [수정] Range Request 지원 확인 (앞부분 1바이트만) ★★★
             conn.setRequestProperty("Range", "bytes=0-0")
             val code = conn.responseCode
             if (code !in listOf(200, 206, 202)) {   // ★ 202 = background 시작
@@ -139,6 +140,7 @@ object YouTubeStream {
             conn.readTimeout = 90000
             conn.requestMethod = "HEAD"
             conn.setRequestProperty("Authorization", "Bearer $token")
+            // ★★★ [수정] Range Request 지원 확인 (앞부분 1바이트만) ★★★
             conn.setRequestProperty("Range", "bytes=0-0")
             val code = conn.responseCode
             if (code !in listOf(200, 206, 202)) {   // ★ 202 = background 다운로드 시작됨 (성공)
