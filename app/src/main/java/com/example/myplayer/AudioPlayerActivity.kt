@@ -847,6 +847,10 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
     private fun trySkipToNextInQueue(failedVideoId: String) {
+        if (isDestroyed || isFinishing) {
+            diag("trySkip destroyed - skip")
+            return
+        }
         try {
             // ★ local 실패 시 YouTube 검색 금지 (playNextLocal로)
             if (failedVideoId.startsWith("local:") || isLocalMode) {
@@ -1494,10 +1498,8 @@ class AudioPlayerActivity : AppCompatActivity() {
 
                 when (playbackState) {
                     Player.STATE_BUFFERING -> {
-                        if (bufferingStartMs == 0L) {
-                            bufferingStartMs = System.currentTimeMillis()
-                            startBufferingWatch()
-                        }
+                        bufferingStartMs = System.currentTimeMillis()
+            startBufferingWatch()
                     }
                     Player.STATE_READY -> {
                         bufferingStartMs = 0L
@@ -1629,7 +1631,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                     try {
                         delay(30_000)
                         if (bufferingStartMs > 0 &&
-                            System.currentTimeMillis() - bufferingStartMs >= 15_000) {
+                            System.currentTimeMillis() - bufferingStartMs >= 30_000) {
                             diag("BUFFERING 30초 초과 → 다음 곡")
                             trySkipToNextInQueue(currentVideoId)
                         }
@@ -2926,7 +2928,14 @@ class AudioPlayerActivity : AppCompatActivity() {
             val rv = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvNextSongs) ?: return
             val adapter = rv.adapter as? NextSongsAdapter ?: return
             val queue = QueueManager.get(this)
-            val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+            
+            val currentId = QueueManager.getCurrent(this) ?: currentVideoId
+
+            var curIdx = queue.indexOfFirst { it.videoId == currentId }
+
+            if (curIdx < 0) curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+
+            if (curIdx < 0 && queue.isNotEmpty()) curIdx = 0
             val result = mutableListOf<HomeVideo>()
             // ★ 오직 QueueManager만 참조 (뒤죽박죽 방지)
             if (curIdx >= 0 && curIdx < queue.size - 1) {
