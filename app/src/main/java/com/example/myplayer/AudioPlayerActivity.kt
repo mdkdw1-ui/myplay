@@ -299,6 +299,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                     QueueManager.save(this, newList)
                 }
                 
+                // ★★★ [수정] save 이후에 setCurrent 호출 (덮어쓰기 방지) ★★★
                 QueueManager.setCurrent(this, currentVideoId)
                 
                 diag("onCreate: fresh selection → 큐 맨 앞에 추가 $currentVideoId")
