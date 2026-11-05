@@ -1609,6 +1609,15 @@ class AudioPlayerActivity : AppCompatActivity() {
                     diag("STATE_ENDED: Activity가 다음 곡 처리")
                     bgScope.launch {
                         delay(300)
+
+                        // STATE_ENDED 중복 처리 방지:
+                        // ExoPlayer 자동 전환으로 이미 다음 곡이 됐다면 추가 로드 금지
+                        val endedNowId = mediaController?.currentMediaItem?.mediaId
+                        if (endedNowId != null && endedNowId != currentVideoId) {
+                            diag("STATE_ENDED already handled by transition - skip")
+                            return@launch
+                        }
+
                         // prefetch 캐시에 있으면 즉시 재생, 없으면 playNextLocal/playNextRelated
                         try {
                             val queue = QueueManager.get(this@AudioPlayerActivity)
