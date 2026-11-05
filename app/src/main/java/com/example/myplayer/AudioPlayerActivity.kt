@@ -892,32 +892,30 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
-        // ★★★ [수정] 큐 강제 동기화: 현재 재생할 곡을 무조건 큐에 넣고 current로 고정 ★★★
+        // ★★★ [최종 수정] 3곳 동시 동기화 (변수, QueueManager, prefs) ★★★
         try {
+            // 1. 내부 변수 업데이트
+            currentVideoId = videoId
+            
+            // 2. QueueManager 업데이트 (한 번에 처리)
             QueueManager.setCurrent(this, videoId)
+            
+            // 3. 큐에 없으면 맨 뒤에 추가
             val queue = QueueManager.get(this)
             if (queue.none { it.videoId == videoId } && !videoId.startsWith("local:")) {
-                val newItem = HomeVideo(videoId, currentTitle, currentChannel, currentThumb)
-                QueueManager.add(this, newItem)
-                diag("loadAudio: 큐에 곡 강제 추가 완료 ($videoId)")
+                val title = currentTitle.ifBlank { videoId }
+                val channel = currentChannel.ifBlank { "YouTube" }
+                QueueManager.add(this, HomeVideo(videoId, title, channel, currentThumb))
+                diag("loadAudio: 큐 맨 뒤에 곡 추가 ($videoId)")
             }
-            diag("loadAudio setCurrent: $videoId")
-        } catch (_: Exception) {}
-
-        // ★★★ 현재 곡이 큐에 없으면 추가 (title fallback)
-        try {
-            if (!videoId.startsWith("local:")) {
-                val queue = QueueManager.get(this)
-                val exists = queue.any { it.videoId == videoId }
-                if (!exists) {
-                    val title = currentTitle.ifBlank { videoId }
-                    val channel = currentChannel.ifBlank { "YouTube" }
-                    QueueManager.add(this,
-                        HomeVideo(videoId, title, channel, currentThumb))
-                    diag("loadAudio: 현재 곡을 큐에 추가 $videoId (title=$title)")
-                }
-            }
-        } catch (_: Exception) {}
+            
+            // 4. prefs 업데이트 (transition 시 꼬임 방지)
+            pref?.edit()?.putString("current_video_id", videoId)?.apply()
+            
+            diag("loadAudio 동기화 완료: $videoId")
+        } catch (e: Exception) {
+            diag("loadAudio 동기화 에러: ${e.message}")
+        }
 
         // ★★★ prefetch 캐시 히트 시 즉시 재생 (extract 스킵) ★★★
         val cached = prefetchedStreams.remove(videoId)
