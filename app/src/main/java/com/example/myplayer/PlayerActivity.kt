@@ -2919,6 +2919,17 @@ class PlayerActivity : AppCompatActivity() {
 
     /** 하단 고정 컨트롤바 (이전/5초뒤/재생/5초앞/다음) */
     private fun setupBottomControls() {
+        // ★ 커스텀 파스텔 아이콘 적용
+        try {
+            findViewById<android.widget.ImageButton>(R.id.btnPrevTrack)?.setImageResource(R.drawable.ic_pastel_prev)
+            findViewById<android.widget.ImageButton>(R.id.btnBack5)?.setImageResource(R.drawable.ic_pastel_rew)
+            findViewById<android.widget.ImageButton>(R.id.btnPlayPause)?.setImageResource(R.drawable.ic_pastel_play)
+            findViewById<android.widget.ImageButton>(R.id.btnFwd5)?.setImageResource(R.drawable.ic_pastel_fwd)
+            findViewById<android.widget.ImageButton>(R.id.btnNextTrack)?.setImageResource(R.drawable.ic_pastel_next)
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerActivity", "icon apply err: ${e.message}")
+        }
+        
         val btnPrev = findViewById<android.widget.ImageButton>(R.id.btnPrevTrack)
         val btnBack5 = findViewById<android.widget.ImageButton>(R.id.btnBack5)
         val btnPlayPause = findViewById<android.widget.ImageButton>(R.id.btnPlayPause)

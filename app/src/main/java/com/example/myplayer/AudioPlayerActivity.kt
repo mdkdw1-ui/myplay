@@ -2538,6 +2538,21 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     private fun attachListeners() {
         val mc = mediaController ?: return
+        
+        // ★ 커스텀 파스텔 아이콘 적용 (XML 구조 변경 없이 코드로 안전하게)
+        try {
+            findViewById<android.widget.ImageButton>(R.id.btnPrev)?.setImageResource(R.drawable.ic_pastel_prev)
+            findViewById<android.widget.ImageButton>(R.id.btnRewind)?.setImageResource(R.drawable.ic_pastel_rew)
+            findViewById<android.widget.ImageButton>(R.id.btnPlay)?.setImageResource(R.drawable.ic_pastel_play)
+            findViewById<android.widget.ImageButton>(R.id.btnForward)?.setImageResource(R.drawable.ic_pastel_fwd)
+            findViewById<android.widget.ImageButton>(R.id.btnNext)?.setImageResource(R.drawable.ic_pastel_next)
+            
+            // 버튼 배경을 투명하게 (파스텔 아이콘 자체가 배경을 가짐)
+            findViewById<android.widget.ImageButton>(R.id.btnPlay)?.setBackgroundColor(0)
+        } catch (e: Exception) {
+            android.util.Log.e("AudioPlayer", "icon apply err: ${e.message}")
+        }
+
 
         btnPlay.setOnClickListener { if (mc.isPlaying) mc.pause() else mc.play() }
         findViewById<ImageButton>(R.id.btnRewind).setOnClickListener {
