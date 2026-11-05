@@ -1385,12 +1385,15 @@ class AudioPlayerActivity : AppCompatActivity() {
                     }
                     // ★ startPos가 음수거나 duration 밖이면 0으로 강제
                     val safeStart = if (startPos < 0) 0L else startPos
+                    // ★★★ 스트림 로딩 속도 개선: setMediaItems 직후 즉시 prepare 및 play ★★★
                     mc2.setMediaItems(listOf(mediaItem), 0, safeStart)
+                    mc2.prepare()
+                    mc2.playWhenReady = true
+                    mc2.play() // prepare와 동시에 재생 명령
                     if (safeStart > 0) {
                         diag("loadAudio: 시작 위치 ${safeStart / 1000}초")
                         pendingStartPos = 0L
                     }
-                    mc2.prepare()
                 } catch (e: Exception) {
                     diag("loadAudio setMediaItems err: ${e.message}")
                 }
