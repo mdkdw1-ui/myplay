@@ -563,6 +563,12 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     /** 라디오 5곡 병렬 서버 prefetch (HEAD → 백그라운드 다운로드 트리거) */
     private fun prefetchRadio5(videoIds: List<String>) {
+        // ★★★ [수정] 재생 준비 안 됐으면 프리페치 skip (자원 경쟁 방지) ★★★
+        val mc = mediaController
+        if (mc == null || mc.playbackState != Player.STATE_READY) {
+            diag("prefetchRadio5 skip: player state=${mc?.playbackState}")
+            return
+        }
         if (videoIds.isEmpty()) return
         bgScope.launch(Dispatchers.IO) {
             val token = try {
