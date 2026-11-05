@@ -44,8 +44,8 @@
 
             <!-- ★★★ MyPlayer 로고 크기 대폭 확대 (250dp) ★★★ -->
             <ImageView
-                android:layout_width="250dp"
-                android:layout_height="70dp"
+                android:layout_width="300dp"
+                android:layout_height="85dp"
                 android:src="@drawable/myplayer_logo"
                 android:scaleType="fitStart" />
 
