@@ -178,6 +178,20 @@ class AudioPlayerActivity : AppCompatActivity() {
         btnRepeat = findViewById(R.id.btnRepeat)
         btnLiveSub = findViewById(R.id.btnLiveSub)
 
+        // ===== Premium UI FX =====
+        try {
+            UiFx.artGlow(ivArt)
+            UiFx.playButton(btnPlay)
+            UiFx.pressScale(btnPlay)
+            UiFx.concaveTrack(seekBar)
+            findViewById<android.view.View>(R.id.rvNextSongs)?.let { UiFx.softConvex(it) }
+            UiFx.pressScale(btnSpeed)
+            UiFx.pressScale(btnRepeat)
+            UiFx.pressScale(btnLiveSub)
+        } catch (e: Exception) {
+            android.util.Log.e("UiFx", "apply failed: ${e.message}")
+        }
+
         // ★ 다음 곡 미리보기 리스트 초기화 (onCreate)
         try {
             val nextRv = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvNextSongs)
