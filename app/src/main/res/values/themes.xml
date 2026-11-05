@@ -6,6 +6,7 @@
         <item name="colorSecondary">@color/accent_pink</item>
         <item name="colorAccent">@color/spinner</item>
         <item name="android:colorBackground">@color/bg_dark</item>
+        <item name="android:windowBackground">@color/bg_dark</item>
         <item name="colorSurface">@color/bg_surface</item>
         <item name="colorOnSurface">@color/text_primary</item>
         <item name="android:statusBarColor">@color/bg_dark</item>

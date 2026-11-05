@@ -2434,7 +2434,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         val serviceStopped = pref?.getBoolean("service_stopped", false) ?: false
         if (serviceStopped) {
             diag("onStop: service_stopped=true → pause (명시적 종료)")
-            try { mediaController?.pause() } catch (_: Exception) {}
+            try { if (mediaController?.isPlaying == true) mediaController?.pause() } catch (_: Exception) {}
             return
         }
 
@@ -2804,6 +2804,13 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     /** ★ 이어듣기 다이얼로그 */
     private fun checkResumeAndPlayAudio(videoId: String) {
+        // ★ 로컬 파일(local:)이나 로컬 모드일 때는 이어듣기 다이얼로그 스킵 (크래시 방지)
+        if (videoId.startsWith("local:") || isLocalMode) {
+            diag("checkResume: 로컬 파일 → 이어듣기 스킵")
+            loadAudio(videoId, isInitial = true)
+            return
+        }
+
         if (mediaController?.currentMediaItem?.mediaId == videoId &&
             (mediaController?.isPlaying == true || mediaController?.playWhenReady == true)) {
             diag("checkResume: 이미 재생 중 → 스킵")
