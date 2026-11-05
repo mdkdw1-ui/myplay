@@ -2538,6 +2538,22 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     private fun attachListeners() {
         val mc = mediaController ?: return
+        
+        // ★ 플레이 버튼 파스텔 톤 적용 (코드로 안전하게)
+        try {
+            val playBtn = findViewById<android.widget.ImageButton>(R.id.btnPlay)
+            playBtn?.setBackgroundResource(R.drawable.bg_play_pastel_circle)
+            playBtn?.setColorFilter(0xFFFFFFFF.toInt()) // 흰색 아이콘
+            
+            // 이전/다음 버튼 파스텔 톤
+            findViewById<android.widget.ImageButton>(R.id.btnPrev)?.setColorFilter(0xFFFFB6C1.toInt()) // 파스텔 핑크
+            findViewById<android.widget.ImageButton>(R.id.btnNext)?.setColorFilter(0xFFFFB6C1.toInt())
+            findViewById<android.widget.ImageButton>(R.id.btnRewind)?.setColorFilter(0xFFDDA0DD.toInt()) // 라벤더
+            findViewById<android.widget.ImageButton>(R.id.btnForward)?.setColorFilter(0xFFDDA0DD.toInt())
+        } catch (e: Exception) {
+            android.util.Log.e("AudioPlayer", "button color err: ${e.message}")
+        }
+
 
         btnPlay.setOnClickListener { if (mc.isPlaying) mc.pause() else mc.play() }
         findViewById<ImageButton>(R.id.btnRewind).setOnClickListener {
