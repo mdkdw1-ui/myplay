@@ -1355,25 +1355,7 @@ class PlayerActivity : AppCompatActivity() {
         resetZoom()
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
-            // ★ 0순위: 폰에서 NewPipe POT(WARP)로 비디오 추출
-            try {
-                val local = YouTubeStream.extractVideoLocal(videoId)
-                if (local.hasAny) {
-                    vdiag("NewPipe Video POT 성공")
-                    if (local.muxedUrl != null) {
-                        applyStreamWithSubtitle(local.muxedUrl, null, null, startPosMs)
-                    } else if (local.videoUrl != null && local.audioUrl != null) {
-                        PlaybackService.playMergedVideoAudio(
-                            videoUrl = local.videoUrl, audioUrl = local.audioUrl,
-                            title = title, channel = channel, videoId = videoId
-                        )
-                    }
-                    progress.visibility = View.GONE
-                    return@launch
-                }
-            } catch (e: Throwable) {
-                vdiag("NewPipe Video POT 실패: ${e.message}")
-            }
+            // (NewPipe 비디오 POT 로직 제거됨 - 서버 병합 재생 사용)
             // ★★★ 1순위: 서버 프록시 병합 재생 (WARP 우회)
             if (playServerMerged(videoId, title, channel, thumb, startPosMs)) {
                 vdiag("서버 병합 재생 성공")
