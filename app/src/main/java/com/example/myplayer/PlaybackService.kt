@@ -102,13 +102,13 @@ class PlaybackService : MediaSessionService() {
 
         val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                2_000,      // minBufferMs: 2초
-                60_000,     // maxBufferMs: 1분
-                100,        // bufferForPlaybackMs: 100ms
-                1_000       // bufferForPlaybackAfterRebufferMs: 1초
+                2_000,      // minBufferMs: 2초 (앞부분 2초만 받아도 즉시 재생)
+                240_000,    // maxBufferMs: 4분 (나머지는 백그라운드로)
+                300,        // bufferForPlaybackMs: 300ms (즉시 재생)
+                1_500       // bufferForPlaybackAfterRebufferMs: 1.5초
             )
             .setPrioritizeTimeOverSizeThresholds(true)
-            .setTargetBufferBytes(50 * 1024 * 1024)   // 200 → 50MB
+            .setTargetBufferBytes(80 * 1024 * 1024)   // 80MB (여유있게)
             .build()
 
         // ★ content:// (로컬 파일), http:// (스트리밍) 모두 지원하는 DataSource
@@ -117,6 +117,9 @@ class PlaybackService : MediaSessionService() {
         val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
             .setUserAgent("com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12) gzip")
             .setAllowCrossProtocolRedirects(true)
+            // ★★★ [최적화] 부분 스트리밍 (Range Request) 지원 ★★★
+            .setConnectTimeoutMs(15_000)   // 연결 타임아웃 15초 (빠른 실패)
+            .setReadTimeoutMs(30_000)      // 읽기 타임아웃 30초 (데이터 대기)
 
         val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(this, httpDataSourceFactory)
 
