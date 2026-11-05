@@ -2718,8 +2718,8 @@ class AudioPlayerActivity : AppCompatActivity() {
                         tvDur.text = if (dur > 0) fmt(dur) else "0:00"
                         if (dur > 0) seekBar.progress = (pos * 1000 / dur).toInt()
                         btnPlay.setImageResource(
-                            if (isPlaying) android.R.drawable.ic_media_pause
-                            else android.R.drawable.ic_media_play
+                            if (isPlaying) R.drawable.ic_pastel_pause
+                            else R.drawable.ic_pastel_play
                         )
                     }
                 }

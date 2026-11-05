@@ -2,14 +2,14 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
         android:id="@+id/nav_video"
-        android:icon="@android:drawable/ic_media_play"
+        android:icon="@drawable/ic_nav_video"
         android:title="동영상" />
     <item
         android:id="@+id/nav_audio"
-        android:icon="@android:drawable/ic_media_play"
+        android:icon="@drawable/ic_nav_audio"
         android:title="음악" />
     <item
         android:id="@+id/nav_local"
-        android:icon="@android:drawable/ic_media_play"
+        android:icon="@drawable/ic_nav_local"
         android:title="로컬" />
 </menu>

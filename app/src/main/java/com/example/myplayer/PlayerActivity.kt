@@ -161,8 +161,8 @@ class PlayerActivity : AppCompatActivity() {
             try {
                 val btn = findViewById<android.widget.ImageButton>(R.id.btnPlayPause)
                 btn?.setImageResource(
-                    if (isPlaying) android.R.drawable.ic_media_pause
-                    else android.R.drawable.ic_media_play
+                    if (isPlaying) R.drawable.ic_pastel_pause
+                    else R.drawable.ic_pastel_play
                 )
             } catch (_: Exception) {}
         }

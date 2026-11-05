@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 배경: 크림 화이트 & 연한 라벤더 -->
-    <color name="bg_dark">#FCFAFF</color>
-    <color name="bg_surface">#F5F0FA</color>
-    <color name="bg_elevated">#FFFFFF</color>
+    <!-- 배경: 아주 어두운 퍼플 블랙 (눈 편안함) -->
+    <color name="bg_dark">#121016</color>
+    <color name="bg_surface">#1C1922</color>
+    <color name="bg_elevated">#26222E</color>
     
-    <!-- 포인트 컬러: 파스텔 핑크 & 라벤더 -->
-    <color name="accent">#FF9A9E</color>
-    <color name="accent_dark">#FECFEF</color>
-    <color name="accent_glow">#33FF9A9E</color>
+    <!-- 포인트 컬러: 파스텔 핑크 & 라벤더 (다크 배경에서 돋보임) -->
+    <color name="accent">#FFB6C1</color>
+    <color name="accent_dark">#DDA0DD</color>
+    <color name="accent_glow">#33FFB6C1</color>
     <color name="accent_pink">#E0BBE4</color>
     
-    <!-- 텍스트: 부드러운 다크 그레이/퍼플 -->
-    <color name="text_primary">#4A4A5A</color>
-    <color name="text_secondary">#8E8E9E</color>
-    <color name="text_tertiary">#B0B0C0</color>
+    <!-- 텍스트: 선명한 화이트 & 밝은 라벤더 -->
+    <color name="text_primary">#F8F8FA</color>
+    <color name="text_secondary">#B0A8C0</color>
+    <color name="text_tertiary">#6A6075</color>
     
-    <color name="divider">#EAE5F2</color>
+    <color name="divider">#332E3D</color>
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
-    <color name="spinner">#FF9A9E</color>
+    <color name="spinner">#FFB6C1</color>
 </resources>

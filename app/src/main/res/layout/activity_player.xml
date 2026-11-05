@@ -455,7 +455,7 @@
             android:layout_width="52dp"
             android:layout_height="52dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_previous"
+            android:src="@drawable/ic_pastel_prev"
             android:tint="@color/text_primary"
             android:contentDescription="이전 곡" />
 
@@ -464,7 +464,7 @@
             android:layout_width="52dp"
             android:layout_height="52dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_rew"
+            android:src="@drawable/ic_pastel_rew"
             android:tint="@color/text_primary"
             android:contentDescription="5초 뒤로" />
 
@@ -475,7 +475,7 @@
             android:layout_marginStart="8dp"
             android:layout_marginEnd="8dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_play"
+            android:src="@drawable/ic_pastel_play"
             android:tint="@color/text_primary"
             android:contentDescription="재생/일시정지" />
 
@@ -484,7 +484,7 @@
             android:layout_width="52dp"
             android:layout_height="52dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_ff"
+            android:src="@drawable/ic_pastel_fwd"
             android:tint="@color/text_primary"
             android:contentDescription="5초 앞으로" />
 
@@ -493,7 +493,7 @@
             android:layout_width="52dp"
             android:layout_height="52dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_next"
+            android:src="@drawable/ic_pastel_next"
             android:tint="@color/text_primary"
             android:contentDescription="다음 곡" />
     </LinearLayout>
