@@ -121,30 +121,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // ★ MyPlayer 텍스트 그라디에이션 적용
-        try {
-            val tvTitle = findViewById<android.widget.TextView>(R.id.tvMyPlayerTitle)
-            tvTitle?.let { tv ->
-                val paint = tv.paint
-                val width = paint.measureText(tv.text.toString())
-                val colors = intArrayOf(
-                    0xFFFFD700.toInt(), // 골드(밝은 노랑)
-                    0xFFFF69B4.toInt(), // 핫핑크
-                    0xFF9370DB.toInt()  // 미디엄 퍼플
-                )
-                val shader = android.graphics.LinearGradient(
-                    0f, 0f, width, tv.textSize,
-                    colors, null,
-                    android.graphics.Shader.TileMode.CLAMP
-                )
-                tv.paint.shader = shader
-                tv.invalidate()
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "그라디에이션 적용 실패: ${e.message}")
-        }
-
-
         val authed = ensureServerAuthGate()
         // early return 제거 — lateinit 미초기화로 인한 onResume NPE 방지
         // (authed=false여도 모든 adapter/뷰 초기화는 진행, 데이터 로드만 스킵)
@@ -384,64 +360,37 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun checkBotDetectionStatus() {
-        val tvStatus = findViewById<android.widget.TextView>(R.id.tvServerStatus)
-        tvStatus?.text = "🟡" // 확인 중
-
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val prefs = getSharedPreferences("server_auth", MODE_PRIVATE)
                 val token = prefs.getString("jwt", "") ?: ""
-                if (token.isBlank()) {
-                    withContext(Dispatchers.Main) { tvStatus?.text = "⚪" }
-                    return@launch
-                }
+                if (token.isBlank()) return@launch
 
                 val url = java.net.URL("http://193.123.167.118:5000/health_check")
                 val conn = url.openConnection() as java.net.HttpURLConnection
                 conn.requestMethod = "GET"
                 conn.setRequestProperty("Authorization", "Bearer $token")
                 conn.connectTimeout = 5000
-                conn.readTimeout = 10000
+                conn.readTimeout = 15000
                 conn.doInput = true
 
                 if (conn.responseCode in 200..299) {
                     val body = conn.inputStream.bufferedReader().use { it.readText() }
                     val json = org.json.JSONObject(body)
-                    
-                    val isBotDetected = json.optBoolean("bot_detected", false)
-                    val isIpChanged = json.optBoolean("ip_changed", false)
-                    
-                    withContext(Dispatchers.Main) {
-                        if (isBotDetected) {
-                            if (isIpChanged) {
-                                tvStatus?.text = "🔵"
-                                tvStatus?.contentDescription = "봇 감지 후 IP 변경됨"
-                            } else {
-                                tvStatus?.text = "🔴"
-                                tvStatus?.contentDescription = "봇 감지됨"
-                                
-                                val hasShown = prefs.getBoolean("bot_alert_shown", false)
-                                if (!hasShown) {
-                                    android.app.AlertDialog.Builder(this@MainActivity)
-                                        .setTitle("⚠️ YouTube 봇 감지됨")
-                                        .setMessage("현재 서버 IP가 YouTube에 의해 일시적으로 차단되었습니다. 잠시 후 다시 시도해주세요.")
-                                        .setPositiveButton("확인", null)
-                                        .show()
-                                    prefs.edit().putBoolean("bot_alert_shown", true).apply()
-                                }
-                            }
-                        } else {
-                            tvStatus?.text = "🟢"
-                            tvStatus?.contentDescription = "서버 정상"
-                            prefs.edit().putBoolean("bot_alert_shown", false).apply()
+                    if (json.optBoolean("bot_detected", false)) {
+                        withContext(Dispatchers.Main) {
+                            android.app.AlertDialog.Builder(this@MainActivity)
+                                .setTitle("⚠️ YouTube 봇 감지됨")
+                                .setMessage("현재 서버 IP가 YouTube에 의해 일시적으로 차단되었습니다.\n\n" +
+                                            "잠시 후 다시 시도하거나, 서버의 WARP IP를 재시작해주세요.\n\n" +
+                                            "(재생은 백그라운드에서 계속 시도됩니다)")
+                                .setPositiveButton("확인", null)
+                                .show()
                         }
                     }
-                } else {
-                    withContext(Dispatchers.Main) { tvStatus?.text = "⚪" }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("BotCheck", "err: ${e.message}")
-                withContext(Dispatchers.Main) { tvStatus?.text = "⚪" }
             }
         }
     }
