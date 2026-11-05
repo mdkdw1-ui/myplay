@@ -41,8 +41,15 @@ object QueueManager {
             }
             arr.put(o)
         }
-        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-            .edit().putString(KEY, arr.toString()).apply()
+        val prefs = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+        editor.putString(KEY, arr.toString())
+        // ★★★ [수정] current_id가 비어있으면 리스트의 첫 번째 곡으로 강제 설정 ★★★
+        val current = prefs.getString("current_id", null)
+        if (current.isNullOrBlank() && list.isNotEmpty()) {
+            editor.putString("current_id", list[0].videoId)
+        }
+        editor.apply()
     }
 
     fun add(ctx: Context, video: HomeVideo): Boolean {
