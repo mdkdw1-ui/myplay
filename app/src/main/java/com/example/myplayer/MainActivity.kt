@@ -121,6 +121,30 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // ★ MyPlayer 텍스트 그라디에이션 적용
+        try {
+            val tvTitle = findViewById<android.widget.TextView>(R.id.tvMyPlayerTitle)
+            tvTitle?.let { tv ->
+                val paint = tv.paint
+                val width = paint.measureText(tv.text.toString())
+                val colors = intArrayOf(
+                    0xFFFFD700.toInt(), // 골드(밝은 노랑)
+                    0xFFFF69B4.toInt(), // 핫핑크
+                    0xFF9370DB.toInt()  // 미디엄 퍼플
+                )
+                val shader = android.graphics.LinearGradient(
+                    0f, 0f, width, tv.textSize,
+                    colors, null,
+                    android.graphics.Shader.TileMode.CLAMP
+                )
+                tv.paint.shader = shader
+                tv.invalidate()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "그라디에이션 적용 실패: ${e.message}")
+        }
+
+
         val authed = ensureServerAuthGate()
         // early return 제거 — lateinit 미초기화로 인한 onResume NPE 방지
         // (authed=false여도 모든 adapter/뷰 초기화는 진행, 데이터 로드만 스킵)
