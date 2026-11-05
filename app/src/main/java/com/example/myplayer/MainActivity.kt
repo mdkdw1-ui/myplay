@@ -361,16 +361,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkBotDetectionStatus() {
         val tvStatus = findViewById<android.widget.TextView>(R.id.tvServerStatus)
-        
-        // 초기 상태: 확인 중 (노란색 또는 회색)
-        tvStatus?.text = "🟡"
+        tvStatus?.text = "🟡" // 확인 중
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val prefs = getSharedPreferences("server_auth", MODE_PRIVATE)
                 val token = prefs.getString("jwt", "") ?: ""
                 if (token.isBlank()) {
-                    withContext(Dispatchers.Main) { tvStatus?.text = "⚪" } // 토큰 없음
+                    withContext(Dispatchers.Main) { tvStatus?.text = "⚪" }
                     return@launch
                 }
 
@@ -387,46 +385,39 @@ class MainActivity : AppCompatActivity() {
                     val json = org.json.JSONObject(body)
                     
                     val isBotDetected = json.optBoolean("bot_detected", false)
-                    val isIpChanged = json.optBoolean("ip_changed", false) // 서버에서 IP 변경 여부를 준다고 가정
+                    val isIpChanged = json.optBoolean("ip_changed", false)
                     
                     withContext(Dispatchers.Main) {
                         if (isBotDetected) {
                             if (isIpChanged) {
-                                // 봇 감지되었으나 IP가 변경되어 회복됨 -> 파란색
                                 tvStatus?.text = "🔵"
                                 tvStatus?.contentDescription = "봇 감지 후 IP 변경됨"
                             } else {
-                                // 봇 감지 상태 유지 -> 빨간색
                                 tvStatus?.text = "🔴"
                                 tvStatus?.contentDescription = "봇 감지됨"
                                 
-                                // 봇 감지 시 알림 (한 번만)
                                 val hasShown = prefs.getBoolean("bot_alert_shown", false)
                                 if (!hasShown) {
                                     android.app.AlertDialog.Builder(this@MainActivity)
                                         .setTitle("⚠️ YouTube 봇 감지됨")
-                                        .setMessage("현재 서버 IP가 YouTube에 의해 일시적으로 차단되었습니다.
-
-잠시 후 다시 시도하거나, 서버의 WARP IP를 재시작해주세요.")
+                                        .setMessage("현재 서버 IP가 YouTube에 의해 일시적으로 차단되었습니다. 잠시 후 다시 시도해주세요.")
                                         .setPositiveButton("확인", null)
                                         .show()
                                     prefs.edit().putBoolean("bot_alert_shown", true).apply()
                                 }
                             }
                         } else {
-                            // 정상 -> 녹색
                             tvStatus?.text = "🟢"
                             tvStatus?.contentDescription = "서버 정상"
-                            // 정상으로 돌아왔으므로 알림 플래그 초기화
                             prefs.edit().putBoolean("bot_alert_shown", false).apply()
                         }
                     }
                 } else {
-                    withContext(Dispatchers.Main) { tvStatus?.text = "⚪" } // 서버 응답 없음
+                    withContext(Dispatchers.Main) { tvStatus?.text = "⚪" }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("BotCheck", "err: ${e.message}")
-                withContext(Dispatchers.Main) { tvStatus?.text = "⚪" } // 오류
+                withContext(Dispatchers.Main) { tvStatus?.text = "⚪" }
             }
         }
     }
