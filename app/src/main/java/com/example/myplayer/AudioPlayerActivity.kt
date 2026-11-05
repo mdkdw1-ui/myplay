@@ -925,6 +925,9 @@ class AudioPlayerActivity : AppCompatActivity() {
             // 4. prefs 업데이트 (transition 시 꼬임 방지)
             pref?.edit()?.putString("current_video_id", videoId)?.apply()
             
+            // ★★★ [수정] 내부 변수 currentVideoId도 강제 업데이트 (스레드 동기화) ★★★
+            currentVideoId = videoId
+            
             diag("loadAudio 동기화 완료: $videoId")
         } catch (e: Exception) {
             diag("loadAudio 동기화 에러: ${e.message}")
