@@ -283,14 +283,26 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         val fromPlaylist = intent.getBooleanExtra("FROM_PLAYLIST", false)
         if (!fromPlaylist && !fromSubNotif) {
-            QueueManager.clear(this)
-            // ★★★ fresh selection → 현재 곡 즉시 큐 추가 (title fallback)
+            // ★★★ [수정] fresh selection 시 큐를 지우지 않고, 새 곡을 맨 앞에 추가 ★★★
             if (currentVideoId.isNotBlank() && !currentVideoId.startsWith("local:")) {
                 val title = currentTitle.ifBlank { currentVideoId }
                 val channel = currentChannel.ifBlank { "YouTube" }
-                QueueManager.add(this, HomeVideo(currentVideoId, title, channel, currentThumb))
-                diag("onCreate: fresh selection → 큐 즉시 추가 $currentVideoId")
-                // ★ prefs도 즉시 갱신 (fresh selection이 prefs에 덮이지 않게)
+                
+                // 기존 큐에서 현재 곡이 있는지 확인
+                val queue = QueueManager.get(this)
+                val exists = queue.any { it.videoId == currentVideoId }
+                
+                if (!exists) {
+                    // 큐에 없으면 맨 앞에 추가 (기존 순서 유지)
+                    val newList = mutableListOf(HomeVideo(currentVideoId, title, channel, currentThumb))
+                    newList.addAll(queue)
+                    QueueManager.save(this, newList)
+                }
+                
+                QueueManager.setCurrent(this, currentVideoId)
+                
+                diag("onCreate: fresh selection → 큐 맨 앞에 추가 $currentVideoId")
+                
                 pref?.edit()
                     ?.putString("current_video_id", currentVideoId)
                     ?.putString("current_title", currentTitle)
