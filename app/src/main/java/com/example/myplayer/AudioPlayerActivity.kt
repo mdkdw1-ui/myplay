@@ -923,6 +923,13 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     private fun loadAudio(videoId: String, isInitial: Boolean = false) {
+        // ★ 재생 시작 전 기존 프리페치 중단 (자원 경쟁 방지)
+        try {
+            prefetchJob?.cancel()
+            prefetchedStreams.clear()
+            diag("loadAudio: 기존 프리페치 취소 및 캐시 클리어")
+        } catch (_: Exception) {}
+
         // ★★★ [최종 수정] 3곳 동시 동기화 (변수, QueueManager, prefs) ★★★
         try {
             // 1. 내부 변수 업데이트
@@ -996,7 +1003,10 @@ class AudioPlayerActivity : AppCompatActivity() {
                 addToHistory(videoId, currentTitle, currentChannel, currentThumb)
                 failedIds.remove(videoId)
                 // ★ 즉시 다음 prefetch 재개
-                bgScope.launch { delay(500); prefetchNext() }
+                prefetchJob = bgScope.launch {
+            delay(4000) // 첫 재생 경쟁 방지
+            try { prefetchNext() } catch (_: Exception) {}
+        }
                 return
             }
         }
