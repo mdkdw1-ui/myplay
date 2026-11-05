@@ -122,13 +122,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         val authed = ensureServerAuthGate()
-        
-        // ★ 메뉴 버튼들을 아이콘+텍스트 가로형으로 코드에서 재배치
-        try {
-            setupCustomMenuButtons()
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "menu setup err: ${e.message}")
-        }
+
 
         // early return 제거 — lateinit 미초기화로 인한 onResume NPE 방지
         // (authed=false여도 모든 adapter/뷰 초기화는 진행, 데이터 로드만 스킵)
@@ -413,96 +407,6 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private fun setupCustomMenuButtons() {
-        val menuMap = mapOf(
-            R.id.btnPlaylist to Pair("cursor_2", "YouTube 재생목록"),
-            R.id.btnMyPlaylists to Pair("cursor_8", "내 플레이리스트"),
-            R.id.btnLocalMedia to Pair("cursor_5", "로컬 파일 재생"),
-            R.id.btnAudioHome to Pair("cursor_6", "오디오 홈"),
-            R.id.btnSmartPlaylist to Pair("cursor_3", "스마트 플레이리스트")
-        )
-
-        for ((btnId, data) in menuMap) {
-            val oldBtn = findViewById<android.view.View>(btnId) ?: continue
-            val parent = oldBtn.parent as? android.view.ViewGroup ?: continue
-            val index = parent.indexOfChild(oldBtn)
-
-            // 기존 버튼 제거
-            parent.removeViewAt(index)
-
-            // 새 가로형 LinearLayout 생성
-            val newBtn = android.widget.LinearLayout(this).apply {
-                id = btnId
-                orientation = android.widget.LinearLayout.HORIZONTAL
-                gravity = android.view.Gravity.CENTER_VERTICAL
-                layoutParams = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    val m = (20 * resources.displayMetrics.density).toInt()
-                    setMargins(m, (8 * resources.displayMetrics.density).toInt(), m, 0)
-                }
-                val p = (12 * resources.displayMetrics.density).toInt()
-                setPadding(p, p, p, p)
-                setBackgroundResource(R.drawable.bg_card_glass)
-                isClickable = true
-                isFocusable = true
-            }
-
-            // 아이콘 이미지뷰
-            val iconSize = (40 * resources.displayMetrics.density).toInt()
-            val icon = android.widget.ImageView(this).apply {
-                layoutParams = android.widget.LinearLayout.LayoutParams(iconSize, iconSize)
-                setImageResource(
-                    resources.getIdentifier(data.first, "drawable", packageName)
-                )
-                scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
-            }
-            newBtn.addView(icon)
-
-            // 텍스트뷰
-            val textView = android.widget.TextView(this).apply {
-                layoutParams = android.widget.LinearLayout.LayoutParams(
-                    0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f
-                ).apply {
-                    val m = (16 * resources.displayMetrics.density).toInt()
-                    marginStart = m
-                }
-                text = data.second
-                textSize = 15f
-                setTypeface(null, android.graphics.Typeface.BOLD)
-                setTextColor(android.graphics.Color.parseColor("#F5F5F7"))
-            }
-            newBtn.addView(textView)
-
-            // 클릭 리스너는 기존 버튼과 동일하게 설정 (복사는 어려우므로, ID로 다시 찾아서 리스너 설정)
-            // *주의*: 기존 클릭 리스너가 새 뷰로 복사되지 않으므로, 여기서 직접 리스너를 달아줍니다.
-            newBtn.setOnClickListener {
-                try {
-                    val intent = when (btnId) {
-                        R.id.btnPlaylist -> android.content.Intent(this, PlaylistActivity::class.java)
-                        R.id.btnMyPlaylists -> android.content.Intent(this, MyPlaylistsActivity::class.java)
-                        R.id.btnLocalMedia -> android.content.Intent(this, LocalMediaActivity::class.java)
-                        R.id.btnAudioHome -> android.content.Intent(this, AudioHomeActivity::class.java)
-                        R.id.btnSmartPlaylist -> android.content.Intent(this, SmartPlaylistActivity::class.java)
-                        else -> null
-                    }
-                    if (btnId == R.id.btnPlaylist) {
-                        // 플레이리스트는 URL 입력 다이얼로그가 필요하므로 기존 로직 재현 (간단히 생략 가능)
-                        // 기존 코드의 로직을 그대로 살리려면, 뷰 ID를 유지한 채로 스타일만 바꾸는 것이 좋습니다.
-                        // 여기서는 간단히 생략합니다.
-                    } else if (intent != null) {
-                        startActivity(intent)
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("MainActivity", "menu click err: ${e.message}")
-                }
-            }
-
-            // 원래 위치(index)에 삽입
-            parent.addView(newBtn, index)
-        }
-    }
 
     override fun onResume() {
         super.onResume()
