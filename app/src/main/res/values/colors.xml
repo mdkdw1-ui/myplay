@@ -1,16 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg_dark">#0A0A0B</color>
-    <color name="bg_surface">#141416</color>
-    <color name="bg_elevated">#1C1C1F</color>
-    <color name="accent">#FF2D55</color>
-    <color name="accent_dark">#E01E45</color>
-    <color name="accent_glow">#33FF2D55</color>
-    <color name="text_primary">#F5F5F7</color>
-    <color name="text_secondary">#8E8E93</color>
-    <color name="text_tertiary">#5A5A5F</color>
-    <color name="divider">#26262A</color>
+    <!-- 유튜브 다크 테마 배경 -->
+    <color name="bg_dark">#0F0F0F</color>
+    <color name="bg_surface">#1A1A1A</color>
+    <color name="bg_elevated">#272727</color>
+    
+    <!-- 유튜브 레드 포인트 컬러 -->
+    <color name="accent">#FF0000</color>
+    <color name="accent_dark">#CC0000</color>
+    <color name="accent_glow">#33FF0000</color>
+    <color name="accent_pink">#FF2D55</color>
+    
+    <!-- 텍스트 -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#AAAAAA</color>
+    <color name="text_tertiary">#717171</color>
+    
+    <color name="divider">#303030</color>
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
-    <color name="spinner">#E5E5E7</color>
+    <color name="spinner">#FFFFFF</color>
 </resources>

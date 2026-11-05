@@ -3,8 +3,7 @@
         <item name="colorPrimary">@color/accent</item>
         <item name="colorPrimaryVariant">@color/accent_dark</item>
         <item name="colorOnPrimary">@color/white</item>
-        <item name="colorSecondary">@color/accent</item>
-        <item name="colorOnSecondary">@color/white</item>
+        <item name="colorSecondary">@color/accent_pink</item>
         <item name="colorAccent">@color/spinner</item>
         <item name="android:colorBackground">@color/bg_dark</item>
         <item name="colorSurface">@color/bg_surface</item>
@@ -16,25 +15,25 @@
         <item name="android:textColorSecondary">@color/text_secondary</item>
     </style>
 
+    <!-- 메인 버튼: 유튜브 빨간 버튼 (둥근 모서리) -->
     <style name="PrimaryButton" parent="Widget.MaterialComponents.Button">
-        <item name="android:textSize">15sp</item>
+        <item name="android:textSize">14sp</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:letterSpacing">0.03</item>
         <item name="android:textColor">@color/white</item>
-        <item name="backgroundTint">@color/accent</item>
-        <item name="cornerRadius">14dp</item>
-        <item name="android:minHeight">56dp</item>
+        <item name="android:background">@drawable/bg_btn_premium</item>
+        <item name="backgroundTint">@null</item>
+        <item name="android:minHeight">48dp</item>
         <item name="elevation">0dp</item>
     </style>
 
-    <style name="GhostButton" parent="Widget.MaterialComponents.Button.OutlinedButton">
-        <item name="android:textSize">15sp</item>
+    <!-- 보조 버튼: 유튜브 회색 칩 스타일 -->
+    <style name="GhostButton" parent="Widget.MaterialComponents.Button">
+        <item name="android:textSize">14sp</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:letterSpacing">0.03</item>
         <item name="android:textColor">@color/text_primary</item>
-        <item name="cornerRadius">14dp</item>
-        <item name="strokeColor">@color/divider</item>
-        <item name="strokeWidth">1dp</item>
-        <item name="android:minHeight">56dp</item>
+        <item name="android:background">@drawable/bg_card_glass</item>
+        <item name="backgroundTint">@null</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="elevation">0dp</item>
     </style>
 </resources>
