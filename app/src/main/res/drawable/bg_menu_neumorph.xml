@@ -1,13 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 하단 그림자 (어두운 부분) -->
     <item android:top="2dp" android:left="2dp">
         <shape android:shape="rectangle">
             <corners android:radius="16dp" />
             <solid android:color="#050506" />
         </shape>
     </item>
-    <!-- 상단 하이라이트 (밝은 부분) -->
     <item android:bottom="2dp" android:right="2dp">
         <shape android:shape="rectangle">
             <corners android:radius="16dp" />
