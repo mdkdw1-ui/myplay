@@ -141,55 +141,145 @@
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
         </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
+        <LinearLayout
             android:id="@+id/btnPlaylist"
-            style="@style/GhostButton"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="wrap_content"
             android:layout_marginStart="20dp"
             android:layout_marginEnd="20dp"
-            android:layout_marginTop="12dp"
-            android:text="📃 YouTube 재생목록 열기" />
+            android:layout_marginTop="16dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_card_glass"
+            android:padding="12dp"
+            android:clickable="true"
+            android:focusable="true">
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/cursor_2"
+                android:scaleType="centerInside" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="YOUTUBE 재생목록"
+                android:textSize="11sp"
+                android:textColor="@color/text_primary"
+                android:gravity="center" />
+        </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
+        <LinearLayout
             android:id="@+id/btnMyPlaylists"
-            style="@style/GhostButton"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="wrap_content"
             android:layout_marginStart="20dp"
             android:layout_marginEnd="20dp"
             android:layout_marginTop="12dp"
-            android:text="📂 내 플레이리스트" />
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_card_glass"
+            android:padding="12dp"
+            android:clickable="true"
+            android:focusable="true">
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/cursor_8"
+                android:scaleType="centerInside" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="내 플레이리스트"
+                android:textSize="11sp"
+                android:textColor="@color/text_primary"
+                android:gravity="center" />
+        </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
+        <LinearLayout
             android:id="@+id/btnLocalMedia"
-            style="@style/GhostButton"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="wrap_content"
             android:layout_marginStart="20dp"
             android:layout_marginEnd="20dp"
             android:layout_marginTop="12dp"
-            android:text="🎧 로컬 파일 재생" />
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_card_glass"
+            android:padding="12dp"
+            android:clickable="true"
+            android:focusable="true">
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/cursor_5"
+                android:scaleType="centerInside" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="로컬 파일 재생"
+                android:textSize="11sp"
+                android:textColor="@color/text_primary"
+                android:gravity="center" />
+        </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
+        <LinearLayout
             android:id="@+id/btnAudioHome"
-            style="@style/GhostButton"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="wrap_content"
             android:layout_marginStart="20dp"
             android:layout_marginEnd="20dp"
             android:layout_marginTop="12dp"
-            android:text="🎵 오디오 홈 (플레이리스트)" />
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_card_glass"
+            android:padding="12dp"
+            android:clickable="true"
+            android:focusable="true">
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/cursor_6"
+                android:scaleType="centerInside" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="오디오 홈"
+                android:textSize="11sp"
+                android:textColor="@color/text_primary"
+                android:gravity="center" />
+        </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
+        <LinearLayout
             android:id="@+id/btnSmartPlaylist"
-            style="@style/GhostButton"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="wrap_content"
             android:layout_marginStart="20dp"
             android:layout_marginEnd="20dp"
             android:layout_marginTop="12dp"
-            android:text="🎧 스마트 플레이리스트" />
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_card_glass"
+            android:padding="12dp"
+            android:clickable="true"
+            android:focusable="true">
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/cursor_3"
+                android:scaleType="centerInside" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="스마트 플레이리스트"
+                android:textSize="11sp"
+                android:textColor="@color/text_primary"
+                android:gravity="center" />
+        </LinearLayout>
 
         <!-- ⭐ 구독 채널 -->
         <LinearLayout
