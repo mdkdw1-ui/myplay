@@ -30,11 +30,11 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:paddingStart="20dp"
-            android:paddingEnd="20dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:gravity="center_vertical">
 
-            <!-- 기존 앱 로고 유지 -->
+            <!-- 기존 앱 로고 -->
             <ImageView
                 android:layout_width="32dp"
                 android:layout_height="32dp"
@@ -42,60 +42,63 @@
                 android:src="@drawable/logo_main"
                 android:scaleType="centerCrop" />
 
-            <!-- ★★★ MyPlayer 로고 크기 대폭 확대 (250dp) ★★★ -->
+            <!-- ★ MyPlayer 로고 (왼쪽으로 당기기 위해 fitStart 유지) -->
             <ImageView
-                android:layout_width="300dp"
-                android:layout_height="85dp"
+                android:layout_width="260dp"
+                android:layout_height="75dp"
                 android:src="@drawable/myplayer_logo"
                 android:scaleType="fitStart" />
 
-            <!-- 우측 정렬을 위한 빈 공간 -->
+            <!-- ★ 우측 아이콘들을 오른쪽 끝으로 밀어내는 빈 공간 -->
             <View
                 android:layout_width="0dp"
                 android:layout_height="0dp"
                 android:layout_weight="1" />
 
-            <!-- ★★★ 서버 상태 아이콘 추가 (🔴/🟢/🔵) ★★★ -->
+            <!-- ★ 우측 아이콘 그룹 (총 4개) -->
+            <!-- 1. 서버 상태 표시등 -->
             <TextView
                 android:id="@+id/tvServerStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="🟢"
-                android:textSize="14sp"
-                android:padding="8dp"
-                android:layout_marginEnd="4dp"
+                android:textSize="12sp"
+                android:padding="4dp"
+                android:layout_marginEnd="2dp"
                 android:contentDescription="서버 상태" />
 
-            <!-- 기존 우측 아이콘들 -->
+            <!-- 2. 테마 변경 -->
             <TextView
                 android:id="@+id/btnTheme"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="🎨"
-                android:textSize="22sp"
-                android:padding="8dp"
+                android:textSize="20sp"
+                android:padding="6dp"
                 android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true" />
 
+            <!-- 3. 통계 -->
             <TextView
                 android:id="@+id/btnStats"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="📊"
-                android:textSize="22sp"
-                android:padding="8dp"
+                android:textSize="20sp"
+                android:padding="6dp"
                 android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true" />
 
+            <!-- 4. 설정 -->
             <TextView
                 android:id="@+id/btnSettings"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="⚙"
-                android:textSize="22sp"
-                android:padding="8dp"
+                android:textSize="20sp"
+                android:padding="6dp"
                 android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true" />
