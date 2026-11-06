@@ -730,29 +730,23 @@ class AudioPlayerActivity : AppCompatActivity() {
         try {
         val artistName = currentArtist.ifBlank { currentChannel }
         
-        val radioDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                kotlinx.coroutines.withTimeoutOrNull(5_000) {
-                    YouTubeRadio.fetchRelated(currentVideoId, currentTitle, currentChannel)
-                } ?: emptyList()
-            } catch (_: Exception) { emptyList() }
-        }
-        val artistDeferred = bgScope.async(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                kotlinx.coroutines.withTimeoutOrNull(5_000) {
-                    if (artistName.isNotBlank())
-                        YouTubeArtist.fetchSongs(artistName, currentVideoId)
-                    else emptyList()
-                } ?: emptyList()
-            } catch (_: Exception) { emptyList() }
-        }
-        
-        val radioList = radioDeferred.await()
-        val artistList = artistDeferred.await()
-        val combined = (radioList + artistList)
-            .distinctBy { it.videoId }
-            .filter { it.videoId != currentVideoId && it.videoId !in failedIds }
+        // ★★★ 다양성 라디오: 같은 분위기 + 다양한 아티스트/장르/시대 ★★★
+        val existingIds = QueueManager.get(this@AudioPlayerActivity).map { it.videoId }.toSet()
+        val recentArtists = lastRelatedCache
             .take(10)
+            .map { it.channel }
+            .filter { it.isNotBlank() }
+            .toSet()
+        val combined = try {
+            DiversityRadio.fetch(
+                videoId = currentVideoId,
+                title = currentTitle,
+                channel = currentChannel,
+                excludeIds = existingIds + failedIds,
+                recentArtists = recentArtists,
+                max = 10
+            )
+        } catch (_: Exception) { emptyList() }
         
         if (combined.isNotEmpty()) {
             for (v in combined) {
