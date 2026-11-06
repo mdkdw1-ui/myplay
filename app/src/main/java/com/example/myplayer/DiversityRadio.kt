@@ -8,6 +8,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 다양성 라디오: 같은 분위기 + 다양한 아티스트/장르/시대
+ * + 음악이 아닌 영상(브이로그, 게임 등) 필터링 강화
  */
 object DiversityRadio {
 
@@ -18,12 +19,51 @@ object DiversityRadio {
         "K-POP 댄스", "K-POP 발라드", "OST", "카페 BGM", "드라이브 팝"
     )
 
+    // ★★★ 음악 영상이 확실한 키워드 (하나라도 있으면 통과)
+    private val MUSIC_GOOD_KEYWORDS = listOf(
+        "가사", "lyrics", "lyric", "playlist", "플레이리스트", "노래모음", "노래 모음",
+        "곡 모음", "메들리", "medley", "cover", "커버", "m/v", "mv", "뮤직비디오",
+        "official", "오피셜", "audio", "오디오", "1시간", "hours", "1hour",
+        "live", "라이브", "inst", "연주", "piano", "피아노", "guitar", "기타",
+        "ost", "soundtrack", "사운드트랙", "remix", "리믹스"
+    )
+
+    // ★★★ 음악이 아닐 확률이 높은 키워드 (하나라도 있으면 제외)
+    private val MUSIC_BAD_KEYWORDS = listOf(
+        "브이로그", "vlog", "일상", "게임", "game", "플레이", "play", "먹방", "mukbang",
+        "리뷰", "review", "언박싱", "unboxing", "꿀팁", "정보", "뉴스", "news",
+        "예능", "드라마", "영화", "시사", "정치", "스포츠", "축구", "야구",
+        "강의", "강연", "공부", "스터디", "요리", "레시피", "recipe", "운동",
+        "화장", "뷰티", "beauty", "패션", "fashion", "여행", "travel",
+        "조회수", "구독", "좋아요", "알림", "채널", "이야기", "사연", "썰",
+        "tv", "방송", "토크", "인터뷰", "interview", "다큐", "documentary"
+    )
+
+    /** 음악 영상인지 판별 (제목 + 채널명 기반) */
+    fun isMusicVideo(title: String, channel: String): Boolean {
+        val text = "$title $channel".lowercase()
+
+        // 1. 음악 제외 키워드가 있으면 즉시 탈락 (단, '라이브'는 예외로 처리)
+        if (MUSIC_BAD_KEYWORDS.any { text.contains(it) } && !text.contains("라이브") && !text.contains("live")) {
+            // '조회수', '구독' 등이 제목에 포함된 일상 영상들
+            if (text.contains("조회수") || text.contains("구독") || text.contains("일상")) return false
+        }
+
+        // 2. 명확한 음악 키워드가 있으면 통과
+        if (MUSIC_GOOD_KEYWORDS.any { text.contains(it) }) return true
+
+        // 3. 채널명이 '- Topic' 이거나 'Music'을 포함하면 통과
+        if (channel.contains("- Topic") || channel.contains("Music", ignoreCase = true)) return true
+
+        // 4. 판단 불가 → 기본적으로 탈락 (엄격 모드)
+        return false
+    }
+
     /** 현재 곡의 제목/채널로부터 장르/시대 키워드 추정 */
     fun inferKeywords(title: String, channel: String): List<String> {
         val text = "$title $channel".lowercase()
         val picks = mutableListOf<String>()
 
-        // 1) 장르 직접 감지
         val genreMap = mapOf(
             "발라드" to listOf("발라드", "ballad"),
             "락" to listOf("락", "rock", "메탈", "metal"),
@@ -39,7 +79,6 @@ object DiversityRadio {
             }
         }
 
-        // 2) 시대 감지
         val eraMap = mapOf(
             "80년대" to listOf("80년대", "80s", "1980"),
             "90년대" to listOf("90년대", "90s", "1990"),
@@ -51,22 +90,19 @@ object DiversityRadio {
             if (keywords.any { text.contains(it) }) { era = e; break }
         }
 
-        // 3) 조합 생성
         val result = mutableListOf<String>()
         if (picks.isNotEmpty()) {
             for (g in picks) {
                 result.add(if (era != null) "$era $g" else g)
             }
         }
-        // 장르 감지 실패 → 기본 풀에서 2~3개 랜덤
         if (result.isEmpty()) {
-            val basePool = GENRE_KEYWORDS.shuffled().take(3)
-            result.addAll(basePool)
+            result.addAll(GENRE_KEYWORDS.shuffled().take(3))
         }
         return result.distinct().take(3)
     }
 
-    /** 여러 소스에서 병렬 수집 → 다양성 필터 → 최종 리스트 */
+    /** 여러 소스에서 병렬 수집 → 다양성 필터 → 음악 필터 → 최종 리스트 */
     suspend fun fetch(
         videoId: String,
         title: String,
@@ -78,7 +114,6 @@ object DiversityRadio {
 
         val keywords = inferKeywords(title, channel)
 
-        // 1) 병렬 수집
         val results = coroutineScope {
             val radio = async {
                 try {
@@ -94,12 +129,12 @@ object DiversityRadio {
                     } ?: emptyList()
                 } catch (_: Exception) { emptyList() }
             }
-            // 장르/시대 키워드 병렬 검색
+            // ★★★ 키워드 검색 시 "노래모음" 대신 "가사"나 "playlist" 조합 추가
             val keywordResults = keywords.map { kw ->
                 async {
                     try {
                         withTimeoutOrNull(4000) {
-                            YouTubeSearch.search("$kw 플레이리스트")
+                            YouTubeSearch.search("$kw 노래 가사 playlist")
                         } ?: emptyList()
                     } catch (_: Exception) { emptyList() }
                 }
@@ -112,7 +147,6 @@ object DiversityRadio {
             listOf(baseRadio, baseArtist) + keywordLists
         }
 
-        // 2) 아티스트 중복 제거 + 다양성 필터
         val seenIds = excludeIds.toMutableSet()
         val artistCount = mutableMapOf<String, Int>()
         val output = mutableListOf<VideoItem>()
@@ -122,6 +156,9 @@ object DiversityRadio {
                 if (v.videoId in seenIds) continue
                 if (v.videoId == videoId) continue
                 if (v.videoId.isBlank()) continue
+
+                // ★★★ 1차 필터: 음악 영상인가?
+                if (!isMusicVideo(v.title, v.channel)) continue
 
                 // 최근 재생 아티스트 제외
                 if (v.channel in recentArtists) continue
@@ -137,13 +174,17 @@ object DiversityRadio {
             }
         }
 
-        // 3) 부족하면 최근 재생 아티스트 제외 조건 완화
+        // 부족하면 최근 재생 아티스트 조건 완화
         if (output.size < max) {
             for (list in results) {
                 for (v in list) {
                     if (v.videoId in seenIds) continue
                     if (v.videoId == videoId) continue
                     if (v.videoId.isBlank()) continue
+
+                    // ★★★ 2차 필터에서도 음악 영상만 통과
+                    if (!isMusicVideo(v.title, v.channel)) continue
+
                     seenIds.add(v.videoId)
                     output.add(v)
                     if (output.size >= max) return@withContext output
