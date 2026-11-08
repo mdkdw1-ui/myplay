@@ -103,7 +103,46 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    override fun onCreate() {
+    
+    // ★★★ 블루투스/테슬라 Next/Prev 신호 직접 수신 ★★★
+    override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
+        try {
+            val keyCode = intent?.getIntExtra("android.intent.extra.KEY_EVENT", -1) ?: -1
+            // KEYCODE_MEDIA_NEXT (87), KEYCODE_MEDIA_PREVIOUS (88)
+            when (keyCode) {
+                87 -> {
+                    Log.d("PlaybackService", "onStartCommand: KEYCODE_MEDIA_NEXT")
+                    val player = exoPlayer
+                    if (player != null && player.hasNextMediaItem()) {
+                        player.seekToNextMediaItem()
+                    } else {
+                        // 큐 끝 → 서비스에서 다음 곡 로드
+                        serviceScope.launch {
+                            val next = resolveNext()
+                            if (next != null) playNext(next)
+                        }
+                    }
+                }
+                88 -> {
+                    Log.d("PlaybackService", "onStartCommand: KEYCODE_MEDIA_PREVIOUS")
+                    val player = exoPlayer
+                    if (player != null && player.hasPreviousMediaItem()) {
+                        player.seekToPreviousMediaItem()
+                    } else {
+                        player?.seekTo(0)
+                    }
+                }
+                else -> {
+                    Log.d("PlaybackService", "onStartCommand: keyCode=$keyCode (기타)")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PlaybackService", "onStartCommand err: ${e.message}")
+        }
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+override fun onCreate() {
         super.onCreate()
         instance = this   // ★ 인스턴스 저장
 

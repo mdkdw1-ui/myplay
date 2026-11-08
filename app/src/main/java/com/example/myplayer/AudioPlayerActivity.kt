@@ -139,6 +139,7 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         // ★★★ Activity가 다음 곡 관리 (PlaybackService 경쟁 방지)
         PlaybackService.autoNextDisabled = true
+        forceUiSync()
 
         try {
             val skipReceiver = object : android.content.BroadcastReceiver() {
@@ -3280,7 +3281,35 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
     /** ★ 매 10초 자동 저장 */
-    private fun startPositionAutoSave() {
+    
+    // ★★★ 10초마다 UI 강제 동기화 (제목 안 바뀌는 문제 해결) ★★★
+    private fun forceUiSync() {
+        bgScope.launch {
+            while (isActive) {
+                try {
+                    val mc = mediaController
+                    if (mc != null) {
+                        val newId = mc.currentMediaItem?.mediaId ?: ""
+                        val meta = mc.currentMediaItem?.mediaMetadata
+                        val newTitle = meta?.title?.toString() ?: ""
+                        val newChannel = meta?.artist?.toString() ?: ""
+                        if (newTitle.isNotBlank() && newTitle != currentTitle) {
+                            currentTitle = newTitle
+                            currentChannel = newChannel
+                            runOnUiThread {
+                                tvTitle.text = newTitle
+                                tvChannel.text = newChannel
+                                diag("forceUiSync: $newTitle")
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+                delay(10_000)  // 10초마다
+            }
+        }
+    }
+
+private fun startPositionAutoSave() {
         bgScope.launch {
             while (isActive) {
                 delay(10_000)   // 10초
