@@ -147,9 +147,9 @@ class PlaybackService : MediaSessionService() {
                     // 연결 시 자동 재생 방지
                 }
 
-                override fun onSkipToNext(session: MediaSession) {
+                override fun onSkipToNext() {
                     android.util.Log.d("PlaybackService", "onSkipToNext from bluetooth")
-                    val player = session.player
+                    val player = player
                     if (player.hasNextMediaItem()) {
                         player.seekToNextMediaItem()
                     } else {
@@ -160,9 +160,9 @@ class PlaybackService : MediaSessionService() {
                     }
                 }
 
-                override fun onSkipToPrevious(session: MediaSession) {
+                override fun onSkipToPrevious() {
                     android.util.Log.d("PlaybackService", "onSkipToPrevious from bluetooth")
-                    val player = session.player
+                    val player = player
                     if (player.hasPreviousMediaItem()) {
                         player.seekToPreviousMediaItem()
                     } else {
