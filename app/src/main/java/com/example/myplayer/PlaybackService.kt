@@ -223,9 +223,52 @@ override fun onCreate() {
                                 previousTrack()
                                 return true
                             }
+                            KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                                seekBy(-10000L)
+                                return true
+                            }
+                            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                                seekBy(10000L)
+                                return true
+                            }
                         }
                     }
                     return super.onMediaButtonEvent(mediaSession, controller, intent)
+                }
+
+                override fun onSkipToNext() {
+                    Log.d("PlaybackService", "Tesla: onSkipToNext")
+                    nextTrack()
+                }
+
+                override fun onSkipToPrevious() {
+                    Log.d("PlaybackService", "Tesla: onSkipToPrevious")
+                    previousTrack()
+                }
+
+                override fun onFastForward() {
+                    Log.d("PlaybackService", "Tesla: onFastForward")
+                    seekBy(10000L)
+                }
+
+                override fun onRewind() {
+                    Log.d("PlaybackService", "Tesla: onRewind")
+                    seekBy(-10000L)
+                }
+
+                override fun onSeekTo(pos: Long) {
+                    Log.d("PlaybackService", "Tesla: onSeekTo $pos")
+                    exoPlayer?.seekTo(pos)
+                }
+
+                override fun onPlay() {
+                    Log.d("PlaybackService", "Tesla: onPlay")
+                    exoPlayer?.play()
+                }
+
+                override fun onPause() {
+                    Log.d("PlaybackService", "Tesla: onPause")
+                    exoPlayer?.pause()
                 }
 
                 override fun onPostConnect(
@@ -787,6 +830,41 @@ override fun onCreate() {
                             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                         ))
                         .setCallback(object : MediaSession.Callback {
+                            override fun onSkipToNext() {
+                                Log.d("PlaybackService", "Tesla(re): onSkipToNext")
+                                nextTrack()
+                            }
+
+                            override fun onSkipToPrevious() {
+                                Log.d("PlaybackService", "Tesla(re): onSkipToPrevious")
+                                previousTrack()
+                            }
+
+                            override fun onFastForward() {
+                                Log.d("PlaybackService", "Tesla(re): onFastForward")
+                                seekBy(10000L)
+                            }
+
+                            override fun onRewind() {
+                                Log.d("PlaybackService", "Tesla(re): onRewind")
+                                seekBy(-10000L)
+                            }
+
+                            override fun onSeekTo(pos: Long) {
+                                Log.d("PlaybackService", "Tesla(re): onSeekTo $pos")
+                                exoPlayer?.seekTo(pos)
+                            }
+
+                            override fun onPlay() {
+                                Log.d("PlaybackService", "Tesla(re): onPlay")
+                                exoPlayer?.play()
+                            }
+
+                            override fun onPause() {
+                                Log.d("PlaybackService", "Tesla(re): onPause")
+                                exoPlayer?.pause()
+                            }
+
                             override fun onPostConnect(
                                 session: MediaSession,
                                 controller: MediaSession.ControllerInfo
