@@ -140,6 +140,25 @@ class AudioPlayerActivity : AppCompatActivity() {
         // ★★★ Activity가 다음 곡 관리 (PlaybackService 경쟁 방지)
         PlaybackService.autoNextDisabled = true
 
+        try {
+            val skipReceiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(ctx: android.content.Context?, intent: android.content.Intent?) {
+                    if (intent?.action == "com.example.myplayer.ACTION_SKIP_NEXT") {
+                        diag("broadcast: ACTION_SKIP_NEXT 수신")
+                        playNextManual()
+                    }
+                }
+            }
+            val filter = android.content.IntentFilter("com.example.myplayer.ACTION_SKIP_NEXT")
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(skipReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(skipReceiver, filter)
+            }
+        } catch (e: Exception) {
+            diag("broadcast 수신기 등록 err: ${e.message}")
+        }
+
         // ★ 이전 종료 상태 감지 → 플래그 해제 후 계속 진행
         val wasStopped = pref?.getBoolean("service_stopped", false) == true
         if (wasStopped) {
