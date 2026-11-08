@@ -27,7 +27,9 @@ class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private var resolvingNext = false
+    private val playbackHistory = ArrayDeque<String>()
+
+private var resolvingNext = false
 
     private val endListener = object : Player.Listener {
 
@@ -309,28 +311,43 @@ override fun onCreate() {
 
     private fun previousTrack() {
         val player = exoPlayer ?: return
+
+        // 3초 초과 → 현재 곡 처음으로
         if (player.currentPosition > 3000L) {
             player.seekTo(0L)
             return
         }
+
+        // 3초 이내 → 직전 재생 곡으로 이동
         serviceScope.launch {
             try {
-                val queue = QueueManager.get(this@PlaybackService)
                 val currentId = player.currentMediaItem?.mediaId
-                val idx = queue.indexOfFirst { it.videoId == currentId }
-                if (idx > 0) {
-                    val prev = queue[idx - 1]
-                    playNext(
-                        VideoItem(
-                            prev.videoId,
-                            prev.title,
-                            prev.channel,
-                            prev.thumbnail
-                        )
-                    )
-                } else {
-                    player.seekTo(0L)
+                var prevId: String? = null
+
+                while (playbackHistory.isNotEmpty()) {
+                    val candidate = playbackHistory.removeLast()
+                    if (candidate != currentId) {
+                        prevId = candidate
+                        break
+                    }
                 }
+
+                if (prevId.isNullOrBlank()) {
+                    player.seekTo(0L)
+                    return@launch
+                }
+
+                val queue = QueueManager.get(this@PlaybackService)
+                val prev = queue.firstOrNull { it.videoId == prevId }
+
+                playNext(
+                    VideoItem(
+                        prevId,
+                        prev?.title ?: "",
+                        prev?.channel ?: "",
+                        prev?.thumbnail ?: ""
+                    )
+                )
             } catch (e: Exception) {
                 Log.e("PlaybackService", "previousTrack err", e)
             }
@@ -478,6 +495,15 @@ override fun onCreate() {
     private suspend fun playNext(item: VideoItem) {
         val player = exoPlayer ?: return
         try {
+            player.currentMediaItem?.mediaId?.let { currentId ->
+                if (currentId.isNotBlank() && currentId != item.videoId) {
+                    playbackHistory.remove(currentId)
+                    playbackHistory.addLast(currentId)
+                    while (playbackHistory.size > 30) {
+                        playbackHistory.removeFirst()
+                    }
+                }
+            }
             if (item.videoId.startsWith("local:")) {
                 val localId = item.videoId.removePrefix("local:").toLongOrNull() ?: return
                 val isQ = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
