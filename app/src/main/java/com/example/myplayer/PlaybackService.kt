@@ -298,6 +298,19 @@ override fun onCreate() {
         }
     }
 
+    private fun seekBy(deltaMs: Long) {
+        val player = exoPlayer ?: return
+        val duration = player.duration
+        val current = player.currentPosition
+        val target = if (duration > 0L) {
+            (current + deltaMs).coerceIn(0L, duration)
+        } else {
+            (current + deltaMs).coerceAtLeast(0L)
+        }
+        player.seekTo(target)
+        Log.d("PlaybackService", "seekBy $deltaMs -> $target")
+    }
+
     private fun nextTrack() {
         serviceScope.launch {
             val next = resolveNext()
