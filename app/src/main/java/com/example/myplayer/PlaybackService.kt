@@ -670,7 +670,32 @@ override fun onCreate() {
 
     override fun onGetSession(
         controllerInfo: MediaSession.ControllerInfo
-    ): MediaSession? = mediaSession
+    ): MediaSession? {
+        // ★★★ [수정] mediaSession이 null이면 재생성 ★★★
+        if (mediaSession == null) {
+            try {
+                val player = exoPlayer
+                if (player != null) {
+                    mediaSession = MediaSession.Builder(this, player)
+                        .setSessionActivity(PendingIntent.getActivity(
+                            this, 0,
+                            Intent(this, PlayerActivity::class.java),
+                            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                        ))
+                        .setCallback(object : MediaSession.Callback {
+                            override fun onPostConnect(
+                                session: MediaSession,
+                                controller: MediaSession.ControllerInfo
+                            ) {}
+                        })
+                        .build()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PlaybackService", "onGetSession 재생성 err: ${e.message}")
+            }
+        }
+        return mediaSession
+    }
 
     override fun onTaskRemoved(rootIntent: android.content.Intent?) {
         Log.d("PlaybackService", "onTaskRemoved → 완전 정지")
