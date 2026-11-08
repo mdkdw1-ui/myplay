@@ -3,6 +3,7 @@ package com.example.myplayer
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.view.KeyEvent
 import android.net.Uri
 import android.util.Log
 import androidx.media3.common.AudioAttributes
@@ -202,6 +203,29 @@ override fun onCreate() {
         mediaSession = MediaSession.Builder(this, player)
             .setSessionActivity(sessionActivity)
             .setCallback(object : MediaSession.Callback {
+                override fun onMediaButtonEvent(
+                    mediaSession: MediaSession,
+                    controller: MediaSession.ControllerInfo,
+                    intent: Intent
+                ): Boolean {
+                    if (intent.action == Intent.ACTION_MEDIA_BUTTON) {
+                        val key = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+                        when (key?.keyCode) {
+                            KeyEvent.KEYCODE_MEDIA_NEXT,
+                            KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD -> {
+                                nextTrack()
+                                return true
+                            }
+                            KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+                            KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD -> {
+                                previousTrack()
+                                return true
+                            }
+                        }
+                    }
+                    return super.onMediaButtonEvent(mediaSession, controller, intent)
+                }
+
                 override fun onPostConnect(
                     session: MediaSession,
                     controller: MediaSession.ControllerInfo
@@ -269,6 +293,47 @@ override fun onCreate() {
             Log.d("PlaybackService", "startForeground OK")
         } catch (e: Exception) {
             Log.e("PlaybackService", "startForeground failed: ${e.message}", e)
+        }
+    }
+
+    private fun nextTrack() {
+        serviceScope.launch {
+            val next = resolveNext()
+            if (next != null) {
+                playNext(next)
+            } else {
+                Log.d("PlaybackService", "nextTrack: no next")
+            }
+        }
+    }
+
+    private fun previousTrack() {
+        val player = exoPlayer ?: return
+        if (player.currentPosition > 3000L) {
+            player.seekTo(0L)
+            return
+        }
+        serviceScope.launch {
+            try {
+                val queue = QueueManager.get(this@PlaybackService)
+                val currentId = player.currentMediaItem?.mediaId
+                val idx = queue.indexOfFirst { it.videoId == currentId }
+                if (idx > 0) {
+                    val prev = queue[idx - 1]
+                    playNext(
+                        VideoItem(
+                            prev.videoId,
+                            prev.title,
+                            prev.channel,
+                            prev.thumbnail
+                        )
+                    )
+                } else {
+                    player.seekTo(0L)
+                }
+            } catch (e: Exception) {
+                Log.e("PlaybackService", "previousTrack err", e)
+            }
         }
     }
 
