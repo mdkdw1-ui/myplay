@@ -60,6 +60,29 @@ class PlaybackService : MediaSessionService() {
             Log.d("PlaybackService", "transition → $newId (title=${title.take(20)})")
         }
 
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int
+        ) {
+            // ★ 블루투스 Next/Prev 신호로 인한 위치 이동 감지 ★
+            if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                val currentId = newPosition.mediaItem?.mediaId
+                if (currentId != null && currentId != newPosition.mediaItem?.mediaId) {
+                    // 큐에 다음 곡이 없으면 다음 곡 로드
+                    val player = exoPlayer ?: return
+                    if (!player.hasNextMediaItem()) {
+                        Log.d("PlaybackService", "onPositionDiscontinuity: 큐 끝, 다음 곡 필요")
+                        // 서비스 내에서 다음 곡 로드 시도
+                        serviceScope.launch {
+                            val next = resolveNext()
+                            if (next != null) playNext(next)
+                        }
+                    }
+                }
+            }
+        }
+
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_ENDED) {
                 val p = exoPlayer
@@ -145,29 +168,6 @@ class PlaybackService : MediaSessionService() {
                     controller: MediaSession.ControllerInfo
                 ) {
                     // 연결 시 자동 재생 방지
-                }
-
-                override fun onSkipToNext() {
-                    android.util.Log.d("PlaybackService", "onSkipToNext from bluetooth")
-                    val player = player
-                    if (player.hasNextMediaItem()) {
-                        player.seekToNextMediaItem()
-                    } else {
-                        try {
-                            val intent = android.content.Intent("com.example.myplayer.ACTION_SKIP_NEXT")
-                            sendBroadcast(intent)
-                        } catch (_: Exception) {}
-                    }
-                }
-
-                override fun onSkipToPrevious() {
-                    android.util.Log.d("PlaybackService", "onSkipToPrevious from bluetooth")
-                    val player = player
-                    if (player.hasPreviousMediaItem()) {
-                        player.seekToPreviousMediaItem()
-                    } else {
-                        player.seekTo(0)
-                    }
                 }
             })
             .build()
