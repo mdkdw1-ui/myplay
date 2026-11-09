@@ -210,8 +210,10 @@ override fun onCreate() {
                     controller: MediaSession.ControllerInfo,
                     intent: Intent
                 ): Boolean {
+                    Log.d("PlaybackService", "CAR_DIAG onMediaButtonEvent action=${intent.action}")
                     if (intent.action == Intent.ACTION_MEDIA_BUTTON) {
                         val key = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+                        Log.d("PlaybackService", "CAR_DIAG key=${key?.keyCode}")
                         when (key?.keyCode) {
                             KeyEvent.KEYCODE_MEDIA_NEXT,
                             KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD -> {
@@ -320,8 +322,10 @@ override fun onCreate() {
     }
 
     private fun nextTrack() {
+        Log.d("PlaybackService", "CAR_DIAG nextTrack entered")
         serviceScope.launch {
             val next = resolveNext()
+            Log.d("PlaybackService", "CAR_DIAG resolved=${next?.videoId}")
             if (next != null) {
                 playNext(next)
             } else {
@@ -398,8 +402,10 @@ override fun onCreate() {
 
             val queue = QueueManager.get(this)
             val curIdx = queue.indexOfFirst { it.videoId == currentVideoId }
+            Log.d("PlaybackService", "CAR_DIAG current=$currentVideoId curIdx=$curIdx queueSize=${queue.size}")
             if (curIdx >= 0 && curIdx < queue.size - 1) {
                 val next = queue[curIdx + 1]
+                Log.d("PlaybackService", "CAR_DIAG queueNext=${next.videoId}")
                 Log.d("PlaybackService", "queue next: ${next.videoId}")
                 return VideoItem(
                     next.videoId, next.title, next.channel, next.thumbnail
