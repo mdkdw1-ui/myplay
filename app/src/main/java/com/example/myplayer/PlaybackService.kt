@@ -379,17 +379,14 @@ override fun onCreate() {
 
     private fun previousTrack() {
         val player = exoPlayer ?: return
+        Log.d("PlaybackService", "CAR_DIAG previousTrack entered")
 
-        // 3초 초과 → 현재 곡 처음으로
-        if (player.currentPosition > 3000L) {
-            player.seekTo(0L)
-            return
-        }
-
-        // 3초 이내 → 직전 재생 곡으로 이동
         serviceScope.launch {
             try {
-                val currentId = player.currentMediaItem?.mediaId
+                val currentId = withContext(Dispatchers.Main) {
+                    player.currentMediaItem?.mediaId
+                }
+
                 var prevId: String? = null
 
                 while (playbackHistory.isNotEmpty()) {
@@ -400,8 +397,15 @@ override fun onCreate() {
                     }
                 }
 
+                Log.d(
+                    "PlaybackService",
+                    "CAR_DIAG previous current=$currentId prev=$prevId history=${playbackHistory.size}"
+                )
+
                 if (prevId.isNullOrBlank()) {
-                    player.seekTo(0L)
+                    withContext(Dispatchers.Main) {
+                        player.seekTo(0L)
+                    }
                     return@launch
                 }
 
