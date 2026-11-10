@@ -13,6 +13,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionResult
 import androidx.media3.session.MediaSessionService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -236,6 +237,48 @@ override fun onCreate() {
                         }
                     }
                     return super.onMediaButtonEvent(mediaSession, controller, intent)
+                }
+
+                override fun onPlayerCommandRequest(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo,
+                    playerCommand: Int
+                ): Int {
+                    Log.d("PlaybackService", "CAR_DIAG playerCommand=$playerCommand")
+
+                    when (playerCommand) {
+                        Player.COMMAND_SEEK_TO_NEXT,
+                        Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
+                            Log.d("PlaybackService", "CAR_DIAG next command")
+                            nextTrack()
+                            return SessionResult.RESULT_INFO_SKIPPED
+                        }
+
+                        Player.COMMAND_SEEK_TO_PREVIOUS,
+                        Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
+                            Log.d("PlaybackService", "CAR_DIAG previous command")
+                            previousTrack()
+                            return SessionResult.RESULT_INFO_SKIPPED
+                        }
+
+                        Player.COMMAND_SEEK_FORWARD -> {
+                            Log.d("PlaybackService", "CAR_DIAG seek forward")
+                            seekBy(10000L)
+                            return SessionResult.RESULT_INFO_SKIPPED
+                        }
+
+                        Player.COMMAND_SEEK_BACK -> {
+                            Log.d("PlaybackService", "CAR_DIAG seek back")
+                            seekBy(-10000L)
+                            return SessionResult.RESULT_INFO_SKIPPED
+                        }
+                    }
+
+                    return super.onPlayerCommandRequest(
+                        session,
+                        controller,
+                        playerCommand
+                    )
                 }
 
                 override fun onPostConnect(
