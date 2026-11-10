@@ -565,12 +565,14 @@ override fun onCreate() {
     private suspend fun playNext(item: VideoItem) {
         val player = exoPlayer ?: return
         try {
-            player.currentMediaItem?.mediaId?.let { currentId ->
-                if (currentId.isNotBlank() && currentId != item.videoId) {
-                    playbackHistory.remove(currentId)
-                    playbackHistory.addLast(currentId)
-                    while (playbackHistory.size > 30) {
-                        playbackHistory.removeFirst()
+            withContext(Dispatchers.Main) {
+                player.currentMediaItem?.mediaId?.let { currentId ->
+                    if (currentId.isNotBlank() && currentId != item.videoId) {
+                        playbackHistory.remove(currentId)
+                        playbackHistory.addLast(currentId)
+                        while (playbackHistory.size > 30) {
+                            playbackHistory.removeFirst()
+                        }
                     }
                 }
             }
