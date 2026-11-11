@@ -24,7 +24,7 @@ object PlaybackWarmup {
                 } catch (_: Exception) { null }
 
                 if (!token.isNullOrBlank()) {
-                    val url = "http://193.123.167.118:5000/warm?v=$id&token=$token"
+                    val url = "https://mymyplay.duckdns.org/warm?v=$id&token=$token"
                     val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
                     conn.connectTimeout = 3000
                     conn.readTimeout = 5000
