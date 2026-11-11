@@ -95,7 +95,7 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun requestJwtForPin(pin: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val conn = java.net.URL("https://mymyplay.duckdns.org/auth").openConnection() as java.net.HttpURLConnection
+            val conn = java.net.URL("${ServerConfig.get()}/auth").openConnection() as java.net.HttpURLConnection
             conn.connectTimeout = 10000
             conn.readTimeout = 15000
             conn.requestMethod = "POST"
@@ -396,7 +396,7 @@ class MainActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                val url = java.net.URL("https://mymyplay.duckdns.org/health_check")
+                val url = java.net.URL("${ServerConfig.get()}/health_check")
                 val conn = url.openConnection() as java.net.HttpURLConnection
                 conn.requestMethod = "GET"
                 conn.setRequestProperty("Authorization", "Bearer $token")
