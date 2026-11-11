@@ -599,7 +599,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 try {
                     for (ep in listOf("media_audio_only", "media_video_only")) {
                         try {
-                            val url = "http://193.123.167.118:5000/$ep?v=$vid&token=$token"
+                            val url = "https://mymyplay.duckdns.org/$ep?v=$vid&token=$token"
                             val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
                             conn.requestMethod = "HEAD"
                             conn.connectTimeout = 3000
@@ -1708,7 +1708,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                             bgScope.launch {
                                 try {
                                     val token = getSharedPreferences("server_auth", MODE_PRIVATE).getString("jwt", "") ?: ""
-                                    val mediaUrl = "http://193.123.167.118:5000/media?v=$vid&token=$token"
+                                    val mediaUrl = "https://mymyplay.duckdns.org/media?v=$vid&token=$token"
                                     diag("폴백 URL: $mediaUrl")
                                     withContext(Dispatchers.Main) {
                                         val mi = androidx.media3.common.MediaItem.Builder()
