@@ -35,7 +35,8 @@ object YouTubeStream {
     private var npVideoSkipUntil = Long.MAX_VALUE   // ★ 영구 스킵
 
     // ★★★ WARP+POT 서버 API (IP 봇 판정 우회)
-    private const val SERVER_API_URL = "https://mymyplay.duckdns.org"
+    private val SERVER_API_URL: String
+        get() = ServerConfig.get()
 
     private fun flogServer(msg: String) {
         android.util.Log.d(TAG, "[SRV] $msg")

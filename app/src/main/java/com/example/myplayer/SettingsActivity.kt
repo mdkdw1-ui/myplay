@@ -17,16 +17,28 @@ class SettingsActivity : AppCompatActivity() {
         val etServerUrl = findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etServerUrl)
         val btnSaveServerUrl = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSaveServerUrl)
 
-        etServerUrl.setText(ServerConfig.get(this))
+        etServerUrl.setText(ServerConfig.get())
 
-        btnSaveServerUrl.setOnClickListener {
+        fun saveServerUrl() {
             val url = etServerUrl.text?.toString()?.trim().orEmpty()
-            if (url.isNotBlank()) {
-                ServerConfig.set(this, url)
-                android.widget.Toast.makeText(this, "서버 주소 저장됨", android.widget.Toast.LENGTH_SHORT).show()
+            if (url.isBlank()) {
+                Toast.makeText(this, "서버 주소를 입력하세요", Toast.LENGTH_SHORT).show()
+                return
+            }
+            ServerConfig.set(this, url)
+            Toast.makeText(this, "서버 주소 저장됨", Toast.LENGTH_SHORT).show()
+        }
+
+        etServerUrl.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                saveServerUrl()
+                true
+            } else {
+                false
             }
         }
 
+        btnSaveServerUrl.setOnClickListener { saveServerUrl() }
 
         findViewById<View>(R.id.btnBack)?.setOnClickListener { finish() }
 
@@ -106,7 +118,7 @@ class SettingsActivity : AppCompatActivity() {
     private suspend fun requestJwtFromSettings(pin: String): Boolean =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val conn = java.net.URL("https://mymyplay.duckdns.org/auth").openConnection() as java.net.HttpURLConnection
+                val conn = java.net.URL("${ServerConfig.get()}/auth").openConnection() as java.net.HttpURLConnection
                 conn.connectTimeout = 10000
                 conn.readTimeout = 15000
                 conn.requestMethod = "POST"

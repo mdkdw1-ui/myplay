@@ -1704,7 +1704,7 @@ class PlayerActivity : AppCompatActivity() {
             Toast.makeText(this, "인증이 필요합니다", Toast.LENGTH_SHORT).show()
             return
         }
-        val url = "https://mymyplay.duckdns.org/media_download?v=$currentVideoId&q=$quality&token=$token"
+        val url = "${ServerConfig.get()}/media_download?v=$currentVideoId&q=$quality&token=$token"
         lifecycleScope.launch {
             val exists = try {
                 HistoryDatabase.get(applicationContext).downloadDao().isDownloaded(currentVideoId)

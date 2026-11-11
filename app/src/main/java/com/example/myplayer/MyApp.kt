@@ -9,6 +9,7 @@ class MyApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        ServerConfig.init(this)
 
         try {
             val pf = getSharedPreferences("app_prefs", MODE_PRIVATE)
