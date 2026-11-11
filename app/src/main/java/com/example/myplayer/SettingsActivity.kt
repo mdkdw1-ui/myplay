@@ -14,6 +14,19 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
+        val etServerUrl = findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etServerUrl)
+        val btnSaveServerUrl = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSaveServerUrl)
+
+        etServerUrl.setText(ServerConfig.get(this))
+
+        btnSaveServerUrl.setOnClickListener {
+            val url = etServerUrl.text?.toString()?.trim().orEmpty()
+            if (url.isNotBlank()) {
+                ServerConfig.set(this, url)
+                android.widget.Toast.makeText(this, "서버 주소 저장됨", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+
 
         findViewById<View>(R.id.btnBack)?.setOnClickListener { finish() }
 
