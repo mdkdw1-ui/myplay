@@ -157,7 +157,31 @@ object YouTubeStream {
 
 
     /** ★ 서버 /media_urls에서 video+audio URL을 한 번에 병렬로 획득 */
-    suspend fun fetchBothUrls(videoId: String): Pair<String?, String?> = withContext(Dispatchers.IO) {
+    suspend fun fetchMetadata(videoId: String): Pair<String, String> = withContext(Dispatchers.IO) {
+    try {
+        val token = getJwtToken() ?: return@withContext Pair("", "")
+        val url = "$SERVER_API_URL/metadata?v=$videoId&token=$token"
+        val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+        conn.connectTimeout = 5000
+        conn.readTimeout = 15000
+        conn.setRequestProperty("Authorization", "Bearer $token")
+        if (conn.responseCode !in 200..299) {
+            flogServer("/metadata HTTP ${conn.responseCode}")
+            return@withContext Pair("", "")
+        }
+        val body = conn.inputStream.bufferedReader().use { it.readText() }
+        val json = org.json.JSONObject(body)
+        Pair(
+            json.optString("description", ""),
+            json.optString("title", "")
+        )
+    } catch (e: Exception) {
+        flogServer("/metadata err: ${e.message}")
+        Pair("", "")
+    }
+}
+
+suspend fun fetchBothUrls(videoId: String): Pair<String?, String?> = withContext(Dispatchers.IO) {
         try {
             val token = getJwtToken() ?: return@withContext Pair(null, null)
             val url = "$SERVER_API_URL/media_urls?v=$videoId&token=$token"

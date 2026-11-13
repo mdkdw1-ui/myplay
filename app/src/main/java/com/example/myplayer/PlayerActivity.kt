@@ -1392,6 +1392,16 @@ class PlayerActivity : AppCompatActivity() {
             (findViewById<TextView>(R.id.tvTitle)).text = finalTitle
             (findViewById<TextView>(R.id.tvChannel)).text = finalChannel
 
+            // ★★★ [수정] 서버 /metadata에서 설명란 가져오기 ★★★
+            var fetchedDesc = ""
+            try {
+                val (desc, _) = YouTubeStream.fetchMetadata(videoId)
+                fetchedDesc = desc
+                vdiag("fetchMetadata: ${desc.take(100)}")
+            } catch (e: Exception) {
+                vdiag("fetchMetadata err: ${e.message}")
+            }
+
             val descText = if (result.description.isNotBlank()) {
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -1403,6 +1413,8 @@ class PlayerActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     result.description.replace(Regex("<[^>]+>"), " ")
                 }.replace(Regex("\\s+"), " ").trim()
+            } else if (fetchedDesc.isNotBlank()) {
+                fetchedDesc
             } else "(설명 없음)"
 
             // ★ 타임스탬프 클릭 가능하게
