@@ -558,8 +558,8 @@ class PlayerActivity : AppCompatActivity() {
             val curId = curItem.mediaId
 
             runOnUiThread {
-                tvTitle.text = chapterTitle
-                tvChannel.text = "🎵 챕터 이동"
+                findViewById<android.widget.TextView>(R.id.tvTitle)?.text = chapterTitle
+                findViewById<android.widget.TextView>(R.id.tvChannel)?.text = "🎵 챕터 이동"
                 android.widget.Toast.makeText(this, chapterTitle, android.widget.Toast.LENGTH_SHORT).show()
             }
 
@@ -583,8 +583,8 @@ class PlayerActivity : AppCompatActivity() {
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 try {
                     runOnUiThread {
-                        tvTitle.text = currentTitle
-                        tvChannel.text = currentChannel
+                        findViewById<android.widget.TextView>(R.id.tvTitle)?.text = currentTitle
+                        findViewById<android.widget.TextView>(R.id.tvChannel)?.text = currentChannel
                     }
                     val mc2 = mediaController ?: return@postDelayed
                     val item2 = mc2.currentMediaItem ?: return@postDelayed
