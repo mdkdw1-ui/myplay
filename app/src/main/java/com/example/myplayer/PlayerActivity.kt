@@ -559,17 +559,8 @@ class PlayerActivity : AppCompatActivity() {
                 if (nextChapter != null) {
                     mc.seekTo(nextChapter.startMs)
                     vdiag("playNextRelated: 챕터 이동 → ${nextChapter.startMs/1000}초 (${nextChapter.title})")
-                    // ★★★ 화면에 곡 이름 표시 ★★★
-                    runOnUiThread {
-                        tvTitle.text = nextChapter.title
-                        tvChannel.text = "🎵 챕터 이동"
-                        android.widget.Toast.makeText(this@PlayerActivity, nextChapter.title, android.widget.Toast.LENGTH_SHORT).show()
-                        // 3초 뒤 원래 제목으로 복구
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            tvTitle.text = currentTitle
-                            tvChannel.text = currentChannel
-                        }, 3000)
-                    }
+                    // ★★★ 앱 화면 + 테슬라 화면 동시 업데이트 ★★★
+                    updateChapterMetadata(nextChapter.title)
                     return
                 }
             }
