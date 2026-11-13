@@ -549,7 +549,69 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun isRecent(videoId: String): Boolean = videoId in recentVideoIds
 
-    private fun playNextRelated() {
+        /** 챕터 이동 시 앱 화면 + 테슬라(MediaSession) 동시 업데이트 */
+    private fun updateChapterMetadata(chapterTitle: String) {
+        try {
+            val mc = mediaController ?: return
+            val curItem = mc.currentMediaItem ?: return
+            val curUrl = curItem.localConfiguration?.uri ?: return
+            val curId = curItem.mediaId
+
+            runOnUiThread {
+                tvTitle.text = chapterTitle
+                tvChannel.text = "🎵 챕터 이동"
+                android.widget.Toast.makeText(this, chapterTitle, android.widget.Toast.LENGTH_SHORT).show()
+            }
+
+            val newMeta = androidx.media3.common.MediaMetadata.Builder()
+                .setTitle(chapterTitle)
+                .setArtist(currentChannel)
+                .setAlbumTitle(currentTitle)
+                .setArtworkUri(android.net.Uri.parse(currentThumb))
+                .build()
+            val newItem = androidx.media3.common.MediaItem.Builder()
+                .setUri(curUrl)
+                .setMediaId(curId)
+                .setMediaMetadata(newMeta)
+                .build()
+            val idx = mc.currentMediaItemIndex
+            if (idx >= 0 && idx < mc.mediaItemCount) {
+                mc.replaceMediaItem(idx, newItem)
+                vdiag("updateChapterMetadata: 테슬라 메타 갱신 → $chapterTitle")
+            }
+
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    runOnUiThread {
+                        tvTitle.text = currentTitle
+                        tvChannel.text = currentChannel
+                    }
+                    val mc2 = mediaController ?: return@postDelayed
+                    val item2 = mc2.currentMediaItem ?: return@postDelayed
+                    val url2 = item2.localConfiguration?.uri ?: return@postDelayed
+                    val origMeta = androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(currentTitle)
+                        .setArtist(currentChannel)
+                        .setArtworkUri(android.net.Uri.parse(currentThumb))
+                        .build()
+                    val origItem = androidx.media3.common.MediaItem.Builder()
+                        .setUri(url2)
+                        .setMediaId(item2.mediaId)
+                        .setMediaMetadata(origMeta)
+                        .build()
+                    val idx2 = mc2.currentMediaItemIndex
+                    if (idx2 >= 0 && idx2 < mc2.mediaItemCount) {
+                        mc2.replaceMediaItem(idx2, origItem)
+                        vdiag("updateChapterMetadata: 테슬라 메타 원복")
+                    }
+                } catch (_: Exception) {}
+            }, 5000)
+        } catch (e: Exception) {
+            vdiag("updateChapterMetadata err: ${e.message}")
+        }
+    }
+
+private fun playNextRelated() {
         // ★★★ 챕터가 있으면 다음 챕터로 이동 ★★★
         if (currentChapters.size >= 2) {
             val mc = mediaController
