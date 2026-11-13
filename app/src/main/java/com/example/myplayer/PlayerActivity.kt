@@ -135,6 +135,7 @@ class PlayerActivity : AppCompatActivity() {
     private var switchingToAudio: Boolean = false   // ★ 오디오 모드 전환 플래그
     private var currentTitle: String = ""
     private var currentDescription: String = ""
+    private var currentChapters: List<Chapter> = emptyList()
     private var currentChannel: String = ""
     private var currentThumb: String = ""
 
@@ -549,6 +550,20 @@ class PlayerActivity : AppCompatActivity() {
     private fun isRecent(videoId: String): Boolean = videoId in recentVideoIds
 
     private fun playNextRelated() {
+        // ★★★ 챕터가 있으면 다음 챕터로 이동 ★★★
+        if (currentChapters.size >= 2) {
+            val mc = mediaController
+            if (mc != null) {
+                val currentPos = mc.currentPosition
+                val nextChapter = currentChapters.firstOrNull { it.startMs > currentPos + 1000 }
+                if (nextChapter != null) {
+                    mc.seekTo(nextChapter.startMs)
+                    vdiag("playNextRelated: 챕터 이동 → ${nextChapter.startMs/1000}초")
+                    return
+                }
+            }
+        }
+
         addRecent(currentVideoId)
 
         // ★ 큐에 다음 영상이 있으면 큐 우선
@@ -1355,7 +1370,7 @@ class PlayerActivity : AppCompatActivity() {
         // ★★★ [수정] 영상 설명란 fetch + 표시 ★★★
         lifecycleScope.launch {
             try {
-                val (desc, _) = YouTubeStream.fetchMetadata(videoId)
+                val (desc, _, duration) = YouTubeStream.fetchMetadata(videoId)
                 currentDescription = desc
                 runOnUiThread {
                     if (desc.isNotBlank()) {

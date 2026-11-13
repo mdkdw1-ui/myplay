@@ -157,9 +157,9 @@ object YouTubeStream {
 
 
     /** ★ 서버 /media_urls에서 video+audio URL을 한 번에 병렬로 획득 */
-    suspend fun fetchMetadata(videoId: String): Pair<String, String> = withContext(Dispatchers.IO) {
+    suspend fun fetchMetadata(videoId: String): Triple<String, String, Long> = withContext(Dispatchers.IO) {
     try {
-        val token = getJwtToken() ?: return@withContext Pair("", "")
+        val token = getJwtToken() ?: return@withContext Triple("", "", 0L)
         val url = "$SERVER_API_URL/metadata?v=$videoId&token=$token"
         val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
         conn.connectTimeout = 5000
@@ -167,17 +167,18 @@ object YouTubeStream {
         conn.setRequestProperty("Authorization", "Bearer $token")
         if (conn.responseCode !in 200..299) {
             flogServer("/metadata HTTP ${conn.responseCode}")
-            return@withContext Pair("", "")
+            return@withContext Triple("", "", 0L)
         }
         val body = conn.inputStream.bufferedReader().use { it.readText() }
         val json = org.json.JSONObject(body)
-        Pair(
+        Triple(
             json.optString("description", ""),
-            json.optString("title", "")
+            json.optString("title", ""),
+            json.optLong("duration", 0L)
         )
     } catch (e: Exception) {
         flogServer("/metadata err: ${e.message}")
-        Pair("", "")
+        Triple("", "", 0L)
     }
 }
 
