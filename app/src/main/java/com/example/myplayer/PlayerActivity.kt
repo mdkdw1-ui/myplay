@@ -134,6 +134,7 @@ class PlayerActivity : AppCompatActivity() {
     private var currentVideoId: String = ""
     private var switchingToAudio: Boolean = false   // ★ 오디오 모드 전환 플래그
     private var currentTitle: String = ""
+    private var currentDescription: String = ""
     private var currentChannel: String = ""
     private var currentThumb: String = ""
 
@@ -1351,6 +1352,32 @@ class PlayerActivity : AppCompatActivity() {
     private fun extractAndPlay(
         videoId: String, title: String, channel: String, thumb: String, startPosMs: Long = 0L
     ) {
+        // ★★★ [수정] 영상 설명란 fetch + 표시 ★★★
+        lifecycleScope.launch {
+            try {
+                val (desc, _) = YouTubeStream.fetchMetadata(videoId)
+                currentDescription = desc
+                runOnUiThread {
+                    if (desc.isNotBlank()) {
+                        val cleanDesc = try {
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                                Html.fromHtml(desc, Html.FROM_HTML_MODE_LEGACY).toString()
+                            } else {
+                                Html.fromHtml(desc).toString()
+                            }
+                        } catch (e: Exception) { desc }
+                        .replace(Regex("\\s+"), " ").trim()
+                        makeTimestampsClickable(findViewById(R.id.tvDescription), cleanDesc)
+                        vdiag("desc OK: ${cleanDesc.take(80)}")
+                    } else {
+                        (findViewById<TextView>(R.id.tvDescription)).text = "(설명 없음)"
+                    }
+                }
+            } catch (e: Exception) {
+                vdiag("fetchMetadata err: ${e.message}")
+            }
+        }
+
         vdiag("extractAndPlay: $videoId ($title)")
         resetZoom()
         progress.visibility = View.VISIBLE
