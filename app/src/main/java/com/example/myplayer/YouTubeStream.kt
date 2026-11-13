@@ -163,7 +163,7 @@ object YouTubeStream {
         val url = "$SERVER_API_URL/metadata?v=$videoId&token=$token"
         val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
         conn.connectTimeout = 5000
-        conn.readTimeout = 15000
+        conn.readTimeout = 30000
         conn.setRequestProperty("Authorization", "Bearer $token")
         if (conn.responseCode !in 200..299) {
             flogServer("/metadata HTTP ${conn.responseCode}")
