@@ -998,23 +998,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             if (idx >= 0 && idx < mc.mediaItemCount) mc.replaceMediaItem(idx, newItem)
 
             // ★ 다음 곡/영상 전환 시까지 제목 유지 (복구 로직 제거)
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                try {
-                    // 테슬라 메타데이터만 원복 (앱 화면 제목은 유지)
-                    // runOnUiThread { tvTitle.text = currentTitle } 등은 제거
-
-                    val mc2 = mediaController ?: return@postDelayed
-                    val item2 = mc2.currentMediaItem ?: return@postDelayed
-                    val url2 = item2.localConfiguration?.uri ?: return@postDelayed
-                    val origMeta = androidx.media3.common.MediaMetadata.Builder()
-                        .setTitle(currentTitle).setArtist(currentChannel)
-                        .setArtworkUri(android.net.Uri.parse(currentThumb)).build()
-                    val origItem = androidx.media3.common.MediaItem.Builder()
-                        .setUri(url2).setMediaId(item2.mediaId).setMediaMetadata(origMeta).build()
-                    val idx2 = mc2.currentMediaItemIndex
-                    if (idx2 >= 0 && idx2 < mc2.mediaItemCount) mc2.replaceMediaItem(idx2, origItem)
-                } catch (_: Exception) {}
-            }, 5000)
+            // postDelayed 원복 로직을 삭제하여 챕터 제목이 계속 유지되도록 합니다.
         } catch (e: Exception) {}
     }
 
@@ -1842,6 +1826,7 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                 currentChannel = newChannel
                 currentThumb = newThumb
                 currentArtist = ""
+                isShowingChapterTitle = false
                 currentSubtitleUrl = pref?.getString("current_subtitle_url", "") ?: ""
 
                 QueueManager.setCurrent(this@AudioPlayerActivity, newId)
@@ -2286,6 +2271,7 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                     val nextChapter = chapters.firstOrNull { it.startMs > currentPos + 1000 }
                     if (nextChapter != null) {
                         mc?.seekTo(nextChapter.startMs)
+                        updateChapterMetadataAudio(nextChapter.title)
                         diag("playNextManual: 타임스탬프 이동 → ${nextChapter.startMs/1000}초 (${nextChapter.title})")
                         return
                     }
@@ -2828,7 +2814,17 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
             override fun onStopTrackingTouch(sb: SeekBar?) {
                 isDragging = false
                 val dur = mc.duration
-                if (dur > 0) mc.seekTo((dur * (sb?.progress ?: 0) / 1000))
+                if (dur > 0) {
+                    val targetPos = (dur * (sb?.progress ?: 0) / 1000)
+                    mc.seekTo(targetPos)
+                    // 챕터 타이틀 업데이트
+                    if (currentChapters.size >= 2) {
+                        val chapter = currentChapters.lastOrNull { it.startMs <= targetPos }
+                        if (chapter != null) {
+                            updateChapterMetadataAudio(chapter.title)
+                        }
+                    }
+                }
                 // ★ 프리페치 트리거: 캐시가 2곡 미만일 때만 (중복 방지)
                 val pos = sb?.progress ?: 0
                 if (pos >= 500 && prefetchedStreams.size < 2 && prefetchJob?.isActive != true) {
@@ -3415,7 +3411,7 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                         val meta = mc.currentMediaItem?.mediaMetadata
                         val newTitle = meta?.title?.toString() ?: ""
                         val newChannel = meta?.artist?.toString() ?: ""
-                        if (newTitle.isNotBlank() && newTitle != currentTitle) {
+                        if (!isShowingChapterTitle && newTitle.isNotBlank() && newTitle != currentTitle) {
                             currentTitle = newTitle
                             currentChannel = newChannel
                             runOnUiThread {
