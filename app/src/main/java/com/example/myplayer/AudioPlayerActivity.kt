@@ -66,6 +66,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private val nextPreviewList = mutableListOf<HomeVideo>()
     private var audioSwipeDetector: android.view.GestureDetector? = null   // ★ 다음 곡 미리보기용   // ★ 이어듣기 시작 위치
     private var currentTitle: String = ""
+    private var currentDescription: String = ""
+    private var currentChapters: List<Chapter> = emptyList()
     private var currentChannel: String = ""
     private var currentThumb: String = ""
     private var currentArtist: String = ""
@@ -942,7 +944,72 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadAudio(videoId: String, isInitial: Boolean = false) {
+        private fun loadChapters(videoId: String) {
+        bgScope.launch {
+            try {
+                val (desc, _, duration) = YouTubeStream.fetchMetadata(videoId)
+                if (videoId != currentVideoId) return@launch
+                currentDescription = desc
+                var chapters = YouTubeChapters.parse(desc)
+                if (chapters.size < 2 && duration > 600) {
+                    diag("Groq AI 타임스탬프 생성 시작 (duration=${duration}초)")
+                    val aiTimestamps = GroqChapterExtractor.generateTimestamps(desc, duration)
+                    if (aiTimestamps.isNotBlank()) {
+                        chapters = YouTubeChapters.parse(aiTimestamps)
+                        diag("Groq AI 타임스탬프 완료: ${chapters.size}개")
+                    }
+                }
+                currentChapters = chapters
+                diag("챕터 로드: ${chapters.size}개")
+            } catch (e: Exception) {
+                diag("metadata/Groq err: ${e.message}")
+            }
+        }
+    }
+
+    private fun updateChapterMetadataAudio(chapterTitle: String) {
+        try {
+            val mc = mediaController ?: return
+            val curItem = mc.currentMediaItem ?: return
+            val curUrl = curItem.localConfiguration?.uri ?: return
+            val curId = curItem.mediaId
+
+            runOnUiThread {
+                tvTitle.text = chapterTitle
+                tvChannel.text = "🎵 챕터 이동"
+                android.widget.Toast.makeText(this, chapterTitle, android.widget.Toast.LENGTH_SHORT).show()
+            }
+
+            val newMeta = androidx.media3.common.MediaMetadata.Builder()
+                .setTitle(chapterTitle).setArtist(currentChannel)
+                .setArtworkUri(android.net.Uri.parse(currentThumb)).build()
+            val newItem = androidx.media3.common.MediaItem.Builder()
+                .setUri(curUrl).setMediaId(curId).setMediaMetadata(newMeta).build()
+            val idx = mc.currentMediaItemIndex
+            if (idx >= 0 && idx < mc.mediaItemCount) mc.replaceMediaItem(idx, newItem)
+
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    runOnUiThread {
+                        tvTitle.text = currentTitle
+                        tvChannel.text = currentChannel
+                    }
+                    val mc2 = mediaController ?: return@postDelayed
+                    val item2 = mc2.currentMediaItem ?: return@postDelayed
+                    val url2 = item2.localConfiguration?.uri ?: return@postDelayed
+                    val origMeta = androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(currentTitle).setArtist(currentChannel)
+                        .setArtworkUri(android.net.Uri.parse(currentThumb)).build()
+                    val origItem = androidx.media3.common.MediaItem.Builder()
+                        .setUri(url2).setMediaId(item2.mediaId).setMediaMetadata(origMeta).build()
+                    val idx2 = mc2.currentMediaItemIndex
+                    if (idx2 >= 0 && idx2 < mc2.mediaItemCount) mc2.replaceMediaItem(idx2, origItem)
+                } catch (_: Exception) {}
+            }, 5000)
+        } catch (e: Exception) {}
+    }
+
+private fun loadAudio(videoId: String, isInitial: Boolean = false) {
         // ★ 재생 시작 전 기존 프리페치 중단 (자원 경쟁 방지)
         try {
             prefetchJob?.cancel()
@@ -974,6 +1041,9 @@ class AudioPlayerActivity : AppCompatActivity() {
             currentVideoId = videoId
             
             diag("loadAudio 동기화 완료: $videoId")
+
+        // ★★★ 챕터 로드 ★★★
+        loadChapters(videoId)
         } catch (e: Exception) {
             diag("loadAudio 동기화 에러: ${e.message}")
         }
@@ -1943,6 +2013,20 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
 
         val mc = mediaController
+        
+        // ★★★ 챕터가 있으면 다음 챕터로 이동 (다음 영상 X) ★★★
+        if (currentChapters.size >= 2 && mc != null) {
+            val currentPos = mc.currentPosition
+            val nextChapter = currentChapters.firstOrNull { it.startMs > currentPos + 1000 }
+            if (nextChapter != null) {
+                mc.seekTo(nextChapter.startMs)
+                updateChapterMetadataAudio(nextChapter.title)
+                diag("playNextRelatedBg: 챕터 이동 → ${nextChapter.startMs/1000}초 (${nextChapter.title})")
+                loadingNext = false
+                return
+            }
+        }
+
         diag("playNextRelatedBg: mc=${mc != null} next=${mc?.hasNextMediaItem()} " +
              "idx=${mc?.currentMediaItemIndex}/${mc?.mediaItemCount}")
         if (mc != null && mc.hasNextMediaItem()) {
@@ -2174,6 +2258,28 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     private fun playNextManual() {
         val mc = mediaController
+        
+        // ★★★ [수정] 현재 곡 설명란에 타임스탬프가 있으면 다음 구간으로 이동 ★★★
+        try {
+            val currentDesc = currentDescription // (설명란 변수 필요 - 아래에서 추가)
+            if (currentDesc.isNotBlank()) {
+                val chapters = YouTubeChapters.parse(currentDesc)
+                if (chapters.size >= 2) {
+                    val currentPos = mc?.currentPosition ?: 0L
+                    // 현재 위치보다 큰 다음 챕터 찾기
+                    val nextChapter = chapters.firstOrNull { it.startMs > currentPos + 1000 }
+                    if (nextChapter != null) {
+                        mc?.seekTo(nextChapter.startMs)
+                        diag("playNextManual: 타임스탬프 이동 → ${nextChapter.startMs/1000}초 (${nextChapter.title})")
+                        return
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            diag("playNextManual 타임스탬프 파싱 err: ${e.message}")
+        }
+        
+        // 타임스탬프 없으면 기존 로직 (다음 곡)
         if (mc != null && mc.hasNextMediaItem()) {
             mc.seekToNextMediaItem()
             return
