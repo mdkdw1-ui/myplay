@@ -68,6 +68,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var currentTitle: String = ""
     private var currentDescription: String = ""
     private var currentChapters: List<Chapter> = emptyList()
+    private var isShowingChapterTitle = false
+    private var chapterTitleToShow: String = ""
     private var currentChannel: String = ""
     private var currentThumb: String = ""
     private var currentArtist: String = ""
@@ -820,8 +822,13 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         val isLocal = currentVideoId.startsWith("local:") || currentVideoId.isBlank()
         findViewById<View>(R.id.btnVideoMode)?.visibility = if (isLocal) View.GONE else View.VISIBLE
-        tvTitle.text = currentTitle
-        tvChannel.text = currentChannel
+        if (isShowingChapterTitle) {
+            tvTitle.text = chapterTitleToShow
+            tvChannel.text = "🎵 챕터 이동"
+        } else {
+            tvTitle.text = currentTitle
+            tvChannel.text = currentChannel
+        }
         if (currentThumb.isNotEmpty()) {
             Glide.with(this).load(currentThumb).into(ivArt)
             Glide.with(this).load(currentThumb).into(ivBackground)
@@ -974,6 +981,8 @@ class AudioPlayerActivity : AppCompatActivity() {
             val curUrl = curItem.localConfiguration?.uri ?: return
             val curId = curItem.mediaId
 
+            isShowingChapterTitle = true
+            chapterTitleToShow = chapterTitle
             runOnUiThread {
                 tvTitle.text = chapterTitle
                 tvChannel.text = "🎵 챕터 이동"
@@ -988,12 +997,12 @@ class AudioPlayerActivity : AppCompatActivity() {
             val idx = mc.currentMediaItemIndex
             if (idx >= 0 && idx < mc.mediaItemCount) mc.replaceMediaItem(idx, newItem)
 
+            // ★ 다음 곡/영상 전환 시까지 제목 유지 (복구 로직 제거)
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 try {
-                    runOnUiThread {
-                        tvTitle.text = currentTitle
-                        tvChannel.text = currentChannel
-                    }
+                    // 테슬라 메타데이터만 원복 (앱 화면 제목은 유지)
+                    // runOnUiThread { tvTitle.text = currentTitle } 등은 제거
+
                     val mc2 = mediaController ?: return@postDelayed
                     val item2 = mc2.currentMediaItem ?: return@postDelayed
                     val url2 = item2.localConfiguration?.uri ?: return@postDelayed
@@ -1043,6 +1052,13 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
             diag("loadAudio 동기화 완료: $videoId")
 
         // ★★★ 챕터 로드 ★★★
+        // ★★★ 새 영상 로드 시 챕터 제목 해제 및 원래 제목 복구 ★★★
+        isShowingChapterTitle = false
+        runOnUiThread {
+            tvTitle.text = currentTitle
+            tvChannel.text = currentChannel
+        }
+
         loadChapters(videoId)
         } catch (e: Exception) {
             diag("loadAudio 동기화 에러: ${e.message}")
