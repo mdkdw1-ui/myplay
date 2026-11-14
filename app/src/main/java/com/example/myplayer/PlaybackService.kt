@@ -291,6 +291,24 @@ override fun onCreate() {
                 ) {
                     // 연결 시 자동 재생 방지
                 }
+
+                // ★★★ 테슬라/블루투스가 보내는 미디어 제어 메서드 전부 오버라이드 ★★★
+                override fun onSeekToNextMediaItem(session: MediaSession) {
+                    Log.d("PlaybackService", "onSeekToNextMediaItem")
+                    handleNext()
+                }
+                override fun onSeekToPreviousMediaItem(session: MediaSession) {
+                    Log.d("PlaybackService", "onSeekToPreviousMediaItem")
+                    handlePrev()
+                }
+                override fun onSeekToNext(session: MediaSession) {
+                    Log.d("PlaybackService", "onSeekToNext")
+                    handleNext()
+                }
+                override fun onSeekToPrevious(session: MediaSession) {
+                    Log.d("PlaybackService", "onSeekToPrevious")
+                    handlePrev()
+                }
             })
             .build()
 
@@ -368,7 +386,129 @@ override fun onCreate() {
         Log.d("PlaybackService", "seekBy $deltaMs -> $target")
     }
 
-    private fun nextTrack() {
+    
+    /** 통합 Next 처리: 챕터 있으면 챕터 이동, 없으면 다음 영상 */
+    private fun handleNext() {
+        try {
+            val player = exoPlayer
+            if (player != null) {
+                val prefs = getSharedPreferences("chapter_prefs", Context.MODE_PRIVATE)
+                val chaptersJson = prefs.getString("chapters", "") ?: ""
+                if (chaptersJson.isNotBlank()) {
+                    val arr = org.json.JSONArray(chaptersJson)
+                    val currentPos = player.currentPosition
+                    var nextStart = -1L
+                    var nextTitle = ""
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        val start = o.optLong("startMs", -1L)
+                        if (start > currentPos + 1000) {
+                            nextStart = start
+                            nextTitle = o.optString("title", "")
+                            break
+                        }
+                    }
+                    if (nextStart > 0) {
+                        Log.d("PlaybackService", "handleNext: 챕터 이동 → ${nextStart/1000}초 ($nextTitle)")
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            player.seekTo(nextStart)
+                            try {
+                                val curItem = player.currentMediaItem
+                                if (curItem != null) {
+                                    val newMeta = MediaMetadata.Builder()
+                                        .setTitle(nextTitle)
+                                        .setArtist(curItem.mediaMetadata.artist)
+                                        .setArtworkUri(curItem.mediaMetadata.artworkUri)
+                                        .build()
+                                    val newItem = MediaItem.Builder()
+                                        .setUri(curItem.localConfiguration?.uri)
+                                        .setMediaId(curItem.mediaId)
+                                        .setMediaMetadata(newMeta)
+                                        .build()
+                                    player.replaceMediaItem(player.currentMediaItemIndex, newItem)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                        return
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PlaybackService", "handleNext err: ${e.message}")
+        }
+        // 챕터 없으면 다음 영상
+        serviceScope.launch {
+            val next = resolveNext()
+            if (next != null) {
+                playNext(next)
+            } else {
+                Log.d("PlaybackService", "handleNext: no next")
+            }
+        }
+    }
+
+    /** 통합 Prev 처리: 챕터 있으면 이전 챕터, 없으면 이전 영상 */
+    private fun handlePrev() {
+        try {
+            val player = exoPlayer
+            if (player != null) {
+                val prefs = getSharedPreferences("chapter_prefs", Context.MODE_PRIVATE)
+                val chaptersJson = prefs.getString("chapters", "") ?: ""
+                if (chaptersJson.isNotBlank()) {
+                    val arr = org.json.JSONArray(chaptersJson)
+                    val currentPos = player.currentPosition
+                    var prevStart = -1L
+                    var prevTitle = ""
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        val start = o.optLong("startMs", -1L)
+                        if (start < currentPos - 3000) {
+                            prevStart = start
+                            prevTitle = o.optString("title", "")
+                        }
+                    }
+                    if (prevStart >= 0) {
+                        Log.d("PlaybackService", "handlePrev: 챕터 이동 → ${prevStart/1000}초 ($prevTitle)")
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            player.seekTo(prevStart)
+                            try {
+                                val curItem = player.currentMediaItem
+                                if (curItem != null) {
+                                    val newMeta = MediaMetadata.Builder()
+                                        .setTitle(prevTitle)
+                                        .setArtist(curItem.mediaMetadata.artist)
+                                        .setArtworkUri(curItem.mediaMetadata.artworkUri)
+                                        .build()
+                                    val newItem = MediaItem.Builder()
+                                        .setUri(curItem.localConfiguration?.uri)
+                                        .setMediaId(curItem.mediaId)
+                                        .setMediaMetadata(newMeta)
+                                        .build()
+                                    player.replaceMediaItem(player.currentMediaItemIndex, newItem)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                        return
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PlaybackService", "handlePrev err: ${e.message}")
+        }
+        // 챕터 없으면 처음으로
+        try {
+            val player = exoPlayer
+            if (player != null) {
+                if (player.currentPosition > 3000L) {
+                    player.seekTo(0L)
+                } else if (player.hasPreviousMediaItem()) {
+                    player.seekToPreviousMediaItem()
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+private fun nextTrack() {
         // ★★★ SharedPreferences에서 챕터 읽어서 다음 챕터로 이동 ★★★
         try {
             val p = exoPlayer
