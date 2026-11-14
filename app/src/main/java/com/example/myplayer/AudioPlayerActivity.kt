@@ -148,13 +148,22 @@ class AudioPlayerActivity : AppCompatActivity() {
         try {
             val skipReceiver = object : android.content.BroadcastReceiver() {
                 override fun onReceive(ctx: android.content.Context?, intent: android.content.Intent?) {
-                    if (intent?.action == "com.example.myplayer.ACTION_SKIP_NEXT") {
-                        diag("broadcast: ACTION_SKIP_NEXT 수신")
-                        playNextManual()
+                    when (intent?.action) {
+                        "com.example.myplayer.ACTION_SKIP_NEXT" -> {
+                            diag("broadcast: ACTION_SKIP_NEXT 수신")
+                            playNextManual()
+                        }
+                        "com.example.myplayer.ACTION_SKIP_PREV" -> {
+                            diag("broadcast: ACTION_SKIP_PREV 수신")
+                            playPrevious()
+                        }
                     }
                 }
             }
-            val filter = android.content.IntentFilter("com.example.myplayer.ACTION_SKIP_NEXT")
+            val filter = android.content.IntentFilter().apply {
+                addAction("com.example.myplayer.ACTION_SKIP_NEXT")
+                addAction("com.example.myplayer.ACTION_SKIP_PREV")
+            }
             if (android.os.Build.VERSION.SDK_INT >= 33) {
                 registerReceiver(skipReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
             } else {
@@ -968,6 +977,21 @@ class AudioPlayerActivity : AppCompatActivity() {
                 }
                 currentChapters = chapters
                 diag("챕터 로드: ${chapters.size}개")
+                // ★★★ Service가 읽을 수 있도록 SharedPreferences에 저장 ★★★
+                try {
+                    val arr = org.json.JSONArray()
+                    for (ch in chapters) {
+                        val o = org.json.JSONObject()
+                        o.put("startMs", ch.startMs)
+                        o.put("title", ch.title)
+                        arr.put(o)
+                    }
+                    getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+                        .edit().putString("chapters", arr.toString()).apply()
+                    diag("챕터 저장 완료 (${chapters.size}개)")
+                } catch (e: Exception) {
+                    diag("챕터 저장 err: ${e.message}")
+                }
             } catch (e: Exception) {
                 diag("metadata/Groq err: ${e.message}")
             }

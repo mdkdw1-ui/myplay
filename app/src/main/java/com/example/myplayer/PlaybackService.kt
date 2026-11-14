@@ -369,6 +369,55 @@ override fun onCreate() {
     }
 
     private fun nextTrack() {
+        // ★★★ SharedPreferences에서 챕터 읽어서 다음 챕터로 이동 ★★★
+        try {
+            val p = exoPlayer
+            if (p != null) {
+                val prefs = getSharedPreferences("chapter_prefs", Context.MODE_PRIVATE)
+                val chaptersJson = prefs.getString("chapters", "") ?: ""
+                if (chaptersJson.isNotBlank()) {
+                    val arr = org.json.JSONArray(chaptersJson)
+                    val currentPos = p.currentPosition
+                    var nextStart = -1L
+                    var nextTitle = ""
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        val start = o.optLong("startMs", -1L)
+                        if (start > currentPos + 1000) {
+                            nextStart = start
+                            nextTitle = o.optString("title", "")
+                            break
+                        }
+                    }
+                    if (nextStart > 0) {
+                        Log.d("PlaybackService", "nextTrack: 챕터 이동 → ${nextStart/1000}초 ($nextTitle)")
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            p.seekTo(nextStart)
+                            try {
+                                val curItem = p.currentMediaItem
+                                if (curItem != null) {
+                                    val newMeta = MediaMetadata.Builder()
+                                        .setTitle(nextTitle)
+                                        .setArtist(curItem.mediaMetadata.artist)
+                                        .setArtworkUri(curItem.mediaMetadata.artworkUri)
+                                        .build()
+                                    val newItem = MediaItem.Builder()
+                                        .setUri(curItem.localConfiguration?.uri)
+                                        .setMediaId(curItem.mediaId)
+                                        .setMediaMetadata(newMeta)
+                                        .build()
+                                    p.replaceMediaItem(p.currentMediaItemIndex, newItem)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                        return
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PlaybackService", "nextTrack chapter err: ${e.message}")
+        }
+
         Log.d("PlaybackService", "CAR_DIAG nextTrack entered")
         serviceScope.launch {
             val next = resolveNext()
@@ -382,6 +431,54 @@ override fun onCreate() {
     }
 
     private fun previousTrack() {
+        // ★★★ SharedPreferences에서 챕터 읽어서 이전 챕터로 이동 ★★★
+        try {
+            val p = exoPlayer
+            if (p != null) {
+                val prefs = getSharedPreferences("chapter_prefs", Context.MODE_PRIVATE)
+                val chaptersJson = prefs.getString("chapters", "") ?: ""
+                if (chaptersJson.isNotBlank()) {
+                    val arr = org.json.JSONArray(chaptersJson)
+                    val currentPos = p.currentPosition
+                    var prevStart = -1L
+                    var prevTitle = ""
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        val start = o.optLong("startMs", -1L)
+                        if (start < currentPos - 3000) {
+                            prevStart = start
+                            prevTitle = o.optString("title", "")
+                        }
+                    }
+                    if (prevStart >= 0) {
+                        Log.d("PlaybackService", "previousTrack: 챕터 이동 → ${prevStart/1000}초 ($prevTitle)")
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            p.seekTo(prevStart)
+                            try {
+                                val curItem = p.currentMediaItem
+                                if (curItem != null) {
+                                    val newMeta = MediaMetadata.Builder()
+                                        .setTitle(prevTitle)
+                                        .setArtist(curItem.mediaMetadata.artist)
+                                        .setArtworkUri(curItem.mediaMetadata.artworkUri)
+                                        .build()
+                                    val newItem = MediaItem.Builder()
+                                        .setUri(curItem.localConfiguration?.uri)
+                                        .setMediaId(curItem.mediaId)
+                                        .setMediaMetadata(newMeta)
+                                        .build()
+                                    p.replaceMediaItem(p.currentMediaItemIndex, newItem)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                        return
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PlaybackService", "previousTrack chapter err: ${e.message}")
+        }
+
         val player = exoPlayer ?: return
         Log.d("PlaybackService", "CAR_DIAG previousTrack entered")
 
