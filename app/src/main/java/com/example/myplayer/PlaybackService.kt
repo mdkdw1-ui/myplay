@@ -292,23 +292,6 @@ override fun onCreate() {
                     // 연결 시 자동 재생 방지
                 }
 
-                // ★★★ 테슬라/블루투스가 보내는 미디어 제어 메서드 전부 오버라이드 ★★★
-                override fun onSeekToNextMediaItem(session: MediaSession) {
-                    Log.d("PlaybackService", "onSeekToNextMediaItem")
-                    handleNext()
-                }
-                override fun onSeekToPreviousMediaItem(session: MediaSession) {
-                    Log.d("PlaybackService", "onSeekToPreviousMediaItem")
-                    handlePrev()
-                }
-                override fun onSeekToNext(session: MediaSession) {
-                    Log.d("PlaybackService", "onSeekToNext")
-                    handleNext()
-                }
-                override fun onSeekToPrevious(session: MediaSession) {
-                    Log.d("PlaybackService", "onSeekToPrevious")
-                    handlePrev()
-                }
             })
             .build()
 
