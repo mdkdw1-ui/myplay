@@ -73,7 +73,7 @@ $cleanDesc
 
 타임스탬프를 만들어줘."""
 
-        try {
+        return try {
             val body = JSONObject().apply {
                 put("model", model)
                 put("messages", JSONArray().apply {
