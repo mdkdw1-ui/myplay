@@ -218,13 +218,17 @@ override fun onCreate() {
                         when (key?.keyCode) {
                             KeyEvent.KEYCODE_MEDIA_NEXT,
                             KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD -> {
-                                nextTrack()
-                                return true
+                            android.util.Log.d("PlaybackService", "KEYCODE_MEDIA_NEXT -> broadcast")
+                            val intent = android.content.Intent("com.example.myplayer.ACTION_SKIP_NEXT")
+                            sendBroadcast(intent)
+                            return true
                             }
                             KeyEvent.KEYCODE_MEDIA_PREVIOUS,
                             KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD -> {
-                                previousTrack()
-                                return true
+                            android.util.Log.d("PlaybackService", "KEYCODE_MEDIA_PREVIOUS -> broadcast")
+                            val intent = android.content.Intent("com.example.myplayer.ACTION_SKIP_PREV")
+                            sendBroadcast(intent)
+                            return true
                             }
                             KeyEvent.KEYCODE_MEDIA_REWIND -> {
                                 seekBy(-10000L)
