@@ -1,51 +1,27 @@
-*.iml
+# Android build
+build/
 .gradle/
-/local.properties
-/.idea/
-.DS_Store
-/build
-/app/build
-/captures
-.externalNativeBuild
-.cxx
+app/build/
 local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Keystore / secrets
+keystore_base64.txt
+*.p12
+*.keystore
 *.jks
-*.keystore
-keystore.b64
-
-# ★ keystore (절대 커밋 금지)
-*.p12
-*.keystore
-*_key.pem
-*_cert.pem
-keystore_base64.txt
-release.p12
-release.keystore
-
-# ★ keystore (절대 커밋 금지)
-*.p12
-*.keystore
-*_key.pem
-*_cert.pem
-keystore_base64.txt
 release.p12
 
-# OCI 자동생성 로그 (민감정보)
-auto_create.log
-auto_create.sh
-__pycache__/
-*.pyc
+# Backups / outputs
+.patch_backup/
+output.txt
+filelist.txt
+*.log
 
-# 테스트 JSON (curl 응답)
-*.json
-!app/src/main/**/*.json
-/mweb.json
-/vr.json
-/vr2.json
-
-# 테스트 JSON (curl 응답)
-*.json
-!app/src/main/**/*.json
-/mweb.json
-/vr.json
-/vr2.json
+# Temp
+*.tmp
+*.part
+fix_playbackservice.py
+*.bak.*

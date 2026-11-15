@@ -215,19 +215,23 @@ override fun onCreate() {
                     if (intent.action == Intent.ACTION_MEDIA_BUTTON) {
                         val key = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
                         Log.d("PlaybackService", "CAR_DIAG key=${key?.keyCode}")
+                        if (key == null) {
+                            return super.onMediaButtonEvent(mediaSession, controller, intent)
+                        }
+                        if (key.action != KeyEvent.ACTION_DOWN) {
+                            return true
+                        }
                         when (key?.keyCode) {
                             KeyEvent.KEYCODE_MEDIA_NEXT,
                             KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD -> {
-                            android.util.Log.d("PlaybackService", "KEYCODE_MEDIA_NEXT -> broadcast")
-                            val intent = android.content.Intent("com.example.myplayer.ACTION_SKIP_NEXT")
-                            sendBroadcast(intent)
+                            Log.d("PlaybackService", "CAR_DIAG KEYCODE_MEDIA_NEXT -> nextTrack()")
+                            nextTrack()
                             return true
                             }
                             KeyEvent.KEYCODE_MEDIA_PREVIOUS,
                             KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD -> {
-                            android.util.Log.d("PlaybackService", "KEYCODE_MEDIA_PREVIOUS -> broadcast")
-                            val intent = android.content.Intent("com.example.myplayer.ACTION_SKIP_PREV")
-                            sendBroadcast(intent)
+                            Log.d("PlaybackService", "CAR_DIAG KEYCODE_MEDIA_PREVIOUS -> previousTrack()")
+                            previousTrack()
                             return true
                             }
                             KeyEvent.KEYCODE_MEDIA_REWIND -> {
