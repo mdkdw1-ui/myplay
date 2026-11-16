@@ -1011,6 +1011,23 @@ class AudioPlayerActivity : AppCompatActivity() {
     private fun maybeSubmitServerAnalysis(videoId: String, groqChapters: List<Chapter>, desc: String) {
         if (videoId.isBlank() || videoId.startsWith("local:")) return
         if (!ServerChapterApi.markSubmitted(videoId)) { diag("이미 제출됨: $videoId"); return }
+
+        // ★ desc에 타임스탬프 있으면 그대로 사용 (Foote skip)
+        val descChapters = YouTubeChapters.parse(desc)
+        val descHasTs = descChapters.size >= 5 && desc.contains(Regex("\d{1,2}:\d{2}"))
+        if (descHasTs) {
+            diag("desc 타임스탬프 우선 사용: ${descChapters.size}개 (Foote skip)")
+            val merged = descChapters.map { Chapter(it.startMs, it.title) }.distinctBy { it.startMs }
+            runOnUiThread {
+                currentChapters = merged
+                lastShownChapterTitle = ""
+                val arr = org.json.JSONArray()
+                merged.forEach { arr.put(org.json.JSONObject().apply { put("startMs", it.startMs); put("title", it.title) }) }
+                getSharedPreferences("chapter_prefs", MODE_PRIVATE).edit().putString("chapters", arr.toString()).apply()
+                diag("desc 챕터 적용: ${merged.size}개")
+            }
+            return
+        }
         val streamUrl = mediaController?.currentMediaItem?.localConfiguration?.uri?.toString() ?: ""
         val dur = mediaController?.duration ?: 0L
         if (dur <= 0L) return
