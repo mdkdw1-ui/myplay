@@ -20,13 +20,14 @@ object ServerChapterApi {
         return true
     }
     data class ServerChapter(val startMs: Long, val endMs: Long, val title: String, val confidence: Double)
+    data class AnalyzeResult(val chapters: List<ServerChapter>, val titles: List<String>)
 
     suspend fun analyze(
         ctx: Context,
         videoId: String,
         audioUrl: String,
         durationMs: Long
-    ): List<ServerChapter>? = withContext(Dispatchers.IO) {
+    ): AnalyzeResult? = withContext(Dispatchers.IO) {
         try {
             val token = ctx.getSharedPreferences("server_auth", Context.MODE_PRIVATE)
                 .getString("jwt", null)
@@ -43,13 +44,18 @@ object ServerChapterApi {
                 Log.d(TAG, "CACHE HIT: fetching result immediately")
                 val res = http("${ServerConfig.get()}/chapters/result?jobId=$jobId", "GET", null, token)
                 if (res != null) {
-                    val arr = JSONObject(res).optJSONArray("chapters")
+                    val resJson = JSONObject(res)
+                    val arr = resJson.optJSONArray("chapters")
+                    val titlesArr = resJson.optJSONArray("titles")
                     if (arr != null) {
-                        return@withContext (0 until arr.length()).map { j ->
+                        val chs = (0 until arr.length()).map { j ->
                             val o = arr.getJSONObject(j)
                             ServerChapter(o.optLong("startMs"), o.optLong("endMs"),
                                 o.optString("title", "구간 ${j+1}"), o.optDouble("confidence", 0.7))
                         }
+                        val ttls = mutableListOf<String>()
+                        if (titlesArr != null) for (k in 0 until titlesArr.length()) ttls.add(titlesArr.optString(k, ""))
+                        return@withContext AnalyzeResult(chs, ttls)
                     }
                 }
             }
@@ -61,18 +67,37 @@ object ServerChapterApi {
                 when (st) {
                     "complete" -> {
                         val res = http("${ServerConfig.get()}/chapters/result?jobId=$jobId", "GET", null, token) ?: return@withContext null
-                        val arr = JSONObject(res).optJSONArray("chapters") ?: return@withContext null
-                        return@withContext (0 until arr.length()).map { j ->
+                        val resJson = JSONObject(res)
+                        val arr = resJson.optJSONArray("chapters") ?: return@withContext null
+                        val chs = (0 until arr.length()).map { j ->
                             val o = arr.getJSONObject(j)
                             ServerChapter(o.optLong("startMs"), o.optLong("endMs"),
                                 o.optString("title", "구간 ${j+1}"), o.optDouble("confidence", 0.7))
                         }
+                        val titlesArr = resJson.optJSONArray("titles")
+                        val ttls = mutableListOf<String>()
+                        if (titlesArr != null) for (k in 0 until titlesArr.length()) ttls.add(titlesArr.optString(k, ""))
+                        return@withContext AnalyzeResult(chs, ttls)
                     }
                     "failed" -> { Log.w(TAG, "server failed"); return@withContext null }
                 }
             }
             null
         } catch (e: Exception) { Log.e(TAG, "analyze err", e); null }
+    }
+
+    suspend fun saveTitles(ctx: Context, videoId: String, titles: List<String>): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val token = ctx.getSharedPreferences("server_auth", Context.MODE_PRIVATE).getString("jwt", null)
+            val body = JSONObject().apply {
+                put("videoId", videoId)
+                put("titles", org.json.JSONArray(titles))
+            }.toString()
+            val resp = http("${ServerConfig.get()}/chapters/titles_save", "POST", body, token) ?: return@withContext false
+            val ok = JSONObject(resp).optBoolean("saved", false)
+            Log.d(TAG, "saveTitles $videoId → ${titles.size}개 saved=$ok")
+            ok
+        } catch (e: Exception) { Log.e(TAG, "saveTitles err", e); false }
     }
 
     private fun http(url: String, method: String, body: String?, token: String?): String? {

@@ -1016,19 +1016,23 @@ class AudioPlayerActivity : AppCompatActivity() {
         if (dur <= 0L) return
         diag("서버 2차 분석 제출: $videoId")
         bgScope.launch {
-            val server = ServerChapterApi.analyze(this@AudioPlayerActivity, videoId, streamUrl, dur)
-            if (server == null || server.size < 2) { diag("서버 분석 실패/부족"); return@launch }
+            val result = ServerChapterApi.analyze(this@AudioPlayerActivity, videoId, streamUrl, dur)
+            if (result == null || result.chapters.size < 2) { diag("서버 분석 실패/부족"); return@launch }
             if (currentVideoId != videoId) { diag("곡 바뀜 → skip"); return@launch }
-            // ★ 서버 경계 → Groq에게 각 구간의 곡명 재질의
-            val segments = server.map { it.startMs to it.endMs }
-            val titles = if (desc.isNotBlank()) {
-                GroqChapterExtractor.retitleSegments(
-                    description = desc,
-                    segments = segments,
-                    durationSec = dur / 1000
-                )
-            } else emptyList()
-            diag("retitle 결과: ${titles.size}곡 (예: ${titles.take(3).joinToString(" | ").ifBlank { "-" }})")
+            val server = result.chapters
+            val serverTitles = result.titles
+            val titles = if (serverTitles.size == server.size && serverTitles.all { it.isNotBlank() }) {
+                diag("서버 titles 사용: ${serverTitles.size}개")
+                serverTitles
+            } else {
+                diag("Groq retitle 호출 (서버 titles 없음)")
+                val groqTitles = if (desc.isNotBlank()) {
+                    GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }, dur / 1000)
+                } else emptyList()
+                if (groqTitles.isNotEmpty()) ServerChapterApi.saveTitles(this@AudioPlayerActivity, videoId, groqTitles)
+                groqTitles
+            }
+            diag("titles: ${titles.size}곡 (예: ${titles.take(3).joinToString(" | ").ifBlank { "-" }})")
             val merged = server.mapIndexed { idx, s ->
                 val title = titles.getOrNull(idx)?.takeIf { it.isNotBlank() } ?: "구간 ${idx + 1}"
                 Chapter(s.startMs, title)
@@ -2380,31 +2384,19 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
     }
 
     private fun playNextManual() {
-        val mc = mediaController
-        
-        // ★★★ [수정] 현재 곡 설명란에 타임스탬프가 있으면 다음 구간으로 이동 ★★★
-        try {
-            val currentDesc = currentDescription // (설명란 변수 필요 - 아래에서 추가)
-            if (currentDesc.isNotBlank()) {
-                val chapters = YouTubeChapters.parse(currentDesc)
-                if (chapters.size >= 2) {
-                    val currentPos = mc?.currentPosition ?: 0L
-                    // 현재 위치보다 큰 다음 챕터 찾기
-                    val nextChapter = chapters.firstOrNull { it.startMs > currentPos + 1000 }
-                    if (nextChapter != null) {
-                        mc?.seekTo(nextChapter.startMs)
-                        updateChapterMetadataAudio(nextChapter.title)
-                        diag("playNextManual: 타임스탬프 이동 → ${nextChapter.startMs/1000}초 (${nextChapter.title})")
-                        return
-                    }
-                }
+        val mc = mediaController ?: return
+        val pos = mc.currentPosition
+        if (currentChapters.size >= 2) {
+            val next = currentChapters.firstOrNull { it.startMs > pos + 1000 }
+            if (next != null) {
+                mc.seekTo(next.startMs)
+                updateChapterMetadataAudio(next.title)
+                lastShownChapterTitle = next.title
+                diag("playNextManual: 다음 챕터 → ${next.startMs/1000}초 (${next.title})")
+                return
             }
-        } catch (e: Exception) {
-            diag("playNextManual 타임스탬프 파싱 err: ${e.message}")
         }
-        
-        // 타임스탬프 없으면 기존 로직 (다음 곡)
-        if (mc != null && mc.hasNextMediaItem()) {
+        if (mc.hasNextMediaItem()) {
             mc.seekToNextMediaItem()
             return
         }
@@ -2421,11 +2413,29 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
     }
 
     private fun playPrevious() {
-        val mc = mediaController
-        if (mc != null && mc.hasPreviousMediaItem()) {
-            mc.seekToPreviousMediaItem()
+        val mc = mediaController ?: return
+        val pos = mc.currentPosition
+        if (currentChapters.size >= 2) {
+            val cur = currentChapters.lastOrNull { it.startMs <= pos }
+            if (cur != null && pos - cur.startMs > 3000) {
+                mc.seekTo(cur.startMs)
+                updateChapterMetadataAudio(cur.title)
+                lastShownChapterTitle = cur.title
+                diag("playPrevious: 현재 챕터 처음 → ${cur.startMs/1000}초")
+                return
+            }
+            val prev = currentChapters.lastOrNull { it.startMs < pos - 500 }
+            if (prev != null && prev.startMs > 0) {
+                mc.seekTo(prev.startMs)
+                updateChapterMetadataAudio(prev.title)
+                lastShownChapterTitle = prev.title
+                diag("playPrevious: 이전 챕터 → ${prev.startMs/1000}초 (${prev.title})")
+                return
+            }
+            mc.seekTo(0)
             return
         }
+        if (mc.hasPreviousMediaItem()) { mc.seekToPreviousMediaItem(); return }
         if (historyIndex > 0) {
             historyIndex--
             val prev = audioHistory[historyIndex]
@@ -2436,9 +2446,7 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
             currentThumb = prev.thumbnail
             updateUI()
             loadAudio(prev.videoId, isInitial = false)
-        } else {
-            mc?.seekTo(0)
-        }
+        } else { mc.seekTo(0) }
     }
 
     private fun dislikeCurrent() {
