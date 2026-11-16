@@ -998,7 +998,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                     } else {
                         diag("챕터 0개 → 기존 prefs 유지 (서버 2차 대기)")
                     }
-                    maybeSubmitServerAnalysis(videoId, if (chapters.isNotEmpty()) chapters else currentChapters)
+                    maybeSubmitServerAnalysis(videoId, if (chapters.isNotEmpty()) chapters else currentChapters, desc)
                 } catch (e: Exception) {
                     diag("챕터 저장 err: ${e.message}")
                 }
@@ -1008,7 +1008,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun maybeSubmitServerAnalysis(videoId: String, groqChapters: List<Chapter>) {
+    private fun maybeSubmitServerAnalysis(videoId: String, groqChapters: List<Chapter>, desc: String) {
         if (videoId.isBlank() || videoId.startsWith("local:")) return
         if (!ServerChapterApi.markSubmitted(videoId)) { diag("이미 제출됨: $videoId"); return }
         val streamUrl = mediaController?.currentMediaItem?.localConfiguration?.uri?.toString() ?: ""
@@ -1019,10 +1019,19 @@ class AudioPlayerActivity : AppCompatActivity() {
             val server = ServerChapterApi.analyze(this@AudioPlayerActivity, videoId, streamUrl, dur)
             if (server == null || server.size < 2) { diag("서버 분석 실패/부족"); return@launch }
             if (currentVideoId != videoId) { diag("곡 바뀜 → skip"); return@launch }
+            // ★ 서버 경계 → Groq에게 각 구간의 곡명 재질의
+            val segments = server.map { it.startMs to it.endMs }
+            val titles = if (desc.isNotBlank()) {
+                GroqChapterExtractor.retitleSegments(
+                    description = desc,
+                    segments = segments,
+                    durationSec = dur / 1000
+                )
+            } else emptyList()
+            diag("retitle 결과: ${titles.size}곡 (예: ${titles.take(3).joinToString(" | ").ifBlank { "-" }})")
             val merged = server.mapIndexed { idx, s ->
-                val n = groqChapters.minByOrNull { kotlin.math.abs(it.startMs - s.startMs) }
-                val t = if (n != null && kotlin.math.abs(n.startMs - s.startMs) <= 15_000) n.title else "구간 ${idx+1}"
-                Chapter(s.startMs, t)
+                val title = titles.getOrNull(idx)?.takeIf { it.isNotBlank() } ?: "구간 ${idx + 1}"
+                Chapter(s.startMs, title)
             }.distinctBy { it.startMs }
             runOnUiThread {
                 currentChapters = merged
