@@ -34,9 +34,25 @@ object ServerChapterApi {
                 put("videoId", videoId); put("audioUrl", audioUrl); put("durationMs", durationMs)
             }.toString()
             val submitResp = http("${ServerConfig.get()}/chapters/analyze", "POST", body, token) ?: return@withContext null
-            val jobId = JSONObject(submitResp).optString("jobId", "")
+            val submitJson = JSONObject(submitResp)
+            val jobId = submitJson.optString("jobId", "")
             if (jobId.isEmpty()) { Log.e(TAG, "no jobId"); return@withContext null }
             Log.d(TAG, "submitted job=$jobId video=$videoId")
+            // ★ 서버 캐시 히트 시 즉시 결과 조회 (10초 대기 skip)
+            if (submitJson.optBoolean("cached", false) || submitJson.optString("status") == "complete") {
+                Log.d(TAG, "CACHE HIT: fetching result immediately")
+                val res = http("${ServerConfig.get()}/chapters/result?jobId=$jobId", "GET", null, token)
+                if (res != null) {
+                    val arr = JSONObject(res).optJSONArray("chapters")
+                    if (arr != null) {
+                        return@withContext (0 until arr.length()).map { j ->
+                            val o = arr.getJSONObject(j)
+                            ServerChapter(o.optLong("startMs"), o.optLong("endMs"),
+                                o.optString("title", "구간 ${j+1}"), o.optDouble("confidence", 0.7))
+                        }
+                    }
+                }
+            }
             repeat(90) { i ->
                 delay(10_000L)
                 val statusResp = http("${ServerConfig.get()}/chapters/status?jobId=$jobId", "GET", null, token) ?: return@repeat
