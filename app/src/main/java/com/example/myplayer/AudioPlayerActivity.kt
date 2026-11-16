@@ -70,6 +70,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var currentChapters: List<Chapter> = emptyList()
     private var chapterWatcherJob: kotlinx.coroutines.Job? = null
     private var lastShownChapterTitle: String = ""
+    private val submittedForServer = mutableSetOf<String>()
     private var isShowingChapterTitle = false
     private var chapterTitleToShow: String = ""
     private var currentChannel: String = ""
@@ -992,11 +993,40 @@ class AudioPlayerActivity : AppCompatActivity() {
                     getSharedPreferences("chapter_prefs", MODE_PRIVATE)
                         .edit().putString("chapters", arr.toString()).apply()
                     diag("챕터 저장 완료 (${chapters.size}개)")
+                    maybeSubmitServerAnalysis(videoId, chapters)
                 } catch (e: Exception) {
                     diag("챕터 저장 err: ${e.message}")
                 }
             } catch (e: Exception) {
                 diag("metadata/Groq err: ${e.message}")
+            }
+        }
+    }
+
+    private fun maybeSubmitServerAnalysis(videoId: String, groqChapters: List<Chapter>) {
+        if (videoId.isBlank() || videoId.startsWith("local:")) return
+        if (videoId in submittedForServer) return
+        val streamUrl = currentStreamUrl ?: return
+        val dur = mediaController?.duration ?: 0L
+        if (dur <= 0L) return
+        submittedForServer.add(videoId)
+        diag("서버 2차 분석 제출: $videoId")
+        bgScope.launch {
+            val server = ServerChapterApi.analyze(this@AudioPlayerActivity, videoId, streamUrl, dur)
+            if (server == null || server.size < 2) { diag("서버 분석 실패/부족"); return@launch }
+            if (currentVideoId != videoId) { diag("곡 바뀜 → skip"); return@launch }
+            val merged = server.mapIndexed { idx, s ->
+                val n = groqChapters.minByOrNull { kotlin.math.abs(it.startMs - s.startMs) }
+                val t = if (n != null && kotlin.math.abs(n.startMs - s.startMs) <= 15_000) n.title else "구간 ${idx+1}"
+                Chapter(s.startMs, t)
+            }.distinctBy { it.startMs }
+            runOnUiThread {
+                currentChapters = merged
+                lastShownChapterTitle = ""
+                val arr = org.json.JSONArray()
+                merged.forEach { arr.put(org.json.JSONObject().apply { put("startMs", it.startMs); put("title", it.title) }) }
+                getSharedPreferences("chapter_prefs", MODE_PRIVATE).edit().putString("chapters", arr.toString()).apply()
+                diag("서버 챕터 적용: ${merged.size}개")
             }
         }
     }
