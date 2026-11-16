@@ -68,6 +68,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var currentTitle: String = ""
     private var currentDescription: String = ""
     private var currentChapters: List<Chapter> = emptyList()
+    private var chapterWatcherJob: kotlinx.coroutines.Job? = null
+    private var lastShownChapterTitle: String = ""
     private var isShowingChapterTitle = false
     private var chapterTitleToShow: String = ""
     private var currentChannel: String = ""
@@ -976,6 +978,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                     }
                 }
                 currentChapters = chapters
+                startChapterWatcher()
                 diag("챕터 로드: ${chapters.size}개")
                 // ★★★ Service가 읽을 수 있도록 SharedPreferences에 저장 ★★★
                 try {
@@ -996,6 +999,58 @@ class AudioPlayerActivity : AppCompatActivity() {
                 diag("metadata/Groq err: ${e.message}")
             }
         }
+    }
+
+    private fun startChapterWatcher() {
+        chapterWatcherJob?.cancel()
+        lastShownChapterTitle = ""
+        chapterWatcherJob = androidx.lifecycle.lifecycleScope.let { scope ->
+            kotlinx.coroutines.CoroutineScope(scope.coroutineContext).launch {
+                while (isActive) {
+                    try {
+                        val mc = mediaController
+                        if (mc != null && mc.isPlaying && currentChapters.size >= 2) {
+                            val pos = mc.currentPosition
+                            val cur = currentChapters.lastOrNull { it.startMs <= pos }
+                            val title = cur?.title ?: ""
+                            if (title.isNotBlank() && title != lastShownChapterTitle) {
+                                lastShownChapterTitle = title
+                                updateChapterMetadataAudioQuiet(title)
+                            }
+                        }
+                    } catch (_: Exception) {}
+                    kotlinx.coroutines.delay(1000L)
+                }
+            }
+        }
+    }
+
+    private fun stopChapterWatcher() {
+        try { chapterWatcherJob?.cancel() } catch (_: Exception) {}
+        chapterWatcherJob = null
+    }
+
+    private fun updateChapterMetadataAudioQuiet(chapterTitle: String) {
+        try {
+            val mc = mediaController ?: return
+            val curItem = mc.currentMediaItem ?: return
+            val curUrl = curItem.localConfiguration?.uri ?: return
+            val curId = curItem.mediaId
+            isShowingChapterTitle = true
+            chapterTitleToShow = chapterTitle
+            lastShownChapterTitle = chapterTitle
+            runOnUiThread {
+                tvTitle.text = chapterTitle
+                tvChannel.text = "🎵 ${currentChannel}"
+            }
+            val newMeta = androidx.media3.common.MediaMetadata.Builder()
+                .setTitle(chapterTitle).setArtist(currentChannel)
+                .setArtworkUri(android.net.Uri.parse(currentThumb)).build()
+            val newItem = androidx.media3.common.MediaItem.Builder()
+                .setUri(curUrl).setMediaId(curId).setMediaMetadata(newMeta).build()
+            val idx = mc.currentMediaItemIndex
+            if (idx >= 0 && idx < mc.mediaItemCount) mc.replaceMediaItem(idx, newItem)
+        } catch (_: Exception) {}
     }
 
     private fun updateChapterMetadataAudio(chapterTitle: String) {
@@ -3626,6 +3681,7 @@ private fun startPositionAutoSave() {
     }
 
     override fun onDestroy() {
+        stopChapterWatcher()
         super.onDestroy()
         // ★ audio_diag.log → Download/MyPlayer 복사 (크래시 진단용, 임시)
         try {

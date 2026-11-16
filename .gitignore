@@ -25,3 +25,4 @@ filelist.txt
 *.part
 fix_playbackservice.py
 *.bak.*
+fix_chapter_watcher.py
