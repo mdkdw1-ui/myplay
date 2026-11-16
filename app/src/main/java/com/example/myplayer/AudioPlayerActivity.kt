@@ -1006,7 +1006,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     private fun maybeSubmitServerAnalysis(videoId: String, groqChapters: List<Chapter>) {
         if (videoId.isBlank() || videoId.startsWith("local:")) return
         if (videoId in submittedForServer) return
-        val streamUrl = currentStreamUrl ?: return
+        val streamUrl = mediaController?.currentMediaItem?.localConfiguration?.uri?.toString() ?: ""
         val dur = mediaController?.duration ?: 0L
         if (dur <= 0L) return
         submittedForServer.add(videoId)
@@ -1034,7 +1034,7 @@ class AudioPlayerActivity : AppCompatActivity() {
     private fun startChapterWatcher() {
         chapterWatcherJob?.cancel()
         lastShownChapterTitle = ""
-        chapterWatcherJob = androidx.lifecycle.lifecycleScope.let { scope ->
+        chapterWatcherJob = lifecycleScope.let { scope ->
             kotlinx.coroutines.CoroutineScope(scope.coroutineContext).launch {
                 while (isActive) {
                     try {

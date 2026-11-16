@@ -27,3 +27,4 @@ fix_playbackservice.py
 *.bak.*
 fix_chapter_watcher.py
 fix_server_chapters.py
+fix_compile.py
