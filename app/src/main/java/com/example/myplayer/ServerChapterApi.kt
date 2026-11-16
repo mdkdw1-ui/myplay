@@ -13,6 +13,12 @@ import java.net.URL
 
 object ServerChapterApi {
     private const val TAG = "ServerChapterApi"
+    private val submitted = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    fun markSubmitted(videoId: String): Boolean {
+        if (videoId in submitted) return false
+        submitted.add(videoId)
+        return true
+    }
     data class ServerChapter(val startMs: Long, val endMs: Long, val title: String, val confidence: Double)
 
     suspend fun analyze(

@@ -70,7 +70,6 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var currentChapters: List<Chapter> = emptyList()
     private var chapterWatcherJob: kotlinx.coroutines.Job? = null
     private var lastShownChapterTitle: String = ""
-    private val submittedForServer = mutableSetOf<String>()
     private var isShowingChapterTitle = false
     private var chapterTitleToShow: String = ""
     private var currentChannel: String = ""
@@ -978,22 +977,28 @@ class AudioPlayerActivity : AppCompatActivity() {
                         diag("Groq AI 타임스탬프 완료: ${chapters.size}개")
                     }
                 }
-                currentChapters = chapters
-                startChapterWatcher()
-                diag("챕터 로드: ${chapters.size}개")
+                if (chapters.isNotEmpty()) {
+                    currentChapters = chapters
+                    startChapterWatcher()
+                }
+                diag("챕터 로드: ${chapters.size}개 (현재: ${currentChapters.size}개)")
                 // ★★★ Service가 읽을 수 있도록 SharedPreferences에 저장 ★★★
                 try {
-                    val arr = org.json.JSONArray()
-                    for (ch in chapters) {
-                        val o = org.json.JSONObject()
-                        o.put("startMs", ch.startMs)
-                        o.put("title", ch.title)
-                        arr.put(o)
+                    if (chapters.isNotEmpty()) {
+                        val arr = org.json.JSONArray()
+                        for (ch in chapters) {
+                            val o = org.json.JSONObject()
+                            o.put("startMs", ch.startMs)
+                            o.put("title", ch.title)
+                            arr.put(o)
+                        }
+                        getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+                            .edit().putString("chapters", arr.toString()).apply()
+                        diag("챕터 저장 완료 (${chapters.size}개)")
+                    } else {
+                        diag("챕터 0개 → 기존 prefs 유지 (서버 2차 대기)")
                     }
-                    getSharedPreferences("chapter_prefs", MODE_PRIVATE)
-                        .edit().putString("chapters", arr.toString()).apply()
-                    diag("챕터 저장 완료 (${chapters.size}개)")
-                    maybeSubmitServerAnalysis(videoId, chapters)
+                    maybeSubmitServerAnalysis(videoId, if (chapters.isNotEmpty()) chapters else currentChapters)
                 } catch (e: Exception) {
                     diag("챕터 저장 err: ${e.message}")
                 }
@@ -1005,11 +1010,10 @@ class AudioPlayerActivity : AppCompatActivity() {
 
     private fun maybeSubmitServerAnalysis(videoId: String, groqChapters: List<Chapter>) {
         if (videoId.isBlank() || videoId.startsWith("local:")) return
-        if (videoId in submittedForServer) return
+        if (!ServerChapterApi.markSubmitted(videoId)) { diag("이미 제출됨: $videoId"); return }
         val streamUrl = mediaController?.currentMediaItem?.localConfiguration?.uri?.toString() ?: ""
         val dur = mediaController?.duration ?: 0L
         if (dur <= 0L) return
-        submittedForServer.add(videoId)
         diag("서버 2차 분석 제출: $videoId")
         bgScope.launch {
             val server = ServerChapterApi.analyze(this@AudioPlayerActivity, videoId, streamUrl, dur)

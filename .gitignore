@@ -28,3 +28,4 @@ fix_playbackservice.py
 fix_chapter_watcher.py
 fix_server_chapters.py
 fix_compile.py
+fix_chapter_bugs.py
