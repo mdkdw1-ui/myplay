@@ -97,6 +97,13 @@ jobs:
           cp "$SRC" "release/myplayer-${{ steps.version.outputs.version }}.apk"
           ls -la release/
 
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: myplayer-apk-${{ github.run_number }}
+          path: release/myplayer-*.apk
+          if-no-files-found: error
+
       - name: Check if release exists
         id: check
         env:
