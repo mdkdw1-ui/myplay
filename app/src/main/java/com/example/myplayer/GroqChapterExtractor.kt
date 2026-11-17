@@ -136,27 +136,34 @@ $cleanDesc
     // ★ 서버 경계 → Groq에게 각 구간의 곡명 재질의
     // ═══════════════════════════════════════════════════════════════
     suspend fun retitleSegments(
-    desc: String,
-    segments: List<Pair<Long, Long>>,
-    durationSec: Long,
-    candidates: List<String> = emptyList(),
-
+        desc: String,
+        segments: List<Pair<Long, Long>>,
+        durationSec: Long,
+        candidates: List<String> = emptyList(),
+    ): List<String> = withContext(Dispatchers.IO) {
         val apiKey = BuildConfig.GROQ_API_KEY
         if (apiKey.isBlank() || segments.isEmpty()) return@withContext emptyList()
 
-        val cleanDesc = description.take(3000)
+        val cleanDesc = desc.take(3000)
         val segList = segments.mapIndexed { i, (s, e) ->
             "${i + 1}) ${s / 1000}초 ~ ${e / 1000}초 (길이 ${(e - s) / 1000}초)"
         }.joinToString("\n")
 
+        val candidateList = candidates
+            .filter { it.isNotBlank() }
+            .distinct()
+            .joinToString("\n")
+
         val systemPrompt = """너는 유튜브 음악 모음 영상의 각 구간에 어떤 곡이 재생되는지 알아내는 전문가야.
 주어진 설명란에 곡 목록이 있고, 영상이 N개 구간으로 정확히 나뉘어 있다 (librosa 음원 분석으로 얻은 정확한 경계).
 각 구간의 시작~끝 시간과 설명란의 곡들을 대조해서, 각 구간에 해당하는 곡을 유추해.
+
 규칙:
 1. 정확히 N개 항목의 JSON 배열로만 출력: ["가수 - 곡제목", "가수 - 곡제목", ...]
 2. 각 항목은 "가수 - 곡제목" 형식
-3. 확실하지 않아도 설명란에서 가장 유사한 곡명 선택
-4. 코드블록 없이 순수 JSON 배열만 출력"""
+3. 후보 곡명 목록이 있으면 반드시 그 목록 안에서만 선택해
+4. 후보 목록에 없는 곡명은 절대 만들지 마
+5. 코드블록 없이 순수 JSON 배열만 출력"""
 
         val userPrompt = """[길이] ${durationSec}초 (${durationSec / 60}분)
 
@@ -166,7 +173,11 @@ $cleanDesc
 [구간 목록 - ${segments.size}개]
 $segList
 
-위 ${segments.size}개 구간 각각에 재생되는 곡을 JSON 배열로 출력해줘. (정확히 ${segments.size}개)"""
+[후보 곡명]
+${candidateList.ifBlank { "없음" }}
+
+위 ${segments.size}개 구간 각각에 재생되는 곡을 JSON 배열로 출력해줘. (정확히 ${segments.size}개)
+반드시 후보 곡명 목록 안에서만 선택해줘."""
 
         for (model in MODELS) {
             dlog("🔄 retitle try: $model (${segments.size}구간)")
@@ -176,6 +187,7 @@ $segList
                 return@withContext result
             }
         }
+
         dlog("❌ retitle 모든 모델 실패")
         emptyList()
     }
