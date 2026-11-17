@@ -1032,8 +1032,15 @@ class AudioPlayerActivity : AppCompatActivity() {
         val dur = mediaController?.duration ?: 0L
         if (dur <= 0L) return
         diag("서버 2차 분석 제출: $videoId")
+        val groqSegments = org.json.JSONArray()
+        for (c in groqChapters) {
+            val o = org.json.JSONObject()
+            o.put("startMs", c.startMs)
+            o.put("title", c.title)
+            groqSegments.put(o)
+        }
         bgScope.launch {
-            val result = ServerChapterApi.analyze(this@AudioPlayerActivity, videoId, streamUrl, dur)
+            val result = ServerChapterApi.analyze(this@AudioPlayerActivity, videoId, streamUrl, dur, groqSegments)
             if (result == null || result.chapters.size < 2) { diag("서버 분석 실패/부족"); return@launch }
             if (currentVideoId != videoId) { diag("곡 바뀜 → skip"); return@launch }
             val server = result.chapters

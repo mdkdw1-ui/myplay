@@ -26,13 +26,19 @@ object ServerChapterApi {
         ctx: Context,
         videoId: String,
         audioUrl: String,
-        durationMs: Long
+        durationMs: Long,
+        groqSegments: org.json.JSONArray? = null
     ): AnalyzeResult? = withContext(Dispatchers.IO) {
         try {
             val token = ctx.getSharedPreferences("server_auth", Context.MODE_PRIVATE)
                 .getString("jwt", null)
             val body = JSONObject().apply {
-                put("videoId", videoId); put("audioUrl", audioUrl); put("durationMs", durationMs)
+                put("videoId", videoId)
+                put("audioUrl", audioUrl)
+                put("durationMs", durationMs)
+                if (groqSegments != null && groqSegments.length() > 0) {
+                    put("groqSegments", groqSegments)
+                }
             }.toString()
             val submitResp = http("${ServerConfig.get()}/chapters/analyze", "POST", body, token) ?: return@withContext null
             val submitJson = JSONObject(submitResp)
