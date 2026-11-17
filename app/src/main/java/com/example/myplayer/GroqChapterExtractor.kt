@@ -140,10 +140,7 @@ $cleanDesc
     segments: List<Pair<Long, Long>>,
     durationSec: Long,
     candidates: List<String> = emptyList(),
-        description: String,
-        segments: List<Pair<Long, Long>>,
-        durationSec: Long
-    ): List<String> = withContext(Dispatchers.IO) {
+
         val apiKey = BuildConfig.GROQ_API_KEY
         if (apiKey.isBlank() || segments.isEmpty()) return@withContext emptyList()
 
