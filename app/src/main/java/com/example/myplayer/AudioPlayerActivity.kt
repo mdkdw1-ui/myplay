@@ -1014,7 +1014,7 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         // ★ desc에 타임스탬프 있으면 그대로 사용 (Foote skip)
         val descChapters = YouTubeChapters.parse(desc)
-        val descHasTs = descChapters.size >= 5 && desc.contains(Regex("\d{1,2}:\d{2}"))
+        val descHasTs = descChapters.size >= 5 && desc.contains(Regex("\\d{1,2}:\\d{2}"))
         if (descHasTs) {
             diag("desc 타임스탬프 우선 사용: ${descChapters.size}개 (Foote skip)")
             val merged = descChapters.map { Chapter(it.startMs, it.title) }.distinctBy { it.startMs }

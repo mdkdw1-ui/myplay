@@ -42,26 +42,31 @@ object ServerChapterApi {
             // ★ 서버 캐시 히트 시 즉시 결과 조회 (10초 대기 skip)
             if (submitJson.optBoolean("cached", false) || submitJson.optString("status") == "complete") {
                 Log.d(TAG, "CACHE HIT: fetching result immediately")
-                val res = http("${ServerConfig.get()}/chapters/result?jobId=$jobId", "GET", null, token)
-                if (res != null) {
-                    val resJson = JSONObject(res)
-                    val arr = resJson.optJSONArray("chapters")
-                    val titlesArr = resJson.optJSONArray("titles")
-                    if (arr != null) {
-                        val chs = (0 until arr.length()).map { j ->
-                            val o = arr.getJSONObject(j)
-                            ServerChapter(o.optLong("startMs"), o.optLong("endMs"),
-                                o.optString("title", "구간 ${j+1}"), o.optDouble("confidence", 0.7))
+                repeat(3) { attempt ->
+                    val res = http("${ServerConfig.get()}/chapters/result?jobId=$jobId", "GET", null, token)
+                    if (res != null) {
+                        val resJson = JSONObject(res)
+                        val arr = resJson.optJSONArray("chapters")
+                        val titlesArr = resJson.optJSONArray("titles")
+                        if (arr != null) {
+                            val chs = (0 until arr.length()).map { j ->
+                                val o = arr.getJSONObject(j)
+                                ServerChapter(o.optLong("startMs"), o.optLong("endMs"),
+                                    o.optString("title", "구간 ${j+1}"), o.optDouble("confidence", 0.7))
+                            }
+                            val ttls = mutableListOf<String>()
+                            if (titlesArr != null) for (k in 0 until titlesArr.length()) ttls.add(titlesArr.optString(k, ""))
+                            return@withContext AnalyzeResult(chs, ttls)
                         }
-                        val ttls = mutableListOf<String>()
-                        if (titlesArr != null) for (k in 0 until titlesArr.length()) ttls.add(titlesArr.optString(k, ""))
-                        return@withContext AnalyzeResult(chs, ttls)
                     }
+                    if (attempt < 2) delay(1_000L)
                 }
+                Log.w(TAG, "cache hit but result fetch failed")
+                return@withContext null
             }
             repeat(90) { i ->
-                delay(10_000L)
-                val statusResp = http("${ServerConfig.get()}/chapters/status?jobId=$jobId", "GET", null, token) ?: return@repeat
+                val statusResp = http("${ServerConfig.get()}/chapters/status?jobId=$jobId", "GET", null, token)
+                if (statusResp == null) { delay(5_000L); return@repeat }
                 val st = JSONObject(statusResp).optString("status", "")
                 Log.d(TAG, "poll[$i] status=$st")
                 when (st) {
@@ -79,8 +84,9 @@ object ServerChapterApi {
                         if (titlesArr != null) for (k in 0 until titlesArr.length()) ttls.add(titlesArr.optString(k, ""))
                         return@withContext AnalyzeResult(chs, ttls)
                     }
-                    "failed" -> { Log.w(TAG, "server failed"); return@withContext null }
+                    "failed", "canceled", "cancelled" -> { Log.w(TAG, "server $st"); return@withContext null }
                 }
+                delay(10_000L)
             }
             null
         } catch (e: Exception) { Log.e(TAG, "analyze err", e); null }
