@@ -136,6 +136,7 @@ $cleanDesc
     // ★ 서버 경계 → Groq에게 각 구간의 곡명 재질의
     // ═══════════════════════════════════════════════════════════════
     suspend fun retitleSegments(
+    candidates: List<String> = emptyList(),
         description: String,
         segments: List<Pair<Long, Long>>,
         durationSec: Long

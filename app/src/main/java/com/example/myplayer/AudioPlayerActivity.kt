@@ -1051,7 +1051,13 @@ class AudioPlayerActivity : AppCompatActivity() {
             } else {
                 diag("Groq retitle 호출 (서버 titles 없음)")
                 val groqTitles = if (desc.isNotBlank()) {
-                    GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }, dur / 1000)
+                    val candidates = server
+    .map { it.title }
+    .filter { it.isNotBlank() }
+    .filter { !it.startsWith("구간") }
+    .filter { !it.contains("Unknown Artist") }
+    .filter { !it.contains("Various Artists") }
+GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }, dur / 1000, candidates)
                 } else emptyList()
                 if (groqTitles.isNotEmpty()) ServerChapterApi.saveTitles(this@AudioPlayerActivity, videoId, groqTitles)
                 groqTitles
