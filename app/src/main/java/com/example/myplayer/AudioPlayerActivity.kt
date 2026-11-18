@@ -965,6 +965,29 @@ class AudioPlayerActivity : AppCompatActivity() {
         private fun loadChapters(videoId: String) {
         bgScope.launch {
             try {
+                // ★ 곡 전환 시 이전 챕터 즉시 초기화
+                currentChapters = emptyList()
+                lastShownChapterTitle = ""
+                getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+                    .edit().remove("chapters").apply()
+                diag("챕터 초기화: $videoId")
+                // ★ 서버 캐시 우선 조회
+                val cachedChapters = ServerChapterApi.getCached(this@AudioPlayerActivity, videoId)
+                if (cachedChapters != null) {
+                    currentChapters = cachedChapters.map { Chapter(it.startMs, it.title) }
+                    startChapterWatcher()
+                    diag("서버 캐시 챕터 적용: ${cachedChapters.size}개")
+                    val arr = org.json.JSONArray()
+                    for (ch in currentChapters) {
+                        val o = org.json.JSONObject()
+                        o.put("startMs", ch.startMs)
+                        o.put("title", ch.title)
+                        arr.put(o)
+                    }
+                    getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+                        .edit().putString("chapters", arr.toString()).apply()
+                    return@launch
+                }
                 val (desc, _, duration) = YouTubeStream.fetchMetadata(videoId)
                 if (videoId != currentVideoId) return@launch
                 currentDescription = desc

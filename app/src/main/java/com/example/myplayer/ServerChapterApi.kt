@@ -19,6 +19,24 @@ object ServerChapterApi {
         submitted.add(videoId)
         return true
     }
+    suspend fun getCached(ctx: Context, videoId: String): List<ServerChapter>? = withContext(Dispatchers.IO) {
+        try {
+            val token = ctx.getSharedPreferences("server_auth", Context.MODE_PRIVATE)
+                .getString("jwt", null)
+            val resp = http("${ServerConfig.get()}/chapters?videoId=$videoId", "GET", null, token) ?: return@withContext null
+            val json = JSONObject(resp)
+            val arr = json.optJSONArray("chapters") ?: return@withContext null
+            val out = (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                ServerChapter(o.optLong("startMs", 0L), o.optLong("endMs", 0L), o.optString("title", ""), o.optDouble("confidence", 0.0))
+            }
+            if (out.size >= 2) out else null
+        } catch (e: Exception) {
+            Log.e(TAG, "getCached err: ${e.message}")
+            null
+        }
+    }
+
     data class ServerChapter(val startMs: Long, val endMs: Long, val title: String, val confidence: Double)
     data class AnalyzeResult(val chapters: List<ServerChapter>, val titles: List<String>)
 
