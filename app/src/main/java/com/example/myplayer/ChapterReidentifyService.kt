@@ -60,7 +60,9 @@ class ChapterReidentifyService : AccessibilityService() {
 
         scope.launch {
             try {
-                val r = ChapterReidentifyClient.reidentify(vid, pos / 1000.0, parsed)
+                val artist = parts[0]
+                val songTitle = parts[1]
+                val r = ChapterReidentifyClient.fixChapter(vid, pos, songTitle, artist)
             if (r.ok && r.title.isNotBlank()) {
                 prefs.edit().putString("current_title", r.title).apply()
                 val i = android.content.Intent("com.example.myplayer.ACTION_CHAPTER_TITLE_UPDATED").setPackage(packageName)

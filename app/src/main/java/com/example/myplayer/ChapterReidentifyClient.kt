@@ -9,18 +9,19 @@ import java.net.URL
 object ChapterReidentifyClient {
     
 
-    suspend fun reidentify(videoId: String, timeSec: Double, title: String? = null): ReidentifyResult =
+    suspend fun fixChapter(videoId: String, startMs: Long, newTitle: String, artist: String? = null): ReidentifyResult =
         withContext(Dispatchers.IO) {
             val token = getJwtToken()
             android.util.Log.d("ChapterReidentifyClient", "token len=${token?.length ?: 0}")
             if (token == null) return@withContext ReidentifyResult(false, "", "")
             val body = JSONObject().apply {
                 put("videoId", videoId)
-                put("time", timeSec)
-                if (!title.isNullOrBlank()) put("title", title)
+                put("startMs", startMs)
+                put("newTitle", newTitle)
+                if (!artist.isNullOrBlank()) put("artist", artist)
             }
-            val conn = URL("${ServerConfig.get()}/chapters/reidentify").openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
+            val conn = URL("${ServerConfig.get()}/chapters/fix").openConnection() as HttpURLConnection
+            conn.requestMethod = "PATCH"
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("Authorization", "Bearer $token")
             conn.doOutput = true
@@ -35,7 +36,7 @@ object ChapterReidentifyClient {
             ReidentifyResult(
                 ok = resp.optBoolean("ok", false),
                 title = resp.optString("title", ""),
-                source = resp.optString("source", "")
+                source = resp.optString("source", "google-music")
             )
         }
 
