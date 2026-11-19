@@ -7,7 +7,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object ChapterReidentifyClient {
-    private const val SERVER = "http://193.123.167.118:5000"
+    
 
     suspend fun reidentify(videoId: String, timeSec: Double, title: String? = null): ReidentifyResult =
         withContext(Dispatchers.IO) {
@@ -19,7 +19,7 @@ object ChapterReidentifyClient {
                 put("time", timeSec)
                 if (!title.isNullOrBlank()) put("title", title)
             }
-            val conn = URL("$SERVER/chapters/reidentify").openConnection() as HttpURLConnection
+            val conn = URL("${ServerConfig.get()}/chapters/reidentify").openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("Authorization", "Bearer $token")
