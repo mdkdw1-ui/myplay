@@ -28,8 +28,6 @@ class ChapterReidentifyService : AccessibilityService() {
         android.util.Log.d("ChapterReidentify", "event pkg=${event?.packageName} type=${event?.eventType}")
         if (event?.packageName?.toString() != "com.google.android.googlequicksearchbox") return
         val now = System.currentTimeMillis()
-        if (now - lastSentMs < 3000) return
-        lastSentMs = now
 
         val root = rootInActiveWindow ?: return
         val texts = mutableListOf<String>()
@@ -54,6 +52,8 @@ class ChapterReidentifyService : AccessibilityService() {
         val prefs = getSharedPreferences("audio_prefs", MODE_PRIVATE)
         val vid = prefs.getString("current_video_id", null) ?: return
         val pos = PlaybackService.exoPlayer?.currentPosition ?: 0L
+
+        lastSentMs = now
 
         scope.launch {
             try {
