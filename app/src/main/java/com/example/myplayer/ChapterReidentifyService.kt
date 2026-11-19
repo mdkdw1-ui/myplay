@@ -42,7 +42,8 @@ class ChapterReidentifyService : AccessibilityService() {
             Regex("^(.{2,60})\\s*[·\\-|]\\s*(.{2,60})$").matches(it.trim())
         }?.trim() ?: return
 
-        val vid = AudioPlayerActivity.currentVideoIdStatic ?: return
+        val prefs = getSharedPreferences("audioprefs", MODE_PRIVATE)
+        val vid = prefs.getString("currentvideoid", null) ?: return
         val pos = PlaybackService.exoPlayer?.currentPosition ?: 0L
 
         scope.launch {
