@@ -140,6 +140,40 @@ class AudioPlayerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_audio)
+        try {
+            val root = findViewById<View>(android.R.id.content) as android.view.ViewGroup
+            val btn = com.google.android.material.button.MaterialButton(this).apply {
+                id = View.generateViewId()
+                text = "🎵 이 구간 다시 찾기"
+                textSize = 12f
+            }
+            root.addView(btn, android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
+            btn.setOnClickListener {
+                val mc = mediaController
+                val posMs = mc?.currentPosition ?: 0L
+                val vid = currentVideoId
+                if (vid.isBlank()) {
+                    Toast.makeText(this, "재생 중인 영상이 없습니다", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                Toast.makeText(this, "이 구간 재분석 중...", Toast.LENGTH_SHORT).show()
+                bgScope.launch {
+                    try {
+                        val r = ChapterReidentifyClient.reidentify(vid, posMs / 1000.0)
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            if (r.ok) Toast.makeText(this@AudioPlayerActivity, "제목 갱신: ${r.title}", Toast.LENGTH_LONG).show()
+                            else Toast.makeText(this@AudioPlayerActivity, "재식별 실패", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            Toast.makeText(this@AudioPlayerActivity, "오류: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
 
         pref = getSharedPreferences("audio_prefs", MODE_PRIVATE)
 
