@@ -13,6 +13,7 @@ class ChapterReidentifyService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        android.util.Log.d("ChapterReidentify", "onServiceConnected")
         val info = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                          AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
@@ -24,6 +25,7 @@ class ChapterReidentifyService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        android.util.Log.d("ChapterReidentify", "event pkg=${event?.packageName} type=${event?.eventType}")
         if (event?.packageName?.toString() != "com.google.android.googlequicksearchbox") return
         val now = System.currentTimeMillis()
         if (now - lastSentMs < 3000) return
