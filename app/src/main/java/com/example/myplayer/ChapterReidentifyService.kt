@@ -39,11 +39,13 @@ class ChapterReidentifyService : AccessibilityService() {
         }
         walk(root)
         android.util.Log.d("ChapterReidentify", "texts=${texts.size} sample=${texts.take(5)}")
+        val cardMarkers = setOf("AI 모드", "전체", "동영상", "이미지")
+        if (texts.none { it.trim() in cardMarkers }) return
 
-        val uiLabels = setOf("홈", "검색", "알림", "활동", "AI 모드", "전체", "동영상", "이미지")
+        val uiLabels = setOf("홈", "검색", "알림", "활동", "AI 모드", "전체", "동영상", "이미지", "실행 중인 앱", "모두 닫기", "화면에", "노래를", "물어보기", "재생하거나", "흥얼거려", "Termux", "Perplexity", "DeepSeek")
         val songText = texts.firstOrNull {
             val t = it.trim()
-            t !in uiLabels && t.length >= 4
+            t !in uiLabels && t.length >= 4 && uiLabels.none { t.contains(it) }
         }?.trim() ?: return
         val parts = songText.split(Regex("\\s+"), limit = 2)
         if (parts.size < 2) return
