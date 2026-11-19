@@ -137,7 +137,19 @@ class AudioPlayerActivity : AppCompatActivity() {
     private lateinit var btnRepeat: MaterialButton
     private lateinit var btnLiveSub: MaterialButton
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+        private val titleUpdateReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+            val t = intent.getStringExtra("title") ?: return
+            currentTitle = t
+            pref?.edit()?.putString("current_title", t)?.apply()
+            runOnUiThread {
+                findViewById<android.widget.TextView>(R.id.tvTitle)?.text = t
+                refreshMediaMetadata()
+            }
+        }
+    }
+
+override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_audio)
         try {
@@ -205,6 +217,12 @@ class AudioPlayerActivity : AppCompatActivity() {
                 registerReceiver(skipReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
             } else {
                 registerReceiver(skipReceiver, filter)
+            }
+            val titleFilter = android.content.IntentFilter("com.example.myplayer.ACTION_CHAPTER_TITLE_UPDATED")
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(titleUpdateReceiver, titleFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(titleUpdateReceiver, titleFilter)
             }
         } catch (e: Exception) {
             diag("broadcast 수신기 등록 err: ${e.message}")
@@ -3821,6 +3839,7 @@ private fun startPositionAutoSave() {
 
     override fun onDestroy() {
         stopChapterWatcher()
+        try { unregisterReceiver(titleUpdateReceiver) } catch (_: Exception) {}
         super.onDestroy()
         // ★ audio_diag.log → Download/MyPlayer 복사 (크래시 진단용, 임시)
         try {

@@ -58,7 +58,14 @@ class ChapterReidentifyService : AccessibilityService() {
 
         scope.launch {
             try {
-                ChapterReidentifyClient.reidentify(vid, pos / 1000.0, parsed)
+                val r = ChapterReidentifyClient.reidentify(vid, pos / 1000.0, parsed)
+            if (r.ok && r.title.isNotBlank()) {
+                prefs.edit().putString("current_title", r.title).apply()
+                val i = android.content.Intent("com.example.myplayer.ACTION_CHAPTER_TITLE_UPDATED").setPackage(packageName)
+                i.putExtra("title", r.title)
+                sendBroadcast(i)
+                android.util.Log.d("ChapterReidentify", "title updated: ${r.title}")
+            }
             } catch (e: Exception) {
                 android.util.Log.d("ChapterReidentify", "reidentify error: ${e.message}")
             }
