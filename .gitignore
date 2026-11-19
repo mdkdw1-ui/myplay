@@ -34,3 +34,4 @@ fix_bg.py
 fix_prev.py
 fix_next.py
 fix_api.py
+*.bak
