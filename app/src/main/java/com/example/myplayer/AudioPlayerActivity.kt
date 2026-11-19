@@ -149,7 +149,9 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
-override fun onCreate(savedInstanceState: Bundle?) {
+    private var lastReidentifyClick = 0L
+
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_audio)
         try {
@@ -163,6 +165,9 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
             btn.setOnClickListener {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (now - lastReidentifyClick < 5000) return@setOnClickListener
+                    lastReidentifyClick = now
                 val mc = mediaController
                 val posMs = mc?.currentPosition ?: 0L
                 val vid = currentVideoId
@@ -176,7 +181,10 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     try {
                         val r = ChapterReidentifyClient.reidentify(vid, posMs / 1000.0)
                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            if (r.ok) Toast.makeText(this@AudioPlayerActivity, "제목 갱신: ${r.title}", Toast.LENGTH_LONG).show()
+                            if (r.ok) {
+                            Toast.makeText(this@AudioPlayerActivity, "제목 갱신: ${r.title}", Toast.LENGTH_LONG).show()
+                            loadChapters(vid)
+                        }
                             else Toast.makeText(this@AudioPlayerActivity, "재식별 실패", Toast.LENGTH_SHORT).show()
                         }
                     } catch (e: Exception) {

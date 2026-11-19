@@ -25,12 +25,13 @@ object ChapterReidentifyClient {
             conn.setRequestProperty("Authorization", "Bearer $token")
             conn.doOutput = true
             conn.connectTimeout = 15000
-            conn.readTimeout = 60000
+            conn.readTimeout = 120000
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
             val code = conn.responseCode
             android.util.Log.d("ChapterReidentifyClient", "HTTP $code")
             if (code !in 200..299) return@withContext ReidentifyResult(false, "", "")
             val resp = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+            conn.disconnect()
             ReidentifyResult(
                 ok = resp.optBoolean("ok", false),
                 title = resp.optString("title", ""),
