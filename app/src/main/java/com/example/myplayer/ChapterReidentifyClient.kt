@@ -11,7 +11,9 @@ object ChapterReidentifyClient {
 
     suspend fun reidentify(videoId: String, timeSec: Double, title: String? = null): ReidentifyResult =
         withContext(Dispatchers.IO) {
-            val token = getJwtToken() ?: return@withContext ReidentifyResult(false, "", "")
+            val token = getJwtToken()
+            android.util.Log.d("ChapterReidentifyClient", "token len=${token?.length ?: 0}")
+            if (token == null) return@withContext ReidentifyResult(false, "", "")
             val body = JSONObject().apply {
                 put("videoId", videoId)
                 put("time", timeSec)
@@ -26,6 +28,7 @@ object ChapterReidentifyClient {
             conn.readTimeout = 60000
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
             val code = conn.responseCode
+            android.util.Log.d("ChapterReidentifyClient", "HTTP $code")
             if (code !in 200..299) return@withContext ReidentifyResult(false, "", "")
             val resp = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
             ReidentifyResult(
