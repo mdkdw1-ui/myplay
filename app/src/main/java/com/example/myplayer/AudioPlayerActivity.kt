@@ -158,6 +158,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                     Toast.makeText(this, "재생 중인 영상이 없습니다", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
+                android.util.Log.d("ChapterReidentify", "reidentify button clicked vid=$vid pos=${posMs / 1000.0}")
                 Toast.makeText(this, "이 구간 재분석 중...", Toast.LENGTH_SHORT).show()
                 bgScope.launch {
                     try {
