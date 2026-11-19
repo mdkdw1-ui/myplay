@@ -41,7 +41,7 @@ object ChapterReidentifyClient {
     data class ReidentifyResult(val ok: Boolean, val title: String, val source: String)
 
     private fun getJwtToken(): String? {
-        val prefs = MyApp.instance.getSharedPreferences("serverauth", android.content.Context.MODE_PRIVATE)
+        val prefs = MyApp.instance.getSharedPreferences("server_auth", android.content.Context.MODE_PRIVATE)
         return prefs.getString("jwt", null)
     }
 }
