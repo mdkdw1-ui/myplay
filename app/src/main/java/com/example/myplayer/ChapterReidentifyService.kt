@@ -33,12 +33,14 @@ class ChapterReidentifyService : AccessibilityService() {
 
         val root = rootInActiveWindow ?: return
         val texts = mutableListOf<String>()
+        android.util.Log.d("ChapterReidentify", "collecting texts")
         fun walk(n: AccessibilityNodeInfo?) {
             if (n == null) return
             n.text?.let { if (it.isNotBlank()) texts.add(it.toString()) }
             for (i in 0 until n.childCount) walk(n.getChild(i))
         }
         walk(root)
+        android.util.Log.d("ChapterReidentify", "texts=${texts.size} sample=${texts.take(5)}")
 
         val parsed = texts.firstOrNull {
             Regex("^(.{2,60})\\s*[·\\-|]\\s*(.{2,60})$").matches(it.trim())
