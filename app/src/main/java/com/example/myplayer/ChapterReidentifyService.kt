@@ -53,6 +53,7 @@ class ChapterReidentifyService : AccessibilityService() {
         val vid = prefs.getString("current_video_id", null) ?: return
         val pos = PlaybackService.exoPlayer?.currentPosition ?: 0L
 
+        if (now - lastSentMs < 3000) return
         lastSentMs = now
 
         scope.launch {
