@@ -42,12 +42,17 @@ class ChapterReidentifyService : AccessibilityService() {
         walk(root)
         android.util.Log.d("ChapterReidentify", "texts=${texts.size} sample=${texts.take(5)}")
 
-        val parsed = texts.firstOrNull {
-            Regex("^(.{2,60})\\s*[·\\-|]\\s*(.{2,60})$").matches(it.trim())
+        val uiLabels = setOf("홈", "검색", "알림", "활동", "AI 모드", "전체", "동영상", "이미지")
+        val songText = texts.firstOrNull {
+            val t = it.trim()
+            t !in uiLabels && t.length >= 4
         }?.trim() ?: return
+        val parts = songText.split(Regex("\\s+"), limit = 2)
+        if (parts.size < 2) return
+        val parsed = parts[0] + " - " + parts[1]
 
-        val prefs = getSharedPreferences("audioprefs", MODE_PRIVATE)
-        val vid = prefs.getString("currentvideoid", null) ?: return
+        val prefs = getSharedPreferences("audio_prefs", MODE_PRIVATE)
+        val vid = prefs.getString("current_video_id", null) ?: return
         val pos = PlaybackService.exoPlayer?.currentPosition ?: 0L
 
         scope.launch {
