@@ -59,7 +59,9 @@ class ChapterReidentifyService : AccessibilityService() {
         scope.launch {
             try {
                 ChapterReidentifyClient.reidentify(vid, pos / 1000.0, parsed)
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.d("ChapterReidentify", "reidentify error: ${e.message}")
+            }
         }
     }
 
