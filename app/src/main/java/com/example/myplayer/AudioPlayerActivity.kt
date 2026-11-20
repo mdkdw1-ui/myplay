@@ -980,9 +980,16 @@ class AudioPlayerActivity : AppCompatActivity() {
         }
     }
 
-        private fun loadChapters(videoId: String) {
+        private var lastChapterVideoId: String? = null
+
+    private fun loadChapters(videoId: String) {
         bgScope.launch {
             try {
+                val prevChapterVideoId = lastChapterVideoId
+                if (prevChapterVideoId != null && prevChapterVideoId != videoId) {
+                    ServerChapterApi.cancelAnalysis(this@AudioPlayerActivity, prevChapterVideoId)
+                }
+                lastChapterVideoId = videoId
                 // ★ 곡 전환 시 이전 챕터 즉시 초기화
                 currentChapters = emptyList()
                 lastShownChapterTitle = ""
@@ -1067,7 +1074,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 getSharedPreferences("chapter_prefs", MODE_PRIVATE).edit().putString("chapters", arr.toString()).apply()
                 diag("desc 챕터 적용: ${merged.size}개")
             }
-            return
+            // 서버 2차 분석도 진행 (챕터 캐시 생성 필요)
         }
         val streamUrl = mediaController?.currentMediaItem?.localConfiguration?.uri?.toString() ?: ""
         val dur = mediaController?.duration ?: 0L

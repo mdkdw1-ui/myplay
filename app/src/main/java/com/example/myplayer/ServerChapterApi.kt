@@ -116,6 +116,21 @@ object ServerChapterApi {
         } catch (e: Exception) { Log.e(TAG, "analyze err", e); null }
     }
 
+    suspend fun cancelAnalysis(ctx: Context, videoId: String): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val token = ctx.getSharedPreferences("server_auth", Context.MODE_PRIVATE)
+                    .getString("jwt", null)
+                val body = JSONObject().apply { put("videoId", videoId) }.toString()
+                val resp = http("${ServerConfig.get()}/chapters/cancel", "POST", body, token)
+                    ?: return@withContext false
+                JSONObject(resp).optBoolean("ok", false)
+            } catch (e: Exception) {
+                Log.e(TAG, "cancelAnalysis err: ${e.message}")
+                false
+            }
+        }
+
     suspend fun saveTitles(ctx: Context, videoId: String, titles: List<String>): Boolean = withContext(Dispatchers.IO) {
         try {
             val token = ctx.getSharedPreferences("server_auth", Context.MODE_PRIVATE).getString("jwt", null)
