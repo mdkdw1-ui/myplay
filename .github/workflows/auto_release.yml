@@ -34,18 +34,17 @@ jobs:
       - name: Grant execute permission
         run: chmod +x ./gradlew || true
 
-      - name: Increment version
+      - name: Compute version
         id: version
         run: |
-          VERSION=$(sed -n 's/.*versionName *= *"\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
-          if [ -z "$VERSION" ]; then VERSION="1.0.0"; fi
+          LATEST=$(git tag --list 'v*' --sort=-v:refname | head -1)
+          if [ -z "$LATEST" ]; then
+            VERSION="1.0.0"
+          else
+            VERSION="${LATEST#v}"
+          fi
           NEW_VERSION=$(python3 -c "print(f'{float('$VERSION')+0.001:.3f}')")
           sed -i "s/versionName *= *\"[^\"]*\"/versionName = \"$NEW_VERSION\"/" app/build.gradle.kts
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add app/build.gradle.kts
-          git commit -m "chore: bump version to $NEW_VERSION [skip ci]" || true
-          git push || true
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "Building v$NEW_VERSION"
