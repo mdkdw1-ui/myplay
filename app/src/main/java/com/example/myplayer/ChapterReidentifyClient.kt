@@ -31,12 +31,12 @@ object ChapterReidentifyClient {
         android.util.Log.d("ChapterReidentifyClient", "job submitted id=$jobId")
 
         var result: JSONObject? = null
-        repeat(60) {
+        for (attempt in 0 until 60) {
             delay(3000)
             val job = pollFix(jobId, token)
             if (job != null) {
                 result = job
-                return@repeat
+                break
             }
         }
 
