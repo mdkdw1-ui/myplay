@@ -1029,7 +1029,7 @@ class AudioPlayerActivity : AppCompatActivity() {
             val analyzeResult = ServerChapterApi.analyze(
                 this@AudioPlayerActivity,
                 videoId,
-                currentStreamUrl ?: "",
+                mediaController?.currentMediaItem?.localConfiguration?.uri?.toString() ?: "",
                 0L
             )
             if (videoId != currentVideoId) return@launch
