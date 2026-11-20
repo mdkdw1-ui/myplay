@@ -1025,7 +1025,33 @@ class AudioPlayerActivity : AppCompatActivity() {
                         diag("Groq AI 타임스탬프 완료: ${chapters.size}개")
                     }
                 }
-                if (chapters.isNotEmpty()) {
+                        if (chapters.isEmpty()) {
+            val analyzeResult = ServerChapterApi.analyze(
+                this@AudioPlayerActivity,
+                videoId,
+                currentStreamUrl ?: "",
+                0L
+            )
+            if (videoId != currentVideoId) return@launch
+            val serverChapters = analyzeResult?.chapters
+            if (!serverChapters.isNullOrEmpty()) {
+                currentChapters = serverChapters.map { Chapter(it.startMs, it.title) }
+                startChapterWatcher()
+                diag("서버 자동 챕터 적용: ${serverChapters.size}개")
+                val arr = org.json.JSONArray()
+                for (ch in currentChapters) {
+                    val o = org.json.JSONObject()
+                    o.put("startMs", ch.startMs)
+                    o.put("title", ch.title)
+                    arr.put(o)
+                }
+                getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+                    .edit().putString("chapters", arr.toString()).apply()
+                return@launch
+            }
+        }
+
+if (chapters.isNotEmpty()) {
                     currentChapters = chapters
                     startChapterWatcher()
                 }
