@@ -44,14 +44,21 @@ class ChapterReidentifyService : AccessibilityService() {
         val cardMarkers = setOf("AI 모드", "전체", "동영상", "이미지")
         if (texts.none { it.trim() in cardMarkers }) return
 
-        val uiLabels = setOf("홈", "검색", "알림", "활동", "AI 모드", "전체", "동영상", "이미지", "실행 중인 앱", "모두 닫기", "화면에", "노래를", "물어보기", "재생하거나", "흥얼거려", "Termux", "Perplexity", "DeepSeek")
-        val songText = texts.firstOrNull {
-            val t = it.trim()
-            t !in uiLabels && t.length >= 4 && uiLabels.none { t.contains(it) }
-        }?.trim() ?: return
-        val parts = songText.split(Regex("\\s+"), limit = 2)
-        if (parts.size < 2) return
-        val parsed = parts[0] + " - " + parts[1]
+        val normalized = texts.map {
+            it.replace('\u00A0', ' ').trim()
+        }
+        val songMeta = Regex("""^(.+)의\s+노래\s*[·‧•・]\s*\d{4}년$""")
+        val metaIndex = normalized.indexOfFirst {
+            songMeta.matchEntire(it) != null
+        }
+        if (metaIndex <= 0) return
+
+        val match = songMeta.matchEntire(normalized[metaIndex]) ?: return
+        val artist = match.groupValues[1].trim()
+        val songTitle = normalized[metaIndex - 1]
+
+        if (artist.isBlank() || songTitle.isBlank()) return
+        if (songTitle in setOf("검색결과", "검색 결과", "전체", "동영상", "이미지")) return
 
         val prefs = getSharedPreferences("audio_prefs", MODE_PRIVATE)
         val vid = prefs.getString("current_video_id", null) ?: return
@@ -62,8 +69,7 @@ class ChapterReidentifyService : AccessibilityService() {
 
         scope.launch {
             try {
-                val artist = parts[0]
-                val songTitle = parts[1]
+                android.util.Log.d("ChapterReidentify", "sending video=$vid hint_ms=$pos title=$songTitle artist=$artist")
                 val r = ChapterReidentifyClient.fixChapter(vid, pos, songTitle, artist)
             if (r.ok && r.title.isNotBlank()) {
                 prefs.edit().putString("current_title", r.title).apply()
