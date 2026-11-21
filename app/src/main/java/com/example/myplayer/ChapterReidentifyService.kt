@@ -38,7 +38,9 @@ class ChapterReidentifyService : AccessibilityService() {
             for (i in 0 until n.childCount) walk(n.getChild(i))
         }
         walk(root)
-        android.util.Log.d("ChapterReidentify", "texts=${texts.size} sample=${texts.take(5)}")
+        texts.forEachIndexed { index, text ->
+            android.util.Log.d("ChapterReidentify", "text[$index]=${text.replace("\n", " / ")}")
+        }
         val cardMarkers = setOf("AI 모드", "전체", "동영상", "이미지")
         if (texts.none { it.trim() in cardMarkers }) return
 
