@@ -191,6 +191,8 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
     }
+    private var updateSeekRunnable: Runnable? = null
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -2254,6 +2256,7 @@ private fun playNextRelated() {
         list.removeAllViews()
 
         val chapters = YouTubeChapters.parse(description)
+        currentChapters = chapters
         if (chapters.isEmpty()) {
             box.visibility = View.GONE
             return
@@ -2997,6 +3000,8 @@ private fun playNextRelated() {
     }
 
     override fun onDestroy() {
+        updateSeekRunnable?.let { mainHandler.removeCallbacks(it) }
+        updateSeekRunnable = null
         super.onDestroy()
         // ★ PlayerActivity 종료 → 자동 다음곡 재활성화
         PlaybackService.autoNextDisabled = false
