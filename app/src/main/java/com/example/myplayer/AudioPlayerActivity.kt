@@ -981,9 +981,11 @@ class AudioPlayerActivity : AppCompatActivity() {
     }
 
         private var lastChapterVideoId: String? = null
+    private var chapterLoadJob: kotlinx.coroutines.Job? = null
 
     private fun loadChapters(videoId: String) {
-        bgScope.launch {
+        chapterLoadJob?.cancel()
+        chapterLoadJob = bgScope.launch {
             try {
                 val prevChapterVideoId = lastChapterVideoId
                 if (prevChapterVideoId != null && prevChapterVideoId != videoId) {
@@ -993,8 +995,6 @@ class AudioPlayerActivity : AppCompatActivity() {
                 // ★ 곡 전환 시 이전 챕터 즉시 초기화
                 currentChapters = emptyList()
                 lastShownChapterTitle = ""
-                getSharedPreferences("chapter_prefs", MODE_PRIVATE)
-                    .edit().remove("chapters").apply()
                 diag("챕터 초기화: $videoId")
                 // ★ 서버 캐시 우선 조회
                 val cachedChapters = ServerChapterApi.getCached(this@AudioPlayerActivity, videoId)
@@ -1013,6 +1013,9 @@ class AudioPlayerActivity : AppCompatActivity() {
                         .edit().putString("chapters", arr.toString()).apply()
                     return@launch
                 }
+                getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+                    .edit().remove("chapters").apply()
+
                 val (desc, _, duration) = YouTubeStream.fetchMetadata(videoId)
                 if (videoId != currentVideoId) return@launch
                 currentDescription = desc
@@ -1072,7 +1075,9 @@ if (chapters.isNotEmpty()) {
                     } else {
                         diag("챕터 0개 → 기존 prefs 유지 (서버 2차 대기)")
                     }
-                    maybeSubmitServerAnalysis(videoId, if (chapters.isNotEmpty()) chapters else currentChapters, desc)
+                    if (chapters.isNotEmpty()) {
+                        maybeSubmitServerAnalysis(videoId, chapters, desc)
+                    }
                 } catch (e: Exception) {
                     diag("챕터 저장 err: ${e.message}")
                 }
