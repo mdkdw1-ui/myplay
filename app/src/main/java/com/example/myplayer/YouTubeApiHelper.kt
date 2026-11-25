@@ -185,7 +185,7 @@ object YouTubeApiHelper {
                                 videoId = id,
                                 title = v.optString("title", ""),
                                 channel = v.optString("author", ""),
-                                thumbnail = normalizeThumb(v.optString("videoThumbnails", ""), v.optString("videoId", "")),
+                                thumbnail = normalizeThumb(v.optJSONArray("videoThumbnails")?.optJSONObject(0)?.optString("url", "") ?: "", v.optString("videoId", "")),
                                 duration = fmtSec(v.optInt("lengthSeconds", 0)),
                                 viewCount = fmtViews(v.optLong("viewCount", 0)),
                                 uploadDate = ""
@@ -249,7 +249,7 @@ object YouTubeApiHelper {
                         videoId = id,
                         title = v.optString("title", ""),
                         channel = v.optString("author", ""),
-                        thumbnail = normalizeThumb(v.optString("videoThumbnails", ""), v.optString("videoId", "")),
+                        thumbnail = normalizeThumb(v.optJSONArray("videoThumbnails")?.optJSONObject(0)?.optString("url", "") ?: "", v.optString("videoId", "")),
                         duration = fmtSec(v.optInt("lengthSeconds", 0)),
                         viewCount = fmtViews(v.optLong("viewCount", 0)),
                         uploadDate = ""
@@ -374,7 +374,7 @@ object YouTubeApiHelper {
                         videoId = v.optString("videoId", ""),
                         title = v.optString("title", ""),
                         channel = v.optString("author", ""),
-                        thumbnail = normalizeThumb(v.optString("videoThumbnails", ""), v.optString("videoId", "")),
+                        thumbnail = normalizeThumb(v.optJSONArray("videoThumbnails")?.optJSONObject(0)?.optString("url", "") ?: "", v.optString("videoId", "")),
                         duration = fmtSec(v.optInt("lengthSeconds", 0)),
                         viewCount = fmtViews(v.optLong("viewCount", 0)),
                         uploadDate = ""
@@ -484,7 +484,7 @@ object YouTubeApiHelper {
                         videoId = v.optString("videoId", ""),
                         title = v.optString("title", ""),
                         channel = v.optString("author", ""),
-                        thumbnail = normalizeThumb(v.optString("videoThumbnails", ""), v.optString("videoId", "")),
+                        thumbnail = normalizeThumb(v.optJSONArray("videoThumbnails")?.optJSONObject(0)?.optString("url", "") ?: "", v.optString("videoId", "")),
                         duration = fmtSec(v.optInt("lengthSeconds", 0)),
                         viewCount = fmtViews(v.optLong("viewCount", 0)),
                         uploadDate = ""

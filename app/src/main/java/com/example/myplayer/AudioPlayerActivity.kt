@@ -71,6 +71,8 @@ class AudioPlayerActivity : AppCompatActivity() {
     private var chapterWatcherJob: kotlinx.coroutines.Job? = null
     private var lastShownChapterTitle: String = ""
     private var isShowingChapterTitle = false
+    private var skipReceiver: android.content.BroadcastReceiver? = null
+    private var positionSaveJob: kotlinx.coroutines.Job? = null
     private var chapterTitleToShow: String = ""
     private var currentChannel: String = ""
     private var currentThumb: String = ""
@@ -160,7 +162,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         forceUiSync()
 
         try {
-            val skipReceiver = object : android.content.BroadcastReceiver() {
+            skipReceiver = object : android.content.BroadcastReceiver() {
                 override fun onReceive(ctx: android.content.Context?, intent: android.content.Intent?) {
                     when (intent?.action) {
                         "com.example.myplayer.ACTION_SKIP_NEXT" -> {
@@ -1084,7 +1086,6 @@ if (chapters.isNotEmpty()) {
 
     private fun maybeSubmitServerAnalysis(videoId: String, groqChapters: List<Chapter>, desc: String) {
         if (videoId.isBlank() || videoId.startsWith("local:")) return
-        if (!ServerChapterApi.markSubmitted(videoId)) { diag("이미 제출됨: $videoId"); return }
 
         // ★ desc에 타임스탬프 있으면 그대로 사용 (Foote skip)
         val descChapters = YouTubeChapters.parse(desc)
@@ -1105,6 +1106,7 @@ if (chapters.isNotEmpty()) {
         val streamUrl = mediaController?.currentMediaItem?.localConfiguration?.uri?.toString() ?: ""
         val dur = mediaController?.duration ?: 0L
         if (dur <= 0L) return
+        if (!ServerChapterApi.markSubmitted(videoId)) { diag("이미 제출됨: $videoId"); return }
         diag("서버 2차 분석 제출: $videoId")
         val groqSegments = org.json.JSONArray()
         for (c in groqChapters) {
@@ -3662,7 +3664,8 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
     }
 
 private fun startPositionAutoSave() {
-        bgScope.launch {
+        positionSaveJob?.cancel()
+        positionSaveJob = bgScope.launch {
             while (isActive) {
                 delay(10_000)   // 10초
                 try {
@@ -3837,7 +3840,10 @@ private fun startPositionAutoSave() {
 
     override fun onDestroy() {
         stopChapterWatcher()
+        try { skipReceiver?.let { unregisterReceiver(it) } } catch (_: Exception) {}
         try { unregisterReceiver(titleUpdateReceiver) } catch (_: Exception) {}
+        positionSaveJob?.cancel()
+        positionSaveJob = null
         super.onDestroy()
         // ★ audio_diag.log → Download/MyPlayer 복사 (크래시 진단용, 임시)
         try {
