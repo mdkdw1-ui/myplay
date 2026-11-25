@@ -528,21 +528,6 @@ class AudioPlayerActivity : AppCompatActivity() {
                 .format(java.util.Date())
             f.appendText("[$ts] $msg\n")
         } catch (_: Exception) {}
-        try {
-            diagLines.addLast(msg)
-            while (diagLines.size > 10) diagLines.removeFirst()
-            val text = diagLines.joinToString("\n")
-            runOnUiThread {
-                try {
-                    val tv = findViewById<android.widget.TextView>(R.id.tvChannel)
-                    if (tv != null) {
-                        tv.text = text
-                        tv.setTextColor(0xFFFFEB3B.toInt())
-                        tv.textSize = 9f
-                    }
-                } catch (_: Exception) {}
-            }
-        } catch (_: Exception) {}
     }
 
     private fun showDiagLog() {
@@ -1720,7 +1705,7 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                 ?.putString("current_thumbnail", currentThumb)
                 ?.putString("current_artist", currentArtist)
                 ?.putString("current_subtitle_url", currentSubtitleUrl)
-                ?.putString("current_stream_url", url)   // ★ 재사용용
+                ?.putString("current_stream_url", useUrl)   // ★ 재사용용
                 ?.apply()
 
             lastMediaSetMs = System.currentTimeMillis()
@@ -3321,8 +3306,11 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
     }
 
     /** ★ 다음 곡 리스트 매 2초마다 갱신 */
+    private var nextSongsUpdateJob: kotlinx.coroutines.Job? = null
+
     private fun startNextSongsUpdate() {
-        bgScope.launch {
+        nextSongsUpdateJob?.cancel()
+        nextSongsUpdateJob = bgScope.launch {
             while (isActive) {
                 try {
                     updateNextSongs()
@@ -3640,8 +3628,11 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
     /** ★ 매 10초 자동 저장 */
     
     // ★★★ 10초마다 UI 강제 동기화 (제목 안 바뀌는 문제 해결) ★★★
+    private var uiSyncJob: kotlinx.coroutines.Job? = null
+
     private fun forceUiSync() {
-        bgScope.launch {
+        uiSyncJob?.cancel()
+        uiSyncJob = bgScope.launch {
             while (isActive) {
                 try {
                     val mc = mediaController
@@ -3847,6 +3838,12 @@ private fun startPositionAutoSave() {
         try { unregisterReceiver(titleUpdateReceiver) } catch (_: Exception) {}
         positionSaveJob?.cancel()
         positionSaveJob = null
+        chapterLoadJob?.cancel()
+        chapterLoadJob = null
+        nextSongsUpdateJob?.cancel()
+        nextSongsUpdateJob = null
+        uiSyncJob?.cancel()
+        uiSyncJob = null
         super.onDestroy()
         // ★ audio_diag.log → Download/MyPlayer 복사 (크래시 진단용, 임시)
         try {
