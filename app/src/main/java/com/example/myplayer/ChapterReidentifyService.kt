@@ -9,7 +9,8 @@ import kotlinx.coroutines.*
 class ChapterReidentifyService : AccessibilityService() {
 
     private val scope = CoroutineScope(Dispatchers.Main + Job())
-    private var lastSentMs = 0L
+    private var inFlight = false
+    private var lastSubmittedKey: List<String>? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -19,15 +20,22 @@ class ChapterReidentifyService : AccessibilityService() {
                          AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
-            packageNames = arrayOf("com.google.android.googlequicksearchbox")
+            // Observe window changes to detect leaving Google.
+            // Text is collected only from Google below.
+            packageNames = null
         }
         serviceInfo = info
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        android.util.Log.d("ChapterReidentify", "event pkg=${event?.packageName} type=${event?.eventType}")
-        if (event?.packageName?.toString() != "com.google.android.googlequicksearchbox") return
-        val now = System.currentTimeMillis()
+        val ev = event ?: return
+        if (ev.packageName?.toString() != "com.google.android.googlequicksearchbox") {
+            if (ev.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+                ev.packageName != null) {
+                lastSubmittedKey = null
+            }
+            return
+        }
 
         val root = rootInActiveWindow ?: return
         val texts = mutableListOf<String>()
@@ -64,22 +72,32 @@ class ChapterReidentifyService : AccessibilityService() {
         val vid = prefs.getString("current_video_id", null) ?: return
         val pos = PlaybackService.exoPlayer?.currentPosition ?: 0L
 
-        if (now - lastSentMs < 3000) return
-        lastSentMs = now
+        val requestKey = listOf(vid, artist, songTitle)
+        if (inFlight || lastSubmittedKey == requestKey) return
+
+        inFlight = true
+        lastSubmittedKey = requestKey
 
         scope.launch {
             try {
                 android.util.Log.d("ChapterReidentify", "sending video=$vid hint_ms=$pos title=$songTitle artist=$artist")
                 val r = ChapterReidentifyClient.fixChapter(vid, pos, songTitle, artist)
+                android.util.Log.d(
+                    "ChapterReidentify",
+                    "fix result ok=${r.ok} title=${r.title} source=${r.source}"
+                )
             if (r.ok && r.title.isNotBlank()) {
-                prefs.edit().putString("current_title", r.title).apply()
                 val i = android.content.Intent("com.example.myplayer.ACTION_CHAPTER_TITLE_UPDATED").setPackage(packageName)
                 i.putExtra("title", r.title)
                 sendBroadcast(i)
                 android.util.Log.d("ChapterReidentify", "title updated: ${r.title}")
             }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.d("ChapterReidentify", "reidentify error: ${e.message}")
+            } finally {
+                inFlight = false
             }
         }
     }

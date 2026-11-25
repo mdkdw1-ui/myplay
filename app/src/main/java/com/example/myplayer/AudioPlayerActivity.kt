@@ -142,11 +142,9 @@ class AudioPlayerActivity : AppCompatActivity() {
         private val titleUpdateReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
             val t = intent.getStringExtra("title") ?: return
-            currentTitle = t
-            pref?.edit()?.putString("current_title", t)?.apply()
             runOnUiThread {
                 findViewById<android.widget.TextView>(R.id.tvTitle)?.text = t
-                refreshMediaMetadata()
+                updateChapterMetadataAudioQuiet(t)
             }
         }
     }
