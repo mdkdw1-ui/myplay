@@ -1249,6 +1249,7 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
         val titles = currentChapters.map { chapter ->
             if (chapter.startMs == startMs) newTitle else chapter.title
         }
+        android.util.Log.e("CHAPTER_SAVE", "saveChapterTitles called: videoId=$currentVideoId title=$newTitle titles=${currentChapters.size}")
         diag("chapter save start: videoId=$videoId title=$newTitle titles=${titles.size}")
 
         bgScope.launch(Dispatchers.IO) {
