@@ -139,7 +139,7 @@ object YouTubeApiHelper {
             // Piped nextpage
             if (continuation.startsWith("piped:")) {
                 val nextpage = continuation.removePrefix("piped:")
-                for (inst in PIPED) {
+                for (inst in livePiped) {
                     val url = "$inst/nextpage/search?q=$q&filter=videos&nextpage=${URLEncoder.encode(nextpage, "UTF-8")}"
                     val obj = getJsonObject(url) ?: continue
                     try {
@@ -173,7 +173,7 @@ object YouTubeApiHelper {
             // Invidious page
             if (continuation.startsWith("inv:")) {
                 val page = continuation.removePrefix("inv:").toIntOrNull() ?: 2
-                for (inst in INVIDIOUS) {
+                for (inst in liveInvidious) {
                     val arr = getJsonArray("$inst/api/v1/search?q=$q&type=video&page=$page") ?: continue
                     try {
                         val out = mutableListOf<VideoItem>()
@@ -207,7 +207,7 @@ object YouTubeApiHelper {
         // ────────────────────────────────────
 
         // Piped 우선
-        for (inst in PIPED) {
+        for (inst in livePiped) {
             val obj = getJsonObject("$inst/search?q=$q&filter=videos") ?: continue
             try {
                 val items = obj.optJSONArray("items") ?: continue
@@ -237,7 +237,7 @@ object YouTubeApiHelper {
         }
 
         // Invidious 폴백
-        for (inst in INVIDIOUS) {
+        for (inst in liveInvidious) {
             val arr = getJsonArray("$inst/api/v1/search?q=$q&type=video") ?: continue
             try {
                 val out = mutableListOf<VideoItem>()
@@ -267,7 +267,19 @@ object YouTubeApiHelper {
     }
 
     
-    suspend fun searchChannels(query: String): List<ChannelItem> = withContext(Dispatchers.IO) {
+    private fun bestAuthorThumb(v: org.json.JSONObject, id: String): String {
+    val arr = v.optJSONArray("authorThumbnails") ?: return ""
+    var best = ""
+    for (i in 0 until arr.length()) {
+        val u = arr.optJSONObject(i)?.optString("url", "") ?: ""
+        if (u.isBlank()) continue
+        if (u.contains("maxres") || u.contains("s800")) return normalizeThumb(u, id)
+        if (best.isBlank()) best = u
+    }
+    return normalizeThumb(best, id)
+}
+
+suspend fun searchChannels(query: String): List<ChannelItem> = withContext(Dispatchers.IO) {
         val q = URLEncoder.encode(query, "UTF-8")
 
         for (inst in INVIDIOUS) {
@@ -281,12 +293,7 @@ object YouTubeApiHelper {
                     out.add(ChannelItem(
                         channelId = id,
                         name = v.optString("author", ""),
-                        thumbnail = normalizeThumb(
-                            v.optJSONArray("authorThumbnails")
-                                ?.optJSONObject(0)
-                                ?.optString("url", "") ?: "",
-                            id
-                        ),
+                        thumbnail = bestAuthorThumb(v, id),
                         subscribers = fmtNum(v.optLong("subCount", 0)) + "명"
                     ))
                 }

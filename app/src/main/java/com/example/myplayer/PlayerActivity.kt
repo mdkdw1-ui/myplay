@@ -1422,6 +1422,19 @@ private fun playNextRelated() {
                 currentTitle = title
                 currentChannel = channel
                 currentThumb = thumb
+
+                withContext(Dispatchers.Main) {
+                    loadSponsorSegments(videoId)
+                    startPreviewWatcher()
+
+                    summaryCard.visibility = View.VISIBLE
+                    tvSummaryBadge.text = "AI 요약 · 탭해서 생성"
+                    tvSummary.text = "탭하면 Gemini가 자막을 요약합니다."
+                    summaryCard.setOnClickListener {
+                        summaryCard.setOnClickListener(null)
+                        buildSummary(videoId, title, currentDescription)
+                    }
+                }
             }
             ok
         } catch (e: Exception) {

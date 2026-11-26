@@ -72,7 +72,7 @@ object YouTubeSearch {
     }
     suspend fun searchPage(query: String, filter: SearchFilter? = null): SearchPage = withContext(Dispatchers.IO) {
         try {
-            val result = youTubeApiSearch(query, null)
+            val result = youTubeApiSearch(query, null, filter)
             if (result.videos.isNotEmpty()) {
                 return@withContext result
             }
@@ -85,7 +85,7 @@ object YouTubeSearch {
     }
 
     /** YouTube API 직접 검색 (youtubei/v1/search) */
-    private fun youTubeApiSearch(query: String, continuation: String?): SearchPage {
+    private fun youTubeApiSearch(query: String, continuation: String?, filter: SearchFilter? = null): SearchPage {
         try {
             val body = JSONObject().apply {
                 put("context", JSONObject().apply {
@@ -100,6 +100,9 @@ object YouTubeSearch {
                     put("continuation", continuation)
                 } else {
                     put("query", query)
+                    if (filter != null) {
+                        put("params", buildFilterParams(filter))
+                    }
                 }
             }
 

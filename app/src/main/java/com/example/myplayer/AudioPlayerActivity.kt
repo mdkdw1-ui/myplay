@@ -139,12 +139,20 @@ class AudioPlayerActivity : AppCompatActivity() {
     private lateinit var btnRepeat: MaterialButton
     private lateinit var btnLiveSub: MaterialButton
 
-        private val titleUpdateReceiver = object : android.content.BroadcastReceiver() {
+        private var titleOverride: String? = null
+
+    private val titleUpdateReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
             val t = intent.getStringExtra("title") ?: return
+            titleOverride = t
             runOnUiThread {
                 findViewById<android.widget.TextView>(R.id.tvTitle)?.text = t
                 updateChapterMetadataAudioQuiet(t)
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    if (titleOverride == t) {
+                        findViewById<android.widget.TextView>(R.id.tvTitle)?.text = t
+                    }
+                }, 1200L)
             }
         }
     }
@@ -1092,8 +1100,12 @@ if (chapters.isNotEmpty()) {
             // 서버 2차 분석도 진행 (챕터 캐시 생성 필요)
         }
         val streamUrl = mediaController?.currentMediaItem?.localConfiguration?.uri?.toString() ?: ""
-        val dur = mediaController?.duration ?: 0L
-        if (dur <= 0L) return
+        var dur = mediaController?.duration ?: 0L
+        if (dur <= 0L) {
+            dur = (groqChapters.lastOrNull()?.startMs ?: 0L) + 60_000L
+            if (dur <= 0L) return
+            diag("duration fallback 사용: $dur")
+        }
         if (!ServerChapterApi.markSubmitted(videoId)) { diag("이미 제출됨: $videoId"); return }
         diag("서버 2차 분석 제출: $videoId")
         val groqSegments = org.json.JSONArray()
