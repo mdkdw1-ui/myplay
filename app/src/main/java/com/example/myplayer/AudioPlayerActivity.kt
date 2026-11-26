@@ -139,20 +139,12 @@ class AudioPlayerActivity : AppCompatActivity() {
     private lateinit var btnRepeat: MaterialButton
     private lateinit var btnLiveSub: MaterialButton
 
-        private var titleOverride: String? = null
-
-    private val titleUpdateReceiver = object : android.content.BroadcastReceiver() {
+        private val titleUpdateReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
             val t = intent.getStringExtra("title") ?: return
-            titleOverride = t
             runOnUiThread {
                 findViewById<android.widget.TextView>(R.id.tvTitle)?.text = t
                 updateChapterMetadataAudioQuiet(t)
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    if (titleOverride == t) {
-                        findViewById<android.widget.TextView>(R.id.tvTitle)?.text = t
-                    }
-                }, 1200L)
             }
         }
     }
@@ -1022,30 +1014,10 @@ class AudioPlayerActivity : AppCompatActivity() {
                     }
                 }
                         if (chapters.isEmpty()) {
-            val analyzeResult = ServerChapterApi.analyze(
-                this@AudioPlayerActivity,
-                videoId,
-                mediaController?.currentMediaItem?.localConfiguration?.uri?.toString() ?: "",
-                duration * 1000L
-            )
-            if (videoId != currentVideoId) return@launch
-            val serverChapters = analyzeResult?.chapters
-            if (!serverChapters.isNullOrEmpty()) {
-                currentChapters = serverChapters.map { Chapter(it.startMs, it.title) }
-                startChapterWatcher()
-                diag("서버 자동 챕터 적용: ${serverChapters.size}개")
-                val arr = org.json.JSONArray()
-                for (ch in currentChapters) {
-                    val o = org.json.JSONObject()
-                    o.put("startMs", ch.startMs)
-                    o.put("title", ch.title)
-                    arr.put(o)
-                }
-                getSharedPreferences("chapter_prefs", MODE_PRIVATE)
-                    .edit().putString("chapters", arr.toString()).apply()
-                return@launch
-            }
-        }
+                            diag("챕터 0개 → 서버 분석 요청")
+                            maybeSubmitServerAnalysis(videoId, emptyList(), desc)
+                            return@launch
+                        }
 
 if (chapters.isNotEmpty()) {
                     currentChapters = chapters
@@ -3127,7 +3099,7 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                     if (currentChapters.size >= 2) {
                         val chapter = currentChapters.lastOrNull { it.startMs <= targetPos }
                         if (chapter != null) {
-                            updateChapterMetadataAudio(chapter.title)
+                            updateChapterMetadataAudioQuiet(chapter.title)
                         }
                     }
                 }
