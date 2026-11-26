@@ -4,7 +4,7 @@ import java.util.regex.Pattern
 
 data class Chapter(
     val startMs: Long,
-    val title: String
+    var title: String
 )
 
 object YouTubeChapters {
