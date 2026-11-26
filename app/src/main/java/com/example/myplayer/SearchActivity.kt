@@ -233,12 +233,21 @@ class SearchActivity : AppCompatActivity() {
         etQuery.clearFocus()
     }
 
+    private var searchJob: kotlinx.coroutines.Job? = null
+    private var lastSearchKey: String? = null
+
     private fun performSearch(q: String) {
         if (q.isEmpty()) {
             Toast.makeText(this, "검색어를 입력하세요", Toast.LENGTH_SHORT).show()
             return
         }
 
+        val searchKey = "$q|${filter.hashCode()}"
+        if (searchJob?.isActive == true && searchKey == lastSearchKey) {
+            android.util.Log.d("Search", "duplicate search skipped: $searchKey")
+            return
+        }
+        lastSearchKey = searchKey
         lastQuery = q
         RecentSearches.add(this, q)
 
@@ -249,7 +258,8 @@ class SearchActivity : AppCompatActivity() {
         tvStatus.visibility = View.VISIBLE
         tvStatus.text = "검색 중..."
 
-        lifecycleScope.launch {
+        searchJob?.cancel()
+        searchJob = lifecycleScope.launch {
             val start = System.currentTimeMillis()
             val page = YouTubeSearch.searchPage(q, filter)
             val elapsed = System.currentTimeMillis() - start
