@@ -876,7 +876,7 @@ class AudioPlayerActivity : AppCompatActivity() {
 
         val artist = currentArtist.ifBlank { currentChannel }
         val metadata = MediaMetadata.Builder()
-            .setTitle(currentTitle)
+            .setTitle(if (isShowingChapterTitle && lastShownChapterTitle.isNotBlank()) lastShownChapterTitle else currentTitle)
             .setArtist(artist)
             .setAlbumTitle(currentChannel)
             .setArtworkUri(android.net.Uri.parse(currentThumb))
@@ -1018,7 +1018,7 @@ class AudioPlayerActivity : AppCompatActivity() {
                 this@AudioPlayerActivity,
                 videoId,
                 mediaController?.currentMediaItem?.localConfiguration?.uri?.toString() ?: "",
-                0L
+                duration * 1000L
             )
             if (videoId != currentVideoId) return@launch
             val serverChapters = analyzeResult?.chapters
@@ -1693,7 +1693,7 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                 .build()
 
             val mediaItem = MediaItem.Builder()
-                .setUri(url)
+                .setUri(useUrl)
                 .setMediaId(videoId)
                 .setMediaMetadata(metadata)
                 .build()
@@ -3846,10 +3846,12 @@ private fun startPositionAutoSave() {
         uiSyncJob = null
         super.onDestroy()
         // ★ audio_diag.log → Download/MyPlayer 복사 (크래시 진단용, 임시)
-        try {
-            copyDiagToDownload()
-        } catch (e: Exception) {
-            android.util.Log.e("AudioPlayer", "copyDiag err", e)
+        bgScope.launch {
+            try {
+                copyDiagToDownload()
+            } catch (e: Exception) {
+                android.util.Log.e("AudioPlayer", "copyDiag err", e)
+            }
         }
         // ★★★ 서비스로 다음 곡 관리 복귀
         PlaybackService.autoNextDisabled = false
