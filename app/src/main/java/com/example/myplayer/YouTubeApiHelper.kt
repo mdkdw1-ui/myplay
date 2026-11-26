@@ -281,7 +281,12 @@ object YouTubeApiHelper {
                     out.add(ChannelItem(
                         channelId = id,
                         name = v.optString("author", ""),
-                        thumbnail = v.optString("authorThumbnails", ""),
+                        thumbnail = normalizeThumb(
+                            v.optJSONArray("authorThumbnails")
+                                ?.optJSONObject(0)
+                                ?.optString("url", "") ?: "",
+                            id
+                        ),
                         subscribers = fmtNum(v.optLong("subCount", 0)) + "명"
                     ))
                 }
@@ -447,7 +452,7 @@ object YouTubeApiHelper {
                         videoId = id,
                         title = v.optString("title", ""),
                         channel = v.optString("uploaderName", ""),
-                        thumbnail = v.optString("thumbnail", ""),
+                        thumbnail = normalizeThumb(v.optString("thumbnail", ""), id),
                         duration = fmtSec(v.optInt("duration", 0)),
                         viewCount = "",
                         uploadDate = ""
