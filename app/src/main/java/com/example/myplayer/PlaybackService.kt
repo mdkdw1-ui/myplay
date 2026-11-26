@@ -91,6 +91,11 @@ private var resolvingNext = false
             if (playbackState == Player.STATE_ENDED) {
                 val p = exoPlayer
 
+
+                if (autoNextDisabled) {
+                    Log.d("PlaybackService", "STATE_ENDED but autoNextDisabled -> stop")
+                    return
+                }
                 // ★★★ autoNextDisabled 무시 → Service가 항상 다음 곡 처리 (근본 해결)
                 if (p != null && p.hasNextMediaItem()) {
                     Log.d("PlaybackService", "STATE_ENDED but hasNext → skip (자동 진행)")
