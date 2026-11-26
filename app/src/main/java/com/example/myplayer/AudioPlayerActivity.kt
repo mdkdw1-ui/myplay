@@ -3079,9 +3079,17 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
         }
         btnRepeat.setOnLongClickListener { dislikeCurrent(); true }
         btnSpeed.setOnClickListener { showSpeedDialog() }
-        seekBar.setOnLongClickListener {
-            showChapterBottomSheet()
-            true
+        val chapterGesture = android.view.GestureDetector(
+            this,
+            object : android.view.GestureDetector.SimpleOnGestureListener() {
+                override fun onLongPress(e: android.view.MotionEvent) {
+                    showChapterBottomSheet()
+                }
+            }
+        )
+        seekBar.setOnTouchListener { _, event ->
+            chapterGesture.onTouchEvent(event)
+            false
         }
 
         findViewById<MaterialButton>(R.id.btnLyrics).setOnClickListener { openLyrics() }
