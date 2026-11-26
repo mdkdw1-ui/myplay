@@ -1436,6 +1436,43 @@ private fun playNextRelated() {
         vdiag("extractAndPlay: $videoId ($title)")
         resetZoom()
         progress.visibility = View.VISIBLE
+
+        // 서버 병합 재생/로컬 추출 공통: 설명 및 챕터 로드
+        lifecycleScope.launch {
+            try {
+                val (desc, _) = YouTubeStream.fetchMetadata(videoId)
+                if (videoId != currentVideoId) return@launch
+
+                currentDescription = desc
+
+                runOnUiThread {
+                    val tvDescription = findViewById<TextView>(R.id.tvDescription)
+
+                    if (desc.isNotBlank()) {
+                        val cleanDesc = try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                Html.fromHtml(desc, Html.FROM_HTML_MODE_LEGACY).toString()
+                            } else {
+                                @Suppress("DEPRECATION")
+                                Html.fromHtml(desc).toString()
+                            }
+                        } catch (e: Exception) {
+                            desc
+                        }.replace(Regex("\\s+"), " ").trim()
+
+                        tvDescription.text = cleanDesc
+                        makeTimestampsClickable(tvDescription, cleanDesc)
+                        renderChapters(desc)
+                    } else {
+                        tvDescription.text = "(설명 없음)"
+                        renderChapters("")
+                    }
+                }
+            } catch (e: Exception) {
+                vdiag("fetchMetadata err: ${e.message}")
+            }
+        }
+
         lifecycleScope.launch {
             // (NewPipe 비디오 POT 로직 제거됨 - 서버 병합 재생 사용)
             // ★★★ 1순위: 서버 프록시 병합 재생 (WARP 우회)
@@ -3092,7 +3129,9 @@ private fun playNextRelated() {
         })
 
         // 업데이트 루프
-        val updateRunnable = object : Runnable {
+        updateSeekRunnable?.let { mainHandler.removeCallbacks(it) }
+
+        val runnable = object : Runnable {
             override fun run() {
                 try {
                     val p = playerView.player
@@ -3109,7 +3148,9 @@ private fun playNextRelated() {
                 mainHandler.postDelayed(this, 500)
             }
         }
-        mainHandler.post(updateRunnable)
+
+        updateSeekRunnable = runnable
+        mainHandler.post(runnable)
     }
 
     private fun fmtTime(ms: Long): String {
