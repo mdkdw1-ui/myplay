@@ -1589,9 +1589,15 @@ private fun playNextRelated() {
                     currentQualities = result.qualities
                     currentStreamUrl = result.videoUrl
                     saveHistory(videoId, finalTitle, finalChannel, thumb, startPosMs)
+                    loadSponsorSegments(videoId)
+                    startPreviewWatcher()
                     summaryCard.visibility = View.VISIBLE
                     tvSummaryBadge.text = "AI 요약 · 탭해서 생성"
                     tvSummary.text = "탭하면 자막을 요약합니다."
+                    summaryCard.setOnClickListener {
+                        summaryCard.setOnClickListener(null)
+                        buildSummary(videoId, finalTitle, currentDescription)
+                    }
                     return@launch
                 }
             }
