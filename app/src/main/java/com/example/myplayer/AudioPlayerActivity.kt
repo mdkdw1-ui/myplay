@@ -469,6 +469,9 @@ class AudioPlayerActivity : AppCompatActivity() {
                 if (alreadyPlaying) {
                     diag("onCreate: 이미 재생 중 → loadAudio skip (큐 보존)")
                     updateUI()
+if (currentChapters.isEmpty()) {
+    loadChapters(currentVideoId)
+}
                     // prefetch 재예약
                     try { prefetchNext() } catch (_: Exception) {}
                 } else {
