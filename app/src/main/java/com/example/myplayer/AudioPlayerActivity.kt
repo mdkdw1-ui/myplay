@@ -3073,11 +3073,6 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
         }
         btnRepeat.setOnLongClickListener { dislikeCurrent(); true }
         btnSpeed.setOnClickListener { showSpeedDialog() }
-        seekBar.setOnLongClickListener {
-            showChapterBottomSheet()
-            true
-        }
-
         findViewById<MaterialButton>(R.id.btnLyrics).setOnClickListener { openLyrics() }
         findViewById<MaterialButton>(R.id.btnEq).setOnClickListener { showEqDialog() }
         findViewById<MaterialButton>(R.id.btnDislike).setOnClickListener { dislikeCurrent() }
