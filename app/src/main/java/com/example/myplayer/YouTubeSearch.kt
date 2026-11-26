@@ -101,7 +101,7 @@ object YouTubeSearch {
                 } else {
                     put("query", query)
                     if (filter != null) {
-                        put("params", buildFilterParams(filter))
+                        put("params", java.net.URLDecoder.decode(buildFilterParams(filter), "UTF-8"))
                     }
                 }
             }

@@ -67,19 +67,6 @@ class SearchActivity : AppCompatActivity() {
         recycler.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 2)
         recycler.adapter = adapter
 
-        // ★ 터치 리스너 (탭/롱프레스 완벽 분리)
-        recycler.addOnItemTouchListener(
-            RecyclerTouchListener(
-                this, recycler,
-                onItemClick = { _, item ->
-                    PlayModeChooser.show(this, item)
-                },
-                onItemLongPress = { _, _, _ ->
-                    // ★ 다중선택은 SearchAdapter가 처리 → 여기선 미리보기 비활성화
-                },
-                onItemRelease = { _, _, _ -> }
-            )
-        )
 
         recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {

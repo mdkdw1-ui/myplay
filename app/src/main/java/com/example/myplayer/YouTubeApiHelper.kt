@@ -314,7 +314,7 @@ suspend fun searchChannels(query: String): List<ChannelItem> = withContext(Dispa
                     out.add(ChannelItem(
                         channelId = id,
                         name = v.optString("name", ""),
-                        thumbnail = v.optString("thumbnail", ""),
+                        thumbnail = normalizeThumb(v.optString("thumbnail", ""), id),
                         subscribers = v.optString("subscribers", "")
                     ))
                 }
