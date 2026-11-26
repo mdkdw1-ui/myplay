@@ -1183,6 +1183,64 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
         chapterWatcherJob = null
     }
 
+    private fun showChapterBottomSheet() {
+        try {
+            if (currentChapters.isEmpty()) {
+                android.widget.Toast.makeText(this, "챕터가 없습니다", android.widget.Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+            val container = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                setPadding(48, 40, 48, 48)
+                setBackgroundColor(0xFF121214.toInt())
+            }
+
+            val header = android.widget.TextView(this).apply {
+                text = "챕터"
+                textSize = 18f
+                setTextColor(0xFFFFFFFF.toInt())
+                setPadding(0, 0, 0, 24)
+            }
+            container.addView(header)
+
+            currentChapters.forEach { chapter ->
+                val row = android.widget.TextView(this).apply {
+                    text = chapterTime(chapter.startMs) + "  " + chapter.title
+                    textSize = 15f
+                    setTextColor(0xFFE8E8EA.toInt())
+                    setPadding(0, 24, 0, 24)
+                    setOnClickListener {
+                        mediaController?.seekTo(chapter.startMs)
+                        sheet.dismiss()
+                    }
+                }
+                container.addView(row)
+            }
+
+            val scroll = android.widget.ScrollView(this).apply {
+                addView(container)
+            }
+            sheet.setContentView(scroll)
+            sheet.show()
+        } catch (e: Exception) {
+            diag("chapter sheet err: ${e.message}")
+        }
+    }
+
+    private fun chapterTime(ms: Long): String {
+        val total = ms / 1000L
+        val h = total / 3600L
+        val m = (total % 3600L) / 60L
+        val sec = total % 60L
+        return if (h > 0L) {
+            String.format("%d:%02d:%02d", h, m, sec)
+        } else {
+            String.format("%d:%02d", m, sec)
+        }
+    }
+
     private fun updateChapterMetadataAudioQuiet(chapterTitle: String) {
         try {
             val mc = mediaController ?: return
@@ -3021,6 +3079,10 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
         }
         btnRepeat.setOnLongClickListener { dislikeCurrent(); true }
         btnSpeed.setOnClickListener { showSpeedDialog() }
+        seekBar.setOnLongClickListener {
+            showChapterBottomSheet()
+            true
+        }
 
         findViewById<MaterialButton>(R.id.btnLyrics).setOnClickListener { openLyrics() }
         findViewById<MaterialButton>(R.id.btnEq).setOnClickListener { showEqDialog() }

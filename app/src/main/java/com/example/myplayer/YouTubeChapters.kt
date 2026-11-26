@@ -11,7 +11,7 @@ object YouTubeChapters {
 
     // "00:00 제목" 또는 "0:00 제목" 또는 "1:23:45 제목"
     private val PATTERN = Pattern.compile(
-        "^(\\d{1,2}:)?\\d{1,2}:\\d{2}\\s*[-–—:]?\\s*(.+)$",
+        "^\\s*(?:[-*•·]\\s*)?\\[?((?:\\d{1,3}:)?\\d{1,2}:\\d{2})\\]?\\s*(?:[-–—:·|]\\s*)?(.+)$",
         Pattern.MULTILINE
     )
 
@@ -25,11 +25,10 @@ object YouTubeChapters {
             val m = PATTERN.matcher(trimmed)
             if (!m.find()) continue
 
-            val timePart = trimmed.substring(0, m.group().indexOf(' ') + 1).trim()
-                .takeWhile { it.isDigit() || it == ':' }
+            val timePart = m.group(1)
             val ms = parseTimestamp(timePart) ?: continue
-            val title = trimmed.substringAfter(timePart).trim()
-                .trimStart('-', '–', '—', ':', ' ')
+            val title = m.group(2).trim()
+                .trimStart('-', '–', '—', ':', '·', '|', ' ')
                 .trim()
 
             if (title.isNotBlank() && ms >= 0) {
