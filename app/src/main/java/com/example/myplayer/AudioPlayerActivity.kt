@@ -145,6 +145,25 @@ class AudioPlayerActivity : AppCompatActivity() {
             runOnUiThread {
                 findViewById<android.widget.TextView>(R.id.tvTitle)?.text = t
                 updateChapterMetadataAudioQuiet(t)
+                lastShownChapterTitle = t
+
+                val posMs = mediaController?.currentPosition ?: 0L
+                val idx = currentChapters.indexOfLast { it.startMs <= posMs }
+                if (idx >= 0) {
+                    val mutable = currentChapters.toMutableList()
+                    mutable[idx] = Chapter(mutable[idx].startMs, t)
+                    currentChapters = mutable
+
+                    val arr = org.json.JSONArray()
+                    mutable.forEach { ch ->
+                        arr.put(org.json.JSONObject().apply {
+                            put("startMs", ch.startMs)
+                            put("title", ch.title)
+                        })
+                    }
+                    getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+                        .edit().putString("chapters", arr.toString()).apply()
+                }
             }
         }
     }
@@ -3051,17 +3070,9 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
         }
         btnRepeat.setOnLongClickListener { dislikeCurrent(); true }
         btnSpeed.setOnClickListener { showSpeedDialog() }
-        val chapterGesture = android.view.GestureDetector(
-            this,
-            object : android.view.GestureDetector.SimpleOnGestureListener() {
-                override fun onLongPress(e: android.view.MotionEvent) {
-                    showChapterBottomSheet()
-                }
-            }
-        )
-        seekBar.setOnTouchListener { _, event ->
-            chapterGesture.onTouchEvent(event)
-            false
+        seekBar.setOnLongClickListener {
+            showChapterBottomSheet()
+            true
         }
 
         findViewById<MaterialButton>(R.id.btnLyrics).setOnClickListener { openLyrics() }
