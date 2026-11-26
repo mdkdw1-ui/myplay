@@ -1249,6 +1249,7 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
         val titles = currentChapters.map { chapter ->
             if (chapter.startMs == startMs) newTitle else chapter.title
         }
+        diag("chapter save start: videoId=$videoId title=$newTitle titles=${titles.size}")
 
         bgScope.launch(Dispatchers.IO) {
             try {
@@ -1286,6 +1287,7 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                 }
             } catch (e: Exception) {
                 runOnUiThread {
+                    diag("chapter save error: ${e.javaClass.simpleName}: ${e.message}")
                     android.widget.Toast.makeText(this@AudioPlayerActivity, "챕터 제목 저장 오류: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
