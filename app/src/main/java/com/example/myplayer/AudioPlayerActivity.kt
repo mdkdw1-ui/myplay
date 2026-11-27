@@ -1436,82 +1436,55 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
             android.widget.Toast.makeText(this, "로컬 파일은 챕터 제목 수정을 지원하지 않습니다", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-
         val videoId = currentVideoId
         val titles = currentChapters.map { chapter ->
             if (chapter.startMs == startMs) newTitle else chapter.title
         }
         diag("chapter save start: videoId=$videoId title=$newTitle titles=${titles.size}")
 
-        bgScope.launch(Dispatchers.IO) {
-            try {
-                val token = getSharedPreferences("server_auth", MODE_PRIVATE).getString("jwt", "") ?: ""
-                val url = "${ServerConfig.get()}/chapters/titles_save?token=$token"
-                val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-                conn.requestMethod = "POST"
-                conn.connectTimeout = 5000
-                conn.readTimeout = 15000
-                conn.doOutput = true
-                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                conn.setRequestProperty("Authorization", "Bearer $token")
-
-                val body = org.json.JSONObject()
-                    .put("videoId", videoId)
-                    .put("titles", org.json.JSONArray(titles))
-                    .toString().toByteArray(Charsets.UTF_8)
-
-                conn.outputStream.use { it.write(body) }
-                val code = conn.responseCode
-                val respText = (if (code in 200..299) conn.inputStream else conn.errorStream)
-                    ?.bufferedReader()?.use { it.readText() } ?: ""
-
-                val savedOk = code in 200..299 && try {
-                    org.json.JSONObject(respText).optBoolean("saved", true)
-                } catch (_: Exception) { true }
-
-                runOnUiThread {
-                    if (savedOk) {
-                        currentChapters.forEach { chapter ->
-                            if (chapter.startMs == startMs) chapter.title = newTitle
-                        }
-
-                        val arr = org.json.JSONArray()
-                        currentChapters.forEach {
-                            arr.put(org.json.JSONObject().apply {
-                                put("startMs", it.startMs)
-                                put("title", it.title)
-                            })
-                        }
-
-                        getSharedPreferences("chapter_prefs", MODE_PRIVATE)
-                            .edit().putString("chapters", arr.toString()).apply()
-
-                        val curPos = mediaController?.currentPosition ?: 0L
-                        val activeChapter = currentChapters.lastOrNull { it.startMs <= curPos }
-                        if (activeChapter?.startMs == startMs) {
-                            updateChapterMetadataAudioQuiet(newTitle)
-                        }
-                        android.widget.Toast.makeText(
-                            this@AudioPlayerActivity,
-                            "챕터 제목이 저장되었습니다",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
-
-                        sheet.dismiss()
-                        showChapterBottomSheet()
-                    } else {
-                        val msg = if (code in 200..299) {
-                            "서버 챕터 캐시가 아직 없어 저장할 수 없습니다"
-                        } else {
-                            "챕터 제목 저장 실패: $code"
-                        }
-                        android.widget.Toast.makeText(this@AudioPlayerActivity, msg, android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                }
+        bgScope.launch {
+            val savedOk = try {
+                ServerChapterApi.saveTitles(this@AudioPlayerActivity, videoId, titles)
             } catch (e: Exception) {
-                runOnUiThread {
-                    diag("chapter save error: ${e.javaClass.simpleName}: ${e.message}")
-                    android.widget.Toast.makeText(this@AudioPlayerActivity, "챕터 제목 저장 오류: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                diag("chapter save error: ${e.javaClass.simpleName}: ${e.message}")
+                false
+            }
+            runOnUiThread {
+                if (savedOk) {
+                    currentChapters.forEach { chapter ->
+                        if (chapter.startMs == startMs) chapter.title = newTitle
+                    }
+
+                    val arr = org.json.JSONArray()
+                    currentChapters.forEach {
+                        arr.put(org.json.JSONObject().apply {
+                            put("startMs", it.startMs)
+                            put("title", it.title)
+                        })
+                    }
+
+                    getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+                        .edit().putString("chapters", arr.toString()).apply()
+
+                    val curPos = mediaController?.currentPosition ?: 0L
+                    val activeChapter = currentChapters.lastOrNull { it.startMs <= curPos }
+                    if (activeChapter?.startMs == startMs) {
+                        updateChapterMetadataAudioQuiet(newTitle)
+                    }
+                    android.widget.Toast.makeText(
+                        this@AudioPlayerActivity,
+                        "챕터 제목이 저장되었습니다",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+
+                    sheet.dismiss()
+                    showChapterBottomSheet()
+                } else {
+                    android.widget.Toast.makeText(
+                        this@AudioPlayerActivity,
+                        "챕터 제목 저장 실패",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
         }
