@@ -3207,16 +3207,17 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
         var startProgress = 0
         var seekBarLongPressed = false
         val longPressRunnable = Runnable {
-            if (currentChapters.isNotEmpty()) {
+            if (!isFinishing && !isDestroyed && currentChapters.isNotEmpty()) {
                 seekBarLongPressed = true
                 isDragging = false
                 seekBar.progress = startProgress
+                seekBar.isPressed = false
                 seekBar.parent?.requestDisallowInterceptTouchEvent(false)
                 showChapterBottomSheet()
             }
         }
 
-        seekBar.setOnTouchListener { _, event ->
+        seekBar.setOnTouchListener { v, event ->
             when (event.actionMasked) {
                 android.view.MotionEvent.ACTION_DOWN -> {
                     downX = event.x
@@ -3241,11 +3242,10 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                 android.view.MotionEvent.ACTION_CANCEL -> {
                     longPressHandler.removeCallbacks(longPressRunnable)
                     if (seekBarLongPressed) {
+                        v.isPressed = false
                         seekBar.progress = startProgress
-                        true
-                    } else {
-                        false
                     }
+                    false
                 }
                 else -> false
             }
