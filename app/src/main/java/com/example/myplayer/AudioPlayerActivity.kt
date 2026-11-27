@@ -3194,8 +3194,8 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
         findViewById<MaterialButton>(R.id.btnMoreAudio).setOnClickListener {
             AlertDialog.Builder(this)
                 .setItems(arrayOf(
-                    "⭐ 내 플레이리스트에 저장",     // ★ NEW
-                    "🔖 북마크 (★ 표시)",           // ★ NEW
+                    "⭐ 내 플레이리스트에 저장",
+                    "🔖 북마크 (★ 표시)",      
                     "💡 화면 켜짐 유지 (토글)",
                     "🔋 백그라운드 재생 유지 (토글)",
                     "⚙️ 배터리 최적화 설정 열기",
@@ -3209,8 +3209,8 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                                         "🔄 챕터 재인식"
                                     )) { _, which ->
                     when (which) {
-                        0 -> saveCurrentToPlaylist()      // ★ NEW
-                        1 -> bookmarkCurrent()             // ★ NEW
+                        0 -> saveCurrentToPlaylist() 
+                        1 -> bookmarkCurrent()        
                         2 -> toggleKeepScreenOn()
                         3 -> toggleBackgroundPlayback()
                         4 -> openBatterySettings()
