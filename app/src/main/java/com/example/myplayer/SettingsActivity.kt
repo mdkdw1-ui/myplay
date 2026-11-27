@@ -75,7 +75,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun showReauthDialog() {
-        val prefs = getSharedPreferences("server_auth", MODE_PRIVATE)
+        val prefs = getSharedPreferences("serverauth", MODE_PRIVATE)
         val existing = prefs.getString("jwt", null)
         val status = if (existing.isNullOrBlank()) "현재: 인증 안 됨" else "현재: 인증됨 (토큰 ${existing.length}자)"
 
@@ -128,7 +128,7 @@ class SettingsActivity : AppCompatActivity() {
                 if (conn.responseCode !in 200..299) return@withContext false
                 val token = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() }).optString("token", "")
                 if (token.isBlank()) return@withContext false
-                getSharedPreferences("server_auth", MODE_PRIVATE).edit().putString("jwt", token).apply()
+                getSharedPreferences("serverauth", MODE_PRIVATE).edit().putString("jwt", token).apply()
                 true
             } catch (e: Exception) {
                 android.util.Log.e("SettingsAuth", "auth err: ${e.message}", e)
