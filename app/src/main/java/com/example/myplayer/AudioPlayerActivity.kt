@@ -1217,6 +1217,7 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                             .setView(input)
                             .setPositiveButton("저장") { _, _ ->
                                 val newTitle = input.text.toString().trim()
+        android.util.Log.e("CHAPTER_SAVE", "positive clicked: raw=${input.text} trimmed=$newTitle")
                                 if (newTitle.isNotEmpty()) {
                                     saveChapterTitles(chapter.startMs, newTitle, sheet)
                                 }
