@@ -1080,6 +1080,48 @@ if (chapters.isNotEmpty()) {
         }
     }
 
+    private fun requestChapterReidentify() {
+        val videoId = currentVideoId
+        if (videoId.isBlank() || videoId.startsWith("local:")) {
+            android.widget.Toast.makeText(this, "재인식할 영상이 없습니다", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val token = getSharedPreferences("server_auth", MODE_PRIVATE).getString("jwt", "") ?: ""
+        if (token.isBlank()) {
+            android.widget.Toast.makeText(this, "서버 로그인이 필요합니다", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        android.widget.Toast.makeText(this, "챕터 재인식을 요청했습니다", android.widget.Toast.LENGTH_SHORT).show()
+        bgScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val url = "${ServerConfig.get()}/play"
+                val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 5000
+                conn.readTimeout = 15000
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                val body = org.json.JSONObject().put("videoId", videoId).toString()
+                    .toByteArray(Charsets.UTF_8)
+                conn.outputStream.use { it.write(body) }
+                val code = conn.responseCode
+                val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() } ?: ""
+                diag("chapter reidentify: code=$code resp=$text")
+                runOnUiThread {
+                    val msg = if (code in 200..299) "챕터 재인식이 시작되었습니다" else "챕터 재인식 요청 실패: $code"
+                    android.widget.Toast.makeText(this@AudioPlayerActivity, msg, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                diag("chapter reidentify err: ${e.message}")
+                runOnUiThread {
+                    android.widget.Toast.makeText(this@AudioPlayerActivity, "챕터 재인식 오류: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     private fun maybeSubmitServerAnalysis(videoId: String, groqChapters: List<Chapter>, desc: String) {
         if (videoId.isBlank() || videoId.startsWith("local:")) return
 
@@ -3163,7 +3205,9 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                     "📺 영상 모드로 전환",
                     "🎚 재생 속도",
                     "📑 챕터 목록"
-                )) { _, which ->
+                ,
+                                        "🔄 챕터 재인식"
+                                    )) { _, which ->
                     when (which) {
                         0 -> saveCurrentToPlaylist()      // ★ NEW
                         1 -> bookmarkCurrent()             // ★ NEW
@@ -3191,6 +3235,7 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                         }
                         9 -> showSpeedDialog()
                         10 -> showChapterBottomSheet()
+                                        11 -> requestChapterReidentify()
                     }
                 }
                 .show()
