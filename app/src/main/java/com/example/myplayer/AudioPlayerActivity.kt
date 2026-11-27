@@ -1455,8 +1455,8 @@ try {
 
         runOnUiThread {
             Toast.makeText(
-                this,
-                "챕터 추가: $title",
+                        this@AudioPlayerActivity,
+                        "챕터 추가: $title",
                 Toast.LENGTH_SHORT
             ).show()
         }
