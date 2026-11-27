@@ -3163,21 +3163,78 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
             }
         }
 
+        val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
+        val longPressHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        var downX = 0f
+        var downY = 0f
+        var startProgress = 0
+        var seekBarLongPressed = false
+        val longPressRunnable = Runnable {
+            if (currentChapters.isNotEmpty()) {
+                seekBarLongPressed = true
+                isDragging = false
+                seekBar.progress = startProgress
+                seekBar.parent?.requestDisallowInterceptTouchEvent(false)
+                showChapterBottomSheet()
+            }
+        }
+
+        seekBar.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    downX = event.x
+                    downY = event.y
+                    startProgress = seekBar.progress
+                    seekBarLongPressed = false
+                    longPressHandler.removeCallbacks(longPressRunnable)
+                    if (currentChapters.isNotEmpty()) {
+                        longPressHandler.postDelayed(longPressRunnable, 500L)
+                    }
+                    false
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val dx = kotlin.math.abs(event.x - downX)
+                    val dy = kotlin.math.abs(event.y - downY)
+                    if (dx > touchSlop || dy > touchSlop) {
+                        longPressHandler.removeCallbacks(longPressRunnable)
+                    }
+                    seekBarLongPressed
+                }
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL -> {
+                    longPressHandler.removeCallbacks(longPressRunnable)
+                    if (seekBarLongPressed) {
+                        seekBar.progress = startProgress
+                        true
+                    } else {
+                        false
+                    }
+                }
+                else -> false
+            }
+        }
+
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser && !isDragging) {
+                if (fromUser && !isDragging && !seekBarLongPressed) {
                     val dur = mc.duration
                     if (dur > 0) mc.seekTo((dur * progress / 1000))
                 }
             }
-            override fun onStartTrackingTouch(sb: SeekBar?) { isDragging = true }
+            override fun onStartTrackingTouch(sb: SeekBar?) {
+                if (!seekBarLongPressed) isDragging = true
+            }
             override fun onStopTrackingTouch(sb: SeekBar?) {
                 isDragging = false
+                if (seekBarLongPressed) {
+                    seekBarLongPressed = false
+                    sb?.progress = startProgress
+                    return
+                }
                 val dur = mc.duration
                 if (dur > 0) {
                     val targetPos = (dur * (sb?.progress ?: 0) / 1000)
                     mc.seekTo(targetPos)
-                    // 챕터 타이틀 업데이트
                     if (currentChapters.size >= 2) {
                         val chapter = currentChapters.lastOrNull { it.startMs <= targetPos }
                         if (chapter != null) {
@@ -3185,7 +3242,6 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                         }
                     }
                 }
-                // ★ 프리페치 트리거: 캐시가 2곡 미만일 때만 (중복 방지)
                 val pos = sb?.progress ?: 0
                 if (pos >= 500 && prefetchedStreams.size < 2 && prefetchJob?.isActive != true) {
                     diag("seekbar 50%+ & 캐시 부족(${prefetchedStreams.size}) → prefetch 시작")
