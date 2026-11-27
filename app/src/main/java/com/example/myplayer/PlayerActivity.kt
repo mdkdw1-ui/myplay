@@ -2292,11 +2292,6 @@ private fun playNextRelated() {
     private fun applyServerChapters(serverChapters: List<ServerChapterApi.ServerChapter>) {
         currentChapters = serverChapters.map { Chapter(it.startMs, it.title) }
         renderServerChapters(currentChapters)
-        val pos = mediaController?.currentPosition ?: 0L
-        val active = currentChapters.lastOrNull { it.startMs <= pos }
-        if (active != null) {
-            updateChapterMetadata(active.title)
-        }
     }
 
     private fun renderServerChapters(chapters: List<Chapter>) {
