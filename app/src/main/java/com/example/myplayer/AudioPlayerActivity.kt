@@ -1205,12 +1205,18 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
             }
             container.addView(header)
 
+            val curPos = mediaController?.currentPosition ?: 0L
+            val activeChapter = currentChapters.lastOrNull { it.startMs <= curPos }
+
+            var activeRow: android.widget.TextView? = null
             currentChapters.forEach { chapter ->
+                val isActive = chapter.startMs == activeChapter?.startMs
                 val row = android.widget.TextView(this).apply {
                     text = chapterTime(chapter.startMs) + "  " + chapter.title
                     textSize = 15f
-                    setTextColor(0xFFE8E8EA.toInt())
-                    setPadding(0, 24, 0, 24)
+                    setTextColor(if (isActive) 0xFFFFFFFF.toInt() else 0xFFE8E8EA.toInt())
+                    setBackgroundColor(if (isActive) 0xFF2A2E37.toInt() else 0x00000000)
+                    setPadding(24, 24, 24, 24)
                     setOnClickListener {
                         mediaController?.seekTo(chapter.startMs)
                         sheet.dismiss()
@@ -1232,6 +1238,7 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                         true
                     }
                 }
+                if (isActive) activeRow = row
                 container.addView(row)
             }
 
@@ -1240,6 +1247,13 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
             }
             sheet.setContentView(scroll)
             sheet.show()
+            activeRow?.let { row ->
+                scroll.post {
+                    try {
+                        scroll.scrollTo(0, row.top)
+                    } catch (_: Exception) {}
+                }
+            }
         } catch (e: Exception) {
             diag("chapter sheet err: ${e.message}")
         }
