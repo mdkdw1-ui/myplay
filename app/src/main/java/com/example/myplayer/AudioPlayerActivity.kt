@@ -1418,6 +1418,55 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                 val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
                     ?.bufferedReader()?.use { it.readText() } ?: ""
                 diag("chapter identify: code=$code resp=$text")
+
+try {
+    val json = org.json.JSONObject(resp)
+    val suggestions = json.optJSONArray("suggestions")
+    val first = suggestions?.optJSONObject(0)
+    val title = first?.optString("title")?.takeIf { it.isNotBlank() }
+    val artist = first?.optString("artist")?.takeIf { it.isNotBlank() }
+    val durationSec = first?.optDouble("duration") ?: 0.0
+
+    if (title != null && durationSec > 0.0) {
+        val pos = mediaController?.currentPosition ?: 0L
+        val videoDuration = mediaController?.duration ?: 0L
+        val songStart = pos.coerceAtLeast(0L)
+        val songEnd = songStart + (durationSec * 1000L).toLong()
+
+        val newChapters = mutableListOf<Chapter>()
+        newChapters.add(Chapter(songStart, title))
+
+        if (videoDuration <= 0L || songEnd < videoDuration - 1000L) {
+            newChapters.add(Chapter(songEnd, "다음 곡"))
+        }
+
+        // 기존 챕터는 유지하고 새 챕터만 병합
+        val merged = (currentChapters + newChapters)
+            .distinctBy { it.startMs }
+            .sortedBy { it.startMs }
+
+        currentChapters = merged
+        startChapterWatcher()
+
+        diag(
+            "chapter merge: start=$songStart end=$songEnd " +
+            "title=$title artist=$artist total=${merged.size}"
+        )
+
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                "챕터 추가: $title",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    } else {
+        diag("chapter merge skipped: no usable suggestion")
+    }
+} catch (e: Exception) {
+    diag("chapter merge err: ${e.message}")
+}
+
                 runOnUiThread {
                     val msg = if (code in 200..299) "구간 재인식이 시작되었습니다" else "구간 재인식 요청 실패: $code"
                     android.widget.Toast.makeText(this@AudioPlayerActivity, msg, android.widget.Toast.LENGTH_SHORT).show()
