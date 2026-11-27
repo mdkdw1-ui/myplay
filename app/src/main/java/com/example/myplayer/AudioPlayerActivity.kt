@@ -1272,19 +1272,46 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
 
                 conn.outputStream.use { it.write(body) }
                 val code = conn.responseCode
-                conn.inputStream?.use { it.readBytes() }
+                val respText = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() } ?: ""
+
+                val savedOk = code in 200..299 && try {
+                    org.json.JSONObject(respText).optBoolean("saved", true)
+                } catch (_: Exception) { true }
 
                 runOnUiThread {
-                    if (code in 200..299) {
+                    if (savedOk) {
                         currentChapters.forEach { chapter ->
                             if (chapter.startMs == startMs) chapter.title = newTitle
                         }
+
+                        val arr = org.json.JSONArray()
+                        currentChapters.forEach {
+                            arr.put(org.json.JSONObject().apply {
+                                put("startMs", it.startMs)
+                                put("title", it.title)
+                            })
+                        }
+
+                        getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+                            .edit().putString("chapters", arr.toString()).apply()
+
                         updateChapterMetadataAudioQuiet(newTitle)
-                        android.widget.Toast.makeText(this@AudioPlayerActivity, "챕터 제목이 저장되었습니다", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(
+                            this@AudioPlayerActivity,
+                            "챕터 제목이 저장되었습니다",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+
                         sheet.dismiss()
                         showChapterBottomSheet()
                     } else {
-                        android.widget.Toast.makeText(this@AudioPlayerActivity, "챕터 제목 저장 실패: $code", android.widget.Toast.LENGTH_SHORT).show()
+                        val msg = if (code in 200..299) {
+                            "서버 챕터 캐시가 아직 없어 저장할 수 없습니다"
+                        } else {
+                            "챕터 제목 저장 실패: $code"
+                        }
+                        android.widget.Toast.makeText(this@AudioPlayerActivity, msg, android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
