@@ -29,7 +29,6 @@ fix_chapter_watcher.py
 fix_server_chapters.py
 fix_compile.py
 fix_chapter_bugs.py
-retitle_funcs.kt
 fix_bg.py
 fix_prev.py
 fix_next.py
