@@ -1300,7 +1300,11 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                         getSharedPreferences("chapter_prefs", MODE_PRIVATE)
                             .edit().putString("chapters", arr.toString()).apply()
 
-                        updateChapterMetadataAudioQuiet(newTitle)
+                        val curPos = mediaController?.currentPosition ?: 0L
+                        val activeChapter = currentChapters.lastOrNull { it.startMs <= curPos }
+                        if (activeChapter?.startMs == startMs) {
+                            updateChapterMetadataAudioQuiet(newTitle)
+                        }
                         android.widget.Toast.makeText(
                             this@AudioPlayerActivity,
                             "챕터 제목이 저장되었습니다",
