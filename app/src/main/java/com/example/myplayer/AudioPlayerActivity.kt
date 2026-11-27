@@ -3143,7 +3143,7 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                     "🔊 음량 부스트",
                     "👎 싫어요 (다음부터 제외)",
                     "📺 영상 모드로 전환",
-                    "🎚 재생 속도"
+                    "🎚 재생 속도",
                     "📑 챕터 목록"
                 )) { _, which ->
                     when (which) {
