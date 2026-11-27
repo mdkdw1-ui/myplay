@@ -3144,6 +3144,7 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                     "👎 싫어요 (다음부터 제외)",
                     "📺 영상 모드로 전환",
                     "🎚 재생 속도"
+                    "📑 챕터 목록"
                 )) { _, which ->
                     when (which) {
                         0 -> saveCurrentToPlaylist()      // ★ NEW
@@ -3171,6 +3172,11 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                             }
                         }
                         9 -> showSpeedDialog()
+                        10 -> {
+                            if (currentChapters.isNotEmpty()) {
+                                showChapterBottomSheet()
+                            }
+                        }
                     }
                 }
                 .show()
