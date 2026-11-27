@@ -3409,7 +3409,7 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                         }
                         9 -> showSpeedDialog()
                         10 -> showChapterBottomSheet()
-                                        11 -> requestChapterReidentify()
+                                        11 -> requestChapterIdentify(mediaController?.currentPosition ?: 0L)
                     }
                 }
                 .show()
