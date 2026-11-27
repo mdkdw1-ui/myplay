@@ -1086,7 +1086,7 @@ if (chapters.isNotEmpty()) {
             android.widget.Toast.makeText(this, "재인식할 영상이 없습니다", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        val token = getSharedPreferences("server_auth", MODE_PRIVATE).getString("jwt", "") ?: ""
+        val token = MyApp.instance.getSharedPreferences("serverauth", android.content.Context.MODE_PRIVATE).getString("jwt", "") ?: ""
         if (token.isBlank()) {
             android.widget.Toast.makeText(this, "서버 로그인이 필요합니다", android.widget.Toast.LENGTH_SHORT).show()
             return
