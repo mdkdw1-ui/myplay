@@ -1420,14 +1420,14 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                 diag("chapter identify: code=$code resp=$text")
 
 try {
-    val json = org.json.JSONObject(resp)
+    val json = org.json.JSONObject(text)
     val suggestions = json.optJSONArray("suggestions")
     val first = suggestions?.optJSONObject(0)
-    val title = first?.optString("title")?.takeIf { it.isNotBlank() }
-    val artist = first?.optString("artist")?.takeIf { it.isNotBlank() }
+    val title = first?.optString("title") ?: ""
+    val artist = first?.optString("artist") ?: ""
     val durationSec = first?.optDouble("duration") ?: 0.0
 
-    if (title != null && durationSec > 0.0) {
+    if (title.isNotBlank() && durationSec > 0.0) {
         val pos = mediaController?.currentPosition ?: 0L
         val videoDuration = mediaController?.duration ?: 0L
         val songStart = pos.coerceAtLeast(0L)
