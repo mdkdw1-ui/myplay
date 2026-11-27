@@ -1366,6 +1366,7 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                 if (isActive) activeRow = row
                 container.addView(row)
             }
+            }
 
             val scroll = android.widget.ScrollView(this).apply {
                 addView(container)
@@ -4335,5 +4336,4 @@ private fun startPositionAutoSave() {
         }
     }
 
-}
 }
