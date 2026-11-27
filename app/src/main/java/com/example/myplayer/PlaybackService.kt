@@ -96,13 +96,13 @@ private var resolvingNext = false
                     Log.d("PlaybackService", "STATE_ENDED but autoNextDisabled -> stop")
                     return
                 }
-                // ★★★ autoNextDisabled 무시 → Service가 항상 다음 곡 처리 (근본 해결)
+                // autoNextDisabled가 true면 자동 다음 곡 처리를 중단한다.
                 if (p != null && p.hasNextMediaItem()) {
                     Log.d("PlaybackService", "STATE_ENDED but hasNext → skip (자동 진행)")
                     return
                 }
 
-                Log.d("PlaybackService", "STATE_ENDED → resolveNext (autoNextDisabled 무시)")
+                Log.d("PlaybackService", "STATE_ENDED → resolveNext")
                 serviceScope.launch {
                     val next = resolveNext()
                     if (next != null) playNext(next)
