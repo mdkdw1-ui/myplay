@@ -1107,6 +1107,7 @@ if (chapters.isNotEmpty()) {
             return
         }
         val token = MyApp.instance.getSharedPreferences("serverauth", android.content.Context.MODE_PRIVATE).getString("jwt", "") ?: ""
+        diag("chapter identify jwt len=${token.length}")
         if (token.isBlank()) {
             android.widget.Toast.makeText(this, "서버 로그인이 필요합니다", android.widget.Toast.LENGTH_SHORT).show()
             return
