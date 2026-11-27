@@ -1029,6 +1029,26 @@ if (currentChapters.isEmpty()) {
                 getSharedPreferences("chapter_prefs", MODE_PRIVATE)
                     .edit().remove("chapters").apply()
 
+                                                                        // ★ R8: YouTube 자동 챕터 fallback
+                                                                        val autoChapters = YouTubeChapters.fetchAuto(videoId)
+                                                                        if (autoChapters.size >= 2) {
+                                                                            currentChapters = autoChapters
+                                                                            startChapterWatcher()
+                                                                            diag("YouTube 자동 챕터 적용: ${autoChapters.size}개")
+
+                                                                            val autoArr = org.json.JSONArray()
+                                                                            for (ch in autoChapters) {
+                                                                                val o = org.json.JSONObject()
+                                                                                o.put("startMs", ch.startMs)
+                                                                                o.put("title", ch.title)
+                                                                                autoArr.put(o)
+                                                                            }
+                                                                            getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+                                                                                .edit().putString("chapters", autoArr.toString()).apply()
+
+                                                                            maybeSubmitServerAnalysis(videoId, autoChapters, "")
+                                                                            return@launch
+                                                                        }
                 val (desc, _, duration) = YouTubeStream.fetchMetadata(videoId)
                 if (videoId != currentVideoId) return@launch
                 currentDescription = desc
