@@ -1314,22 +1314,35 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                         sheet.dismiss()
                     }
                     setOnLongClickListener {
-                        val input = android.widget.EditText(this@AudioPlayerActivity)
-                        input.setText(chapter.title)
                         android.app.AlertDialog.Builder(this@AudioPlayerActivity)
-                            .setTitle("챕터 제목 수정")
-                            .setView(input)
-                            .setPositiveButton("저장") { _, _ ->
-                                val newTitle = input.text.toString().trim()
-                                if (newTitle.isNotEmpty()) {
-                                    saveChapterTitles(chapter.startMs, newTitle, sheet)
+                            .setTitle(chapter.title)
+                            .setItems(arrayOf("제목 수정", "현재 구간 서버 재인식")) { _, which ->
+                                when (which) {
+                                    0 -> {
+                                        val input = android.widget.EditText(this@AudioPlayerActivity)
+                                        input.setText(chapter.title)
+                                        android.app.AlertDialog.Builder(this@AudioPlayerActivity)
+                                            .setTitle("챕터 제목 수정")
+                                            .setView(input)
+                                            .setPositiveButton("저장") { _, _ ->
+                                                val newTitle = input.text.toString().trim()
+                                                if (newTitle.isNotEmpty()) {
+                                                    saveChapterTitles(chapter.startMs, newTitle, sheet)
+                                                }
+                                            }
+                                            .setNegativeButton("취소", null)
+                                            .show()
+                                    }
+                                    1 -> {
+                                        sheet.dismiss()
+                                        requestChapterIdentify(chapter.startMs)
+                                    }
                                 }
                             }
                             .setNegativeButton("취소", null)
                             .show()
                         true
                     }
-                }
                 if (isActive) activeRow = row
                 container.addView(row)
             }
@@ -1348,6 +1361,73 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
             }
         } catch (e: Exception) {
             diag("chapter sheet err: ${e.message}")
+        }
+    }
+
+    private fun requestChapterIdentify(startMs: Long) {
+        val videoId = currentVideoId
+        if (videoId.isBlank() || videoId.startsWith("local:")) {
+            android.widget.Toast.makeText(this, "재인식할 영상이 없습니다", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val token = MyApp.instance.getSharedPreferences("serverauth", android.content.Context.MODE_PRIVATE).getString("jwt", "") ?: ""
+        if (token.isBlank()) {
+            android.widget.Toast.makeText(this, "서버 로그인이 필요합니다", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        android.widget.Toast.makeText(this, "현재 구간 재인식을 요청했습니다", android.widget.Toast.LENGTH_SHORT).show()
+        bgScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val url = "${ServerConfig.get()}/chapters/identify"
+                val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 10000
+                conn.readTimeout = 15000
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                val body = org.json.JSONObject()
+                    .put("videoId", videoId)
+                    .put("positionMs", startMs)
+                    .toString()
+                    .toByteArray(Charsets.UTF_8)
+                conn.outputStream.use { it.write(body) }
+                val code = conn.responseCode
+                val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() } ?: ""
+                diag("chapter identify: code=$code resp=$text")
+                runOnUiThread {
+                    val msg = if (code in 200..299) "구간 재인식이 시작되었습니다" else "구간 재인식 요청 실패: $code"
+                    android.widget.Toast.makeText(this@AudioPlayerActivity, msg, android.widget.Toast.LENGTH_SHORT).show()
+                }
+                if (code in 200..299) {
+                    repeat(60) {
+                        kotlinx.coroutines.delay(10_000L)
+                        if (currentVideoId != videoId || isFinishing || isDestroyed) return@launch
+                        val updated = ServerChapterApi.getCached(this@AudioPlayerActivity, videoId)
+                        if (updated != null && updated.size >= 2) {
+                            runOnUiThread {
+                                if (currentVideoId == videoId) {
+                                    currentChapters = updated.map { Chapter(it.startMs, it.title) }
+                                    lastShownChapterTitle = ""
+                                    startChapterWatcher()
+                                    android.widget.Toast.makeText(
+                                        this@AudioPlayerActivity,
+                                        "구간 재인식 완료 (${currentChapters.size}개)",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                            return@launch
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                diag("chapter identify err: ${e.message}")
+                runOnUiThread {
+                    android.widget.Toast.makeText(this@AudioPlayerActivity, "구간 재인식 오류: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
