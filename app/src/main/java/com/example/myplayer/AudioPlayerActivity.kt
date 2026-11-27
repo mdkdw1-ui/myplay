@@ -1091,32 +1091,81 @@ if (chapters.isNotEmpty()) {
             android.widget.Toast.makeText(this, "서버 로그인이 필요합니다", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
+        val streamUrl = mediaController?.currentMediaItem?.localConfiguration?.uri?.toString() ?: ""
+        val durationMs = (mediaController?.duration ?: 0L).coerceAtLeast(0L)
         android.widget.Toast.makeText(this, "챕터 재인식을 요청했습니다", android.widget.Toast.LENGTH_SHORT).show()
         bgScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val url = "${ServerConfig.get()}/play"
+                val url = "${ServerConfig.get()}/chapters/analyze"
                 val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
                 conn.requestMethod = "POST"
-                conn.connectTimeout = 5000
+                conn.connectTimeout = 10000
                 conn.readTimeout = 15000
                 conn.doOutput = true
                 conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 conn.setRequestProperty("Authorization", "Bearer $token")
-                val body = org.json.JSONObject().put("videoId", videoId).toString()
+                val body = org.json.JSONObject()
+                    .put("videoId", videoId)
+                    .put("audioUrl", streamUrl)
+                    .put("durationMs", durationMs)
+                    .put("force", true)
+                    .toString()
                     .toByteArray(Charsets.UTF_8)
                 conn.outputStream.use { it.write(body) }
                 val code = conn.responseCode
                 val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
                     ?.bufferedReader()?.use { it.readText() } ?: ""
                 diag("chapter reidentify: code=$code resp=$text")
+                val jobId = try {
+                    org.json.JSONObject(text).optString("jobId", "")
+                } catch (_: Exception) {
+                    ""
+                }
+                if (code !in 200..299 || jobId.isBlank()) {
+                    runOnUiThread {
+                        android.widget.Toast.makeText(
+                            this@AudioPlayerActivity,
+                            "챕터 재인식 요청 실패: $code",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    return@launch
+                }
                 runOnUiThread {
-                    val msg = if (code in 200..299) "챕터 재인식이 시작되었습니다" else "챕터 재인식 요청 실패: $code"
-                    android.widget.Toast.makeText(this@AudioPlayerActivity, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(
+                        this@AudioPlayerActivity,
+                        "챕터 재인식이 시작되었습니다",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+                repeat(90) {
+                    kotlinx.coroutines.delay(10_000L)
+                    if (currentVideoId != videoId || isFinishing || isDestroyed) return@launch
+                    val updated = ServerChapterApi.getCached(this@AudioPlayerActivity, videoId)
+                    if (updated != null && updated.size >= 2) {
+                        runOnUiThread {
+                            if (currentVideoId == videoId) {
+                                currentChapters = updated.map { Chapter(it.startMs, it.title) }
+                                lastShownChapterTitle = ""
+                                startChapterWatcher()
+                                android.widget.Toast.makeText(
+                                    this@AudioPlayerActivity,
+                                    "챕터 재인식 완료 (${currentChapters.size}개)",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                        return@launch
+                    }
                 }
             } catch (e: Exception) {
                 diag("chapter reidentify err: ${e.message}")
                 runOnUiThread {
-                    android.widget.Toast.makeText(this@AudioPlayerActivity, "챕터 재인식 오류: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(
+                        this@AudioPlayerActivity,
+                        "챕터 재인식 오류: ${e.message}",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
         }
@@ -1191,6 +1240,7 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                 val arr = org.json.JSONArray()
                 merged.forEach { arr.put(org.json.JSONObject().apply { put("startMs", it.startMs); put("title", it.title) }) }
                 getSharedPreferences("chapter_prefs", MODE_PRIVATE).edit().putString("chapters", arr.toString()).apply()
+                startChapterWatcher()
                 diag("서버 챕터 적용: ${merged.size}개")
             }
         }
