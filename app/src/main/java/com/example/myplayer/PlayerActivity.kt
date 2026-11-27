@@ -1455,6 +1455,7 @@ private fun playNextRelated() {
             try {
                 val (desc, _) = YouTubeStream.fetchMetadata(videoId)
                 if (videoId != currentVideoId) return@launch
+                                                        val serverChapters = ServerChapterApi.getCached(this@PlayerActivity, videoId)
 
                 currentDescription = desc
 
@@ -1475,10 +1476,18 @@ private fun playNextRelated() {
 
                         tvDescription.text = cleanDesc
                         makeTimestampsClickable(tvDescription, cleanDesc)
-                        renderChapters(desc)
+                        if (serverChapters != null && videoId == currentVideoId) {
+                            applyServerChapters(serverChapters)
+                        } else {
+                            renderChapters(desc)
+                        }
                     } else {
                         tvDescription.text = "(설명 없음)"
-                        renderChapters("")
+                        if (serverChapters != null && videoId == currentVideoId) {
+                            applyServerChapters(serverChapters)
+                        } else {
+                            renderChapters("")
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -2280,6 +2289,66 @@ private fun playNextRelated() {
 
 
     // ========== 📑 챕터 ==========
+    private fun applyServerChapters(serverChapters: List<ServerChapterApi.ServerChapter>) {
+        currentChapters = serverChapters.map { Chapter(it.startMs, it.title) }
+        renderServerChapters(currentChapters)
+        val pos = mediaController?.currentPosition ?: 0L
+        val active = currentChapters.lastOrNull { it.startMs <= pos }
+        if (active != null) {
+            updateChapterMetadata(active.title)
+        }
+    }
+
+    private fun renderServerChapters(chapters: List<Chapter>) {
+        val box = findViewById<View>(R.id.chapterBox)
+        val list = findViewById<android.widget.LinearLayout>(R.id.chapterList)
+        list.removeAllViews()
+        if (chapters.isEmpty()) {
+            box.visibility = View.GONE
+            return
+        }
+        box.visibility = View.VISIBLE
+        for (c in chapters) {
+            val row = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                setPadding(0, 12, 0, 12)
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                isClickable = true
+                isFocusable = true
+                setBackgroundResource(android.R.drawable.list_selector_background)
+            }
+            row.addView(android.widget.TextView(this).apply {
+                text = formatTime(c.startMs)
+                textSize = 12f
+                setTextColor(0xFFFF2D55.toInt())
+                typeface = android.graphics.Typeface.MONOSPACE
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    (60 * resources.displayMetrics.density).toInt(),
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            })
+            row.addView(android.widget.TextView(this).apply {
+                text = c.title
+                textSize = 13f
+                setTextColor(0xFFF5F5F7.toInt())
+                maxLines = 2
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    0,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f
+                )
+            })
+            row.setOnClickListener {
+                mediaController?.seekTo(c.startMs)
+                Toast.makeText(this@PlayerActivity, "${formatTime(c.startMs)}로 이동", Toast.LENGTH_SHORT).show()
+            }
+            list.addView(row)
+        }
+    }
+
     private fun renderChapters(description: String) {
         val box = findViewById<View>(R.id.chapterBox)
         val list = findViewById<android.widget.LinearLayout>(R.id.chapterList)
