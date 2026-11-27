@@ -3176,11 +3176,7 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                             }
                         }
                         9 -> showSpeedDialog()
-                        10 -> {
-                            if (currentChapters.isNotEmpty()) {
-                                showChapterBottomSheet()
-                            }
-                        }
+                        10 -> showChapterBottomSheet()
                     }
                 }
                 .show()
