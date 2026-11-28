@@ -58,7 +58,9 @@ object ChapterReidentifyClient {
                 title = title,
                 source = resp.optString("source", "google+whisper"),
                 startMs = if (newStart < 0) 0L else newStart,
-                chaptersJson = chapters?.toString()
+                chaptersJson = chapters?.toString(),
+                added = resp.optBoolean("added", true),
+                reason = resp.optString("reason", "")
             )
         } finally {
             conn.disconnect()
@@ -70,10 +72,12 @@ object ChapterReidentifyClient {
         val title: String,
         val source: String,
         val startMs: Long,
-        val chaptersJson: String? = null
+        val chaptersJson: String? = null,
+        val added: Boolean = true,
+        val reason: String = ""
     )
 
-    fun fetchCurrentVideoId(): String? {
+    suspend fun fetchCurrentVideoId(): String? = withContext(Dispatchers.IO) {
         var conn: java.net.HttpURLConnection? = null
         return try {
             val url = java.net.URL("${ServerConfig.get()}/chapters/current_video")

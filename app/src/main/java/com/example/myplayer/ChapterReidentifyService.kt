@@ -72,37 +72,45 @@ class ChapterReidentifyService : AccessibilityService() {
         if (songTitle in setOf("검색결과", "검색 결과", "전체", "동영상", "이미지")) return
 
         val prefs = getSharedPreferences("audio_prefs", MODE_PRIVATE)
-        var vid = prefs.getString("current_video_id", null)
-        if (vid.isNullOrBlank()) {
-            vid = ChapterReidentifyClient.fetchCurrentVideoId()
-            if (vid.isNullOrBlank()) return
-            prefs.edit().putString("current_video_id", vid).apply()
-        }
-        val pos = PlaybackService.exoPlayer?.currentPosition ?: 0L
-
-        val requestKey = listOf(vid, artist, songTitle)
-        if (inFlight || lastSubmittedKey == requestKey) return
-
-        inFlight = true
-        lastSubmittedKey = requestKey
-
         scope.launch {
             try {
+                var vid = prefs.getString("current_video_id", null)
+                if (vid.isNullOrBlank()) {
+                    vid = ChapterReidentifyClient.fetchCurrentVideoId()
+                    if (vid.isNullOrBlank()) return@launch
+                    prefs.edit().putString("current_video_id", vid).apply()
+                }
+                val pos = PlaybackService.exoPlayer?.currentPosition ?: 0L
+                val requestKey = listOf(vid, artist, songTitle)
+                if (inFlight || lastSubmittedKey == requestKey) return@launch
+                inFlight = true
+                lastSubmittedKey = requestKey
                 android.util.Log.d("ChapterReidentify", "sending video=$vid hint_ms=$pos title=$songTitle artist=$artist")
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    android.widget.Toast.makeText(applicationContext, "챕터 식별 중… (최대 1분)", android.widget.Toast.LENGTH_SHORT).show()
+                }
                 val r = ChapterReidentifyClient.fixChapter(vid, pos, songTitle, artist)
-                android.util.Log.d(
-                    "ChapterReidentify",
-                    "fix result ok=${r.ok} title=${r.title} source=${r.source}"
-                )
-            if (r.ok && r.title.isNotBlank()) {
-                val i = android.content.Intent("com.example.myplayer.ACTION_CHAPTER_TITLE_UPDATED").setPackage(packageName)
-                i.putExtra("title", r.title)
-                i.putExtra("startMs", r.startMs)
-                i.putExtra("source", r.source)
-                r.chaptersJson?.let { i.putExtra("chaptersJson", it) }
-                sendBroadcast(i)
-                android.util.Log.d("ChapterReidentify", "title updated: ${r.title}")
-            }
+                android.util.Log.d("ChapterReidentify", "fix result ok=${r.ok} title=${r.title} source=${r.source}")
+                if (!r.added) {
+                    val msg = when (r.reason) {
+                        "duplicate" -> "이미 챕터에 있는 곡입니다: $songTitle"
+                        "no_duration" -> "곡 길이를 찾지 못했습니다"
+                        else -> "챕터를 추가하지 못했습니다"
+                    }
+                    if (r.reason != "duplicate") lastSubmittedKey = emptyList()
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        android.widget.Toast.makeText(applicationContext, msg, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+                if (r.ok && r.title.isNotBlank()) {
+                    val i = android.content.Intent("com.example.myplayer.ACTION_CHAPTER_TITLE_UPDATED").setPackage(packageName)
+                    i.putExtra("title", r.title)
+                    i.putExtra("startMs", r.startMs)
+                    i.putExtra("source", r.source)
+                    r.chaptersJson?.let { i.putExtra("chaptersJson", it) }
+                    sendBroadcast(i)
+                    android.util.Log.d("ChapterReidentify", "title updated: ${r.title}")
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

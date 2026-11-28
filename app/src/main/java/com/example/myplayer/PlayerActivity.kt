@@ -319,6 +319,30 @@ class PlayerActivity : AppCompatActivity() {
         chapterUpdateReceiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
                 val t = intent?.getStringExtra("title") ?: return
+                val chaptersJson = intent.getStringExtra("chaptersJson")
+                if (!chaptersJson.isNullOrBlank()) {
+                    try {
+                        val arr = org.json.JSONArray(chaptersJson)
+                        val parsed = mutableListOf<Chapter>()
+                        for (i in 0 until arr.length()) {
+                            val o = arr.getJSONObject(i)
+                            parsed.add(Chapter(o.optLong("startMs", 0L), o.optString("title")))
+                        }
+                        if (parsed.isNotEmpty()) {
+                            currentChapters = parsed
+                            renderServerChapters(currentChapters)
+                            val saved = org.json.JSONArray()
+                            parsed.forEach { ch ->
+                                saved.put(org.json.JSONObject().apply {
+                                    put("startMs", ch.startMs)
+                                    put("title", ch.title)
+                                })
+                            }
+                            getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+                                .edit().putString("chapters", saved.toString()).apply()
+                        }
+                    } catch (_: Exception) {}
+                }
                 if (t.isNotBlank()) {
                     currentTitle = t
                     findViewById<TextView>(R.id.tvTitle)?.text = t
@@ -3228,11 +3252,14 @@ private fun playNextRelated() {
     }
 
     private var isSeeking = false
+    private var chapterSheetDialog: com.google.android.material.bottomsheet.BottomSheetDialog? = null
 
     private fun showChapterSheet() {
         val chapters = currentChapters
         if (chapters.isEmpty()) return
+        chapterSheetDialog?.dismiss()
         val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        chapterSheetDialog = dialog
         val container = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             setPadding(48, 32, 48, 48)
@@ -3297,6 +3324,8 @@ private fun playNextRelated() {
                     if (ok) {
                         val updated = ServerChapterApi.getCached(this@PlayerActivity, vid)
                         updated?.let { applyServerChapters(it) }
+                        chapterSheetDialog?.dismiss()
+                        showChapterSheet()
                     }
                 }
             }
@@ -3351,6 +3380,7 @@ private fun playNextRelated() {
             if (!isFinishing && !isDestroyed) {
                 seekBarLongPressed = true
                 isDragging = false
+                isSeeking = false
                 sb.progress = startProgress
                 sb.isPressed = false
                 sb.parent?.requestDisallowInterceptTouchEvent(false)
@@ -3371,6 +3401,7 @@ private fun playNextRelated() {
                     startProgress = sb.progress
                     seekBarLongPressed = false
                     isDragging = false
+                    isSeeking = true
                     v.parent?.requestDisallowInterceptTouchEvent(true)
                     longPressHandler.removeCallbacks(longPressRunnable)
                     longPressHandler.postDelayed(longPressRunnable, 450L)
@@ -3399,11 +3430,13 @@ private fun playNextRelated() {
                     if (seekBarLongPressed || event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) {
                         seekBarLongPressed = false
                         isDragging = false
+                        isSeeking = false
                         sb.progress = startProgress
                         return@setOnTouchListener true
                     }
                     val targetProgress = if (isDragging) sb.progress else progressFromX(event.x)
                     isDragging = false
+                    isSeeking = false
                     sb.progress = targetProgress
                     val dur = playerView.player?.duration ?: 0L
                     if (dur > 0) {

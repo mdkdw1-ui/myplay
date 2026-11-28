@@ -40,7 +40,7 @@ object ServerChapterApi {
     suspend fun splitChapter(ctx: Context, videoId: String, startMs: Long): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                val token = ctx.getSharedPreferences("auth", Context.MODE_PRIVATE).getString("jwt", null)
+                val token = ctx.getSharedPreferences("server_auth", Context.MODE_PRIVATE).getString("jwt", null)
                 val body = JSONObject().put("videoId", videoId).put("startMs", startMs).toString()
                 val resp = http("${ServerConfig.get()}/chapters/split", "POST", body, token) ?: return@withContext false
                 JSONObject(resp).optBoolean("ok", false)
@@ -54,7 +54,7 @@ object ServerChapterApi {
     suspend fun adjustChapter(ctx: Context, videoId: String, chapterIndex: Int, field: String, deltaMs: Long): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                val token = ctx.getSharedPreferences("auth", Context.MODE_PRIVATE).getString("jwt", null)
+                val token = ctx.getSharedPreferences("server_auth", Context.MODE_PRIVATE).getString("jwt", null)
                 val body = JSONObject()
                     .put("videoId", videoId)
                     .put("chapterIndex", chapterIndex)
