@@ -45,12 +45,15 @@ class ChapterReidentifyService : AccessibilityService() {
             n.text?.let { if (it.isNotBlank()) texts.add(it.toString()) }
             for (i in 0 until n.childCount) walk(n.getChild(i))
         }
+        if (inFlight) return
+
         walk(root)
+        val cardMarkers = setOf("AI 모드", "전체", "동영상", "이미지")
+        if (texts.none { it.trim() in cardMarkers }) return
+
         texts.forEachIndexed { index, text ->
             android.util.Log.d("ChapterReidentify", "text[$index]=${text.replace("\n", " / ")}")
         }
-        val cardMarkers = setOf("AI 모드", "전체", "동영상", "이미지")
-        if (texts.none { it.trim() in cardMarkers }) return
 
         val normalized = texts.map {
             it.replace('\u00A0', ' ').trim()
@@ -69,7 +72,12 @@ class ChapterReidentifyService : AccessibilityService() {
         if (songTitle in setOf("검색결과", "검색 결과", "전체", "동영상", "이미지")) return
 
         val prefs = getSharedPreferences("audio_prefs", MODE_PRIVATE)
-        val vid = prefs.getString("current_video_id", null) ?: return
+        var vid = prefs.getString("current_video_id", null)
+        if (vid.isNullOrBlank()) {
+            vid = ChapterReidentifyClient.fetchCurrentVideoId()
+            if (vid.isNullOrBlank()) return
+            prefs.edit().putString("current_video_id", vid).apply()
+        }
         val pos = PlaybackService.exoPlayer?.currentPosition ?: 0L
 
         val requestKey = listOf(vid, artist, songTitle)
@@ -89,6 +97,9 @@ class ChapterReidentifyService : AccessibilityService() {
             if (r.ok && r.title.isNotBlank()) {
                 val i = android.content.Intent("com.example.myplayer.ACTION_CHAPTER_TITLE_UPDATED").setPackage(packageName)
                 i.putExtra("title", r.title)
+                i.putExtra("startMs", r.startMs)
+                i.putExtra("source", r.source)
+                r.chaptersJson?.let { i.putExtra("chaptersJson", it) }
                 sendBroadcast(i)
                 android.util.Log.d("ChapterReidentify", "title updated: ${r.title}")
             }

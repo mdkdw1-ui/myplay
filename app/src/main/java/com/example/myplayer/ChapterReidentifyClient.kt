@@ -48,13 +48,17 @@ object ChapterReidentifyClient {
                 conn.inputStream.bufferedReader().use { it.readText() }
             )
 
-            val newStart = resp.optLong("startMs", 0L)
+            val newStart = resp.optLong("startMs", -1L)
+            val chapters = resp.optJSONArray("chapters")
+            val hasChapters = chapters != null && chapters.length() > 0
+            val title = resp.optString("title", newTitle)
 
             ReidentifyResult(
-                ok = newStart > 0,
-                title = resp.optString("title", newTitle),
+                ok = (newStart >= 0 && title.isNotBlank()) || hasChapters,
+                title = title,
                 source = resp.optString("source", "google+whisper"),
-                startMs = newStart
+                startMs = if (newStart < 0) 0L else newStart,
+                chaptersJson = chapters?.toString()
             )
         } finally {
             conn.disconnect()
@@ -65,8 +69,29 @@ object ChapterReidentifyClient {
         val ok: Boolean,
         val title: String,
         val source: String,
-        val startMs: Long
+        val startMs: Long,
+        val chaptersJson: String? = null
     )
+
+    fun fetchCurrentVideoId(): String? {
+        var conn: java.net.HttpURLConnection? = null
+        return try {
+            val url = java.net.URL("${ServerConfig.get()}/chapters/current_video")
+            conn = url.openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 5000
+            conn.readTimeout = 5000
+            getJwtToken()?.let { conn.setRequestProperty("Authorization", "Bearer $it") }
+            if (conn.responseCode in 200..299) {
+                val json = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                json.optString("videoId").takeIf { it.isNotBlank() }
+            } else null
+        } catch (e: Exception) {
+            null
+        } finally {
+            try { conn?.disconnect() } catch (_: Exception) {}
+        }
+    }
 
     private fun getJwtToken(): String? {
         val prefs = MyApp.instance.getSharedPreferences(

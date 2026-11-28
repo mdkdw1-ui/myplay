@@ -30,10 +30,43 @@ object ServerChapterApi {
                 val o = arr.getJSONObject(i)
                 ServerChapter(o.optLong("startMs", 0L), o.optLong("endMs", 0L), o.optString("title", ""), o.optDouble("confidence", 0.0))
             }
-            if (out.size >= 2) out else null
+            if (out.isNotEmpty()) out else null
         } catch (e: Exception) {
             Log.e(TAG, "getCached err: ${e.message}")
             null
+        }
+    }
+
+    suspend fun splitChapter(ctx: Context, videoId: String, startMs: Long): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val token = ctx.getSharedPreferences("auth", Context.MODE_PRIVATE).getString("jwt", null)
+                val body = JSONObject().put("videoId", videoId).put("startMs", startMs).toString()
+                val resp = http("${ServerConfig.get()}/chapters/split", "POST", body, token) ?: return@withContext false
+                JSONObject(resp).optBoolean("ok", false)
+            } catch (e: Exception) {
+                Log.e(TAG, "splitChapter err: ${e.message}")
+                false
+            }
+        }
+    }
+
+    suspend fun adjustChapter(ctx: Context, videoId: String, chapterIndex: Int, field: String, deltaMs: Long): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val token = ctx.getSharedPreferences("auth", Context.MODE_PRIVATE).getString("jwt", null)
+                val body = JSONObject()
+                    .put("videoId", videoId)
+                    .put("chapterIndex", chapterIndex)
+                    .put("field", field)
+                    .put("deltaMs", deltaMs)
+                    .toString()
+                val resp = http("${ServerConfig.get()}/chapters/adjust", "POST", body, token) ?: return@withContext false
+                JSONObject(resp).optBoolean("ok", false)
+            } catch (e: Exception) {
+                Log.e(TAG, "adjustChapter err: ${e.message}")
+                false
+            }
         }
     }
 

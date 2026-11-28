@@ -414,6 +414,14 @@
             android:progressTint="@color/accent"
             android:thumbTint="@color/accent" />
 
+        <Button
+            android:id="@+id/btnSplitChapter"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:layout_marginTop="4dp"
+            android:text="✂ 여기서 곡 끊기"
+            android:textSize="12sp" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

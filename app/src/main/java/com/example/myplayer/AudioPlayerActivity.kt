@@ -1179,6 +1179,37 @@ if (chapters.isNotEmpty()) {
                         return@launch
                     }
                 }
+            // Track 1 실패 → Track 2 Google 검색 브릿지
+            runOnUiThread {
+                android.widget.Toast.makeText(
+                    this@AudioPlayerActivity,
+                    "Track 1 실패 — Google 검색으로 전환합니다",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                val pos = mediaController?.currentPosition ?: 0L
+                val query = currentChapters.lastOrNull { it.startMs <= pos }?.title
+                    ?: currentTitle
+                val intent = android.content.Intent(android.content.Intent.ACTION_WEB_SEARCH).apply {
+                    setPackage("com.google.android.googlequicksearchbox")
+                    putExtra("query", query)
+                }
+                try {
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    try {
+                        startActivity(
+                            android.content.Intent(android.content.Intent.ACTION_WEB_SEARCH)
+                                .putExtra("query", query)
+                        )
+                    } catch (_: Exception) {
+                        android.widget.Toast.makeText(
+                            this@AudioPlayerActivity,
+                            "Google 검색을 열 수 없습니다",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
             } catch (e: Exception) {
                 diag("chapter reidentify err: ${e.message}")
                 runOnUiThread {
@@ -1275,7 +1306,7 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                 while (isActive) {
                     try {
                         val mc = mediaController
-                        if (mc != null && mc.isPlaying && currentChapters.size >= 2) {
+                        if (mc != null && mc.isPlaying && currentChapters.isNotEmpty()) {
                             val pos = mc.currentPosition
                             val cur = currentChapters.lastOrNull { it.startMs <= pos }
                             val title = cur?.title ?: ""
@@ -1441,8 +1472,10 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                             Chapter(o.optLong("startMs", 0L), o.optString("title", "구간 ${i + 1}"))
                         }
 
-                        currentChapters = merged
-                        startChapterWatcher()
+                        runOnUiThread {
+                            currentChapters = merged
+                            startChapterWatcher()
+                        }
 
                         val arr = org.json.JSONArray()
                         merged.forEach { ch ->
@@ -1455,7 +1488,10 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                         getSharedPreferences("chapter_prefs", MODE_PRIVATE)
                             .edit().putString("chapters", arr.toString()).apply()
 
-                        resultTitle = merged.lastOrNull()?.title ?: ""
+                        val serverTitle = json.optString("title")
+                        resultTitle = serverTitle.ifBlank {
+                            merged.firstOrNull { it.startMs >= startMs }?.title ?: ""
+                        }
                         updated = true
                     } else {
                         // 2) 서버가 suggestion만 주면 전달받은 startMs 기준으로 병합
@@ -3509,7 +3545,10 @@ val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
                         isDragging = true
                     }
                     if (isDragging) {
-                        seekBar.progress = progressFromX(event.x)
+                        val p = progressFromX(event.x)
+                        seekBar.progress = p
+                        val dur = mediaController?.duration ?: 0L
+                        if (dur > 0) tvPos.text = formatTime(dur * p / 1000L)
                     }
                     true
                 }

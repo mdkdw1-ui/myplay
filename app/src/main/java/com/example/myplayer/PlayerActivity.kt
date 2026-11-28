@@ -132,6 +132,7 @@ class PlayerActivity : AppCompatActivity() {
     private var currentStreamUrl: String? = null
 
     private var currentVideoId: String = ""
+    private var chapterUpdateReceiver: android.content.BroadcastReceiver? = null
     private var switchingToAudio: Boolean = false   // ★ 오디오 모드 전환 플래그
     private var currentTitle: String = ""
     private var currentDescription: String = ""
@@ -310,7 +311,26 @@ class PlayerActivity : AppCompatActivity() {
         val vThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
 
         currentVideoId = videoId ?: ""
+        getSharedPreferences("audio_prefs", MODE_PRIVATE).edit()
+            .putString("current_video_id", currentVideoId)
+            .apply()
         registerCurrentVideoServer(currentVideoId)
+
+        chapterUpdateReceiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                val t = intent?.getStringExtra("title") ?: return
+                if (t.isNotBlank()) {
+                    currentTitle = t
+                    findViewById<TextView>(R.id.tvTitle)?.text = t
+                }
+            }
+        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            chapterUpdateReceiver,
+            android.content.IntentFilter("com.example.myplayer.ACTION_CHAPTER_TITLE_UPDATED"),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         currentTitle = vTitle
         currentChannel = vChannel
         currentThumb = vThumb
@@ -3097,6 +3117,10 @@ private fun playNextRelated() {
     override fun onDestroy() {
         updateSeekRunnable?.let { mainHandler.removeCallbacks(it) }
         updateSeekRunnable = null
+        chapterUpdateReceiver?.let { r ->
+            try { unregisterReceiver(r) } catch (_: Exception) {}
+        }
+        chapterUpdateReceiver = null
         super.onDestroy()
         // ★ PlayerActivity 종료 → 자동 다음곡 재활성화
         PlaybackService.autoNextDisabled = false
@@ -3178,9 +3202,106 @@ private fun playNextRelated() {
         // ★ seekbar 연결
         setupSeekBar()
         setupMiniMap()
+
+        findViewById<android.widget.Button>(R.id.btnSplitChapter)?.setOnClickListener {
+            val vid = currentVideoId
+            val pos = playerView.player?.currentPosition ?: 0L
+            if (vid.isNullOrBlank() || pos <= 0L) {
+                android.widget.Toast.makeText(this, "곡 끊기 위치를 찾을 수 없습니다", android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            lifecycleScope.launch {
+                val ok = ServerChapterApi.splitChapter(this@PlayerActivity, vid, pos)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        this@PlayerActivity,
+                        if (ok) "챕터를 나눴습니다" else "챕터 나누기 실패",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+                if (ok) {
+                    val chapters = ServerChapterApi.getCached(this@PlayerActivity, vid)
+                    chapters?.let { applyServerChapters(it) }
+                }
+            }
+        }
     }
 
     private var isSeeking = false
+
+    private fun showChapterSheet() {
+        val chapters = currentChapters
+        if (chapters.isEmpty()) return
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(48, 32, 48, 48)
+        }
+        for ((i, ch) in chapters.withIndex()) {
+            val row = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                setPadding(0, 16, 0, 16)
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            val tv = android.widget.TextView(this).apply {
+                text = ch.title
+                layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                textSize = 16f
+                setOnClickListener {
+                    playerView.player?.seekTo(ch.startMs)
+                    updateChapterMetadata(ch.title)
+                    dialog.dismiss()
+                }
+            }
+            val btn = android.widget.Button(this).apply {
+                text = "조정"
+                textSize = 12f
+                setOnClickListener { showChapterAdjustDialog(i) }
+            }
+            row.addView(tv)
+            row.addView(btn)
+            container.addView(row)
+        }
+        dialog.setContentView(container)
+        dialog.show()
+    }
+
+    private fun showChapterAdjustDialog(index: Int) {
+        val chapters = currentChapters
+        if (index !in chapters.indices) return
+        val ch = chapters[index]
+        val vid = currentVideoId ?: return
+        val options = arrayOf(
+            "시작 -5초", "시작 -1초", "시작 +1초", "시작 +5초",
+            "끝 -5초", "끝 -1초", "끝 +1초", "끝 +5초"
+        )
+        android.app.AlertDialog.Builder(this)
+            .setTitle(ch.title)
+            .setItems(options) { _, which ->
+                val field = if (which < 4) "start" else "end"
+                val delta = when (which % 4) {
+                    0 -> -5000L
+                    1 -> -1000L
+                    2 -> 1000L
+                    else -> 5000L
+                }
+                lifecycleScope.launch {
+                    val ok = ServerChapterApi.adjustChapter(this@PlayerActivity, vid, index, field, delta)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        android.widget.Toast.makeText(
+                            this@PlayerActivity,
+                            if (ok) "챕터 경계를 조정했습니다" else "경계 조정 실패",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    if (ok) {
+                        val updated = ServerChapterApi.getCached(this@PlayerActivity, vid)
+                        updated?.let { applyServerChapters(it) }
+                    }
+                }
+            }
+            .show()
+    }
 
     private fun setupSeekBar() {
         val sb = findViewById<android.widget.SeekBar>(R.id.playerSeekBar) ?: return
@@ -3211,6 +3332,93 @@ private fun playNextRelated() {
                 showControls()
             }
         })
+
+        val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
+        val longPressHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        var downX = 0f
+        var downY = 0f
+        var startProgress = 0
+        var seekBarLongPressed = false
+        var isDragging = false
+
+        fun progressFromX(x: Float): Int {
+            val usable = (sb.width - sb.paddingLeft - sb.paddingRight).coerceAtLeast(1)
+            val ratio = ((x - sb.paddingLeft) / usable.toFloat()).coerceIn(0f, 1f)
+            return (ratio * sb.max).toInt()
+        }
+
+        val longPressRunnable = Runnable {
+            if (!isFinishing && !isDestroyed) {
+                seekBarLongPressed = true
+                isDragging = false
+                sb.progress = startProgress
+                sb.isPressed = false
+                sb.parent?.requestDisallowInterceptTouchEvent(false)
+                sb.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                if (currentChapters.isNotEmpty()) {
+                    showChapterSheet()
+                } else {
+                    android.widget.Toast.makeText(this, "챕터 정보가 아직 없습니다", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        sb.setOnTouchListener { v, event ->
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    downX = event.x
+                    downY = event.y
+                    startProgress = sb.progress
+                    seekBarLongPressed = false
+                    isDragging = false
+                    v.parent?.requestDisallowInterceptTouchEvent(true)
+                    longPressHandler.removeCallbacks(longPressRunnable)
+                    longPressHandler.postDelayed(longPressRunnable, 450L)
+                    true
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    if (seekBarLongPressed) return@setOnTouchListener true
+                    val dx = kotlin.math.abs(event.x - downX)
+                    val dy = kotlin.math.abs(event.y - downY)
+                    if (!isDragging && (dx > touchSlop * 2f || dy > touchSlop * 2f)) {
+                        longPressHandler.removeCallbacks(longPressRunnable)
+                        isDragging = true
+                    }
+                    if (isDragging) {
+                        val p = progressFromX(event.x)
+                        sb.progress = p
+                        val dur = playerView.player?.duration ?: 0L
+                        if (dur > 0) tvPos?.text = fmtTime(dur * p / 1000L)
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL -> {
+                    longPressHandler.removeCallbacks(longPressRunnable)
+                    v.parent?.requestDisallowInterceptTouchEvent(false)
+                    if (seekBarLongPressed || event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) {
+                        seekBarLongPressed = false
+                        isDragging = false
+                        sb.progress = startProgress
+                        return@setOnTouchListener true
+                    }
+                    val targetProgress = if (isDragging) sb.progress else progressFromX(event.x)
+                    isDragging = false
+                    sb.progress = targetProgress
+                    val dur = playerView.player?.duration ?: 0L
+                    if (dur > 0) {
+                        val targetPos = dur * targetProgress / 1000L
+                        playerView.player?.seekTo(targetPos)
+                        currentChapters.lastOrNull { it.startMs <= targetPos }?.let {
+                            updateChapterMetadata(it.title)
+                        }
+                    }
+                    showControls()
+                    true
+                }
+                else -> false
+            }
+        }
 
         // 업데이트 루프
         updateSeekRunnable?.let { mainHandler.removeCallbacks(it) }
