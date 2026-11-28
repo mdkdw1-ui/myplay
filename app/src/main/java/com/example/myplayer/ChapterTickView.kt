@@ -36,9 +36,13 @@ class ChapterTickView @JvmOverloads constructor(
         if (positions.isEmpty()) return
         val top = height * 0.15f
         val bottom = height * 0.85f
+        var lastX = -100f
         positions.forEach { ratio ->
             val x = ratio * width
-            canvas.drawLine(x, top, x, bottom, paint)
+            if (x - lastX >= 8f) {
+                canvas.drawLine(x, top, x, bottom, paint)
+                lastX = x
+            }
         }
     }
 }
