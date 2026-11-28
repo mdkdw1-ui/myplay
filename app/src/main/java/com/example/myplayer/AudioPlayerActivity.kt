@@ -1106,7 +1106,7 @@ if (chapters.isNotEmpty()) {
             android.widget.Toast.makeText(this, "재인식할 영상이 없습니다", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        val token = MyApp.instance.getSharedPreferences("serverauth", android.content.Context.MODE_PRIVATE).getString("jwt", "") ?: ""
+        val token = MyApp.instance.getSharedPreferences("server_auth", android.content.Context.MODE_PRIVATE).getString("jwt", "") ?: ""
         diag("chapter identify jwt len=${token.length}")
         if (token.isBlank()) {
             android.widget.Toast.makeText(this, "서버 로그인이 필요합니다", android.widget.Toast.LENGTH_SHORT).show()
@@ -1392,7 +1392,7 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
             android.widget.Toast.makeText(this, "재인식할 영상이 없습니다", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        val token = MyApp.instance.getSharedPreferences("serverauth", android.content.Context.MODE_PRIVATE).getString("jwt", "") ?: ""
+        val token = MyApp.instance.getSharedPreferences("server_auth", android.content.Context.MODE_PRIVATE).getString("jwt", "") ?: ""
         if (token.isBlank()) {
             android.widget.Toast.makeText(this, "서버 로그인이 필요합니다", android.widget.Toast.LENGTH_SHORT).show()
             return
@@ -3433,20 +3433,32 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
             }
         }
 
-        val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
+val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
         val longPressHandler = android.os.Handler(android.os.Looper.getMainLooper())
         var downX = 0f
         var downY = 0f
         var startProgress = 0
         var seekBarLongPressed = false
+
+        fun progressFromX(x: Float): Int {
+            val usable = (seekBar.width - seekBar.paddingLeft - seekBar.paddingRight).coerceAtLeast(1)
+            val ratio = ((x - seekBar.paddingLeft) / usable.toFloat()).coerceIn(0f, 1f)
+            return (ratio * seekBar.max).toInt()
+        }
+
         val longPressRunnable = Runnable {
-            if (!isFinishing && !isDestroyed && currentChapters.isNotEmpty()) {
+            if (!isFinishing && !isDestroyed) {
                 seekBarLongPressed = true
                 isDragging = false
                 seekBar.progress = startProgress
                 seekBar.isPressed = false
                 seekBar.parent?.requestDisallowInterceptTouchEvent(false)
-                showChapterBottomSheet()
+                seekBar.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                if (currentChapters.isNotEmpty()) {
+                    showChapterBottomSheet()
+                } else {
+                    Toast.makeText(this, "챕터 정보가 아직 없습니다", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
@@ -3457,28 +3469,52 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                     downY = event.y
                     startProgress = seekBar.progress
                     seekBarLongPressed = false
+                    isDragging = false
+                    v.parent?.requestDisallowInterceptTouchEvent(true)
                     longPressHandler.removeCallbacks(longPressRunnable)
-                    if (currentChapters.isNotEmpty()) {
-                        longPressHandler.postDelayed(longPressRunnable, 500L)
-                    }
-                    false
+                    longPressHandler.postDelayed(longPressRunnable, 450L)
+                    true
                 }
                 android.view.MotionEvent.ACTION_MOVE -> {
+                    if (seekBarLongPressed) return@setOnTouchListener true
                     val dx = kotlin.math.abs(event.x - downX)
                     val dy = kotlin.math.abs(event.y - downY)
-                    if (dx > touchSlop || dy > touchSlop) {
+                    if (!isDragging && (dx > touchSlop * 2f || dy > touchSlop * 2f)) {
                         longPressHandler.removeCallbacks(longPressRunnable)
+                        isDragging = true
                     }
-                    seekBarLongPressed
+                    if (isDragging) {
+                        seekBar.progress = progressFromX(event.x)
+                    }
+                    true
                 }
                 android.view.MotionEvent.ACTION_UP,
                 android.view.MotionEvent.ACTION_CANCEL -> {
                     longPressHandler.removeCallbacks(longPressRunnable)
-                    if (seekBarLongPressed) {
-                        v.isPressed = false
+                    v.parent?.requestDisallowInterceptTouchEvent(false)
+                    if (seekBarLongPressed || event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) {
+                        seekBarLongPressed = false
+                        isDragging = false
                         seekBar.progress = startProgress
+                        return@setOnTouchListener true
                     }
-                    false
+                    val targetProgress = if (isDragging) seekBar.progress else progressFromX(event.x)
+                    isDragging = false
+                    seekBar.progress = targetProgress
+                    val dur = mc.duration
+                    if (dur > 0) {
+                        val targetPos = dur * targetProgress / 1000L
+                        mc.seekTo(targetPos)
+                        if (currentChapters.size >= 2) {
+                            currentChapters.lastOrNull { it.startMs <= targetPos }?.let {
+                                updateChapterMetadataAudioQuiet(it.title)
+                            }
+                        }
+                    }
+                    if (targetProgress >= 500 && prefetchedStreams.size < 2 && prefetchJob?.isActive != true) {
+                        try { prefetchNext() } catch (_: Exception) {}
+                    }
+                    true
                 }
                 else -> false
             }
@@ -3486,37 +3522,13 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
 
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser && !isDragging && !seekBarLongPressed) {
-                    val dur = mc.duration
-                    if (dur > 0) mc.seekTo((dur * progress / 1000))
-                }
+                // 시크 처리는 터치 리스너에서 수행
             }
+
             override fun onStartTrackingTouch(sb: SeekBar?) {
-                if (!seekBarLongPressed) isDragging = true
             }
+
             override fun onStopTrackingTouch(sb: SeekBar?) {
-                isDragging = false
-                if (seekBarLongPressed) {
-                    seekBarLongPressed = false
-                    sb?.progress = startProgress
-                    return
-                }
-                val dur = mc.duration
-                if (dur > 0) {
-                    val targetPos = (dur * (sb?.progress ?: 0) / 1000)
-                    mc.seekTo(targetPos)
-                    if (currentChapters.size >= 2) {
-                        val chapter = currentChapters.lastOrNull { it.startMs <= targetPos }
-                        if (chapter != null) {
-                            updateChapterMetadataAudioQuiet(chapter.title)
-                        }
-                    }
-                }
-                val pos = sb?.progress ?: 0
-                if (pos >= 500 && prefetchedStreams.size < 2 && prefetchJob?.isActive != true) {
-                    diag("seekbar 50%+ & 캐시 부족(${prefetchedStreams.size}) → prefetch 시작")
-                    try { prefetchNext() } catch (_: Exception) {}
-                }
             }
         })
     }

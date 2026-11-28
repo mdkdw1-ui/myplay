@@ -133,7 +133,7 @@ object ServerChapterApi {
 
     suspend fun saveTitles(ctx: Context, videoId: String, titles: List<String>): Boolean = withContext(Dispatchers.IO) {
         try {
-            val token = ctx.getSharedPreferences("serverauth", Context.MODE_PRIVATE).getString("jwt", null)
+            val token = ctx.getSharedPreferences("server_auth", Context.MODE_PRIVATE).getString("jwt", null)
             val body = JSONObject().apply {
                 put("videoId", videoId)
                 put("titles", org.json.JSONArray(titles))
