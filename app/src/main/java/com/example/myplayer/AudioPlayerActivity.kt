@@ -1356,7 +1356,7 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                                     }
                                     1 -> {
                                         sheet.dismiss()
-                                        requestChapterIdentify(chapter.startMs)
+                                        requestChapterIdentify(chapter.startMs, true)
                                     }
                                 }
                             }
@@ -1386,112 +1386,137 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
         }
     }
 
-    private fun requestChapterIdentify(startMs: Long) {
+    private fun requestChapterIdentify(startMs: Long, fromChapterStart: Boolean = false) {
         val videoId = currentVideoId
         if (videoId.isBlank() || videoId.startsWith("local:")) {
-            android.widget.Toast.makeText(this, "재인식할 영상이 없습니다", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(this, "재인식 할 영상이 없습니다", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
+
         val token = MyApp.instance.getSharedPreferences("server_auth", android.content.Context.MODE_PRIVATE).getString("jwt", "") ?: ""
         if (token.isBlank()) {
             android.widget.Toast.makeText(this, "서버 로그인이 필요합니다", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
+
         android.widget.Toast.makeText(this, "현재 구간 재인식을 요청했습니다", android.widget.Toast.LENGTH_SHORT).show()
+
         bgScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val url = "${ServerConfig.get()}/chapters/identify"
                 val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.connectTimeout = 10000
-                conn.readTimeout = 15000
+                conn.readTimeout = 120000
                 conn.doOutput = true
                 conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 conn.setRequestProperty("Authorization", "Bearer $token")
+
                 val body = org.json.JSONObject()
                     .put("videoId", videoId)
                     .put("positionMs", startMs)
+                    .put("fromChapterStart", fromChapterStart)
                     .toString()
                     .toByteArray(Charsets.UTF_8)
+
                 conn.outputStream.use { it.write(body) }
+
                 val code = conn.responseCode
                 val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
                     ?.bufferedReader()?.use { it.readText() } ?: ""
+
                 diag("chapter identify: code=$code resp=$text")
 
-try {
-    val json = org.json.JSONObject(text)
-    val suggestions = json.optJSONArray("suggestions")
-    val first = suggestions?.optJSONObject(0)
-    val title = first?.optString("title") ?: ""
-    val artist = first?.optString("artist") ?: ""
-    val durationSec = first?.optDouble("duration") ?: 0.0
+                var updated = false
+                var resultTitle = ""
 
-    if (title.isNotBlank() && durationSec > 0.0) {
-        val pos = mediaController?.currentPosition ?: 0L
-        val videoDuration = mediaController?.duration ?: 0L
-        val songStart = pos.coerceAtLeast(0L)
-        val songEnd = songStart + (durationSec * 1000L).toLong()
+                try {
+                    val json = org.json.JSONObject(text)
 
-        val newChapters = mutableListOf<Chapter>()
-        newChapters.add(Chapter(songStart, title))
+                    // 1) 서버가 전체 챕터 배열을 주면 그대로 반영
+                    val chaptersArr = json.optJSONArray("chapters")
+                    if (chaptersArr != null && chaptersArr.length() > 0) {
+                        val merged = (0 until chaptersArr.length()).map { i ->
+                            val o = chaptersArr.getJSONObject(i)
+                            Chapter(o.optLong("startMs", 0L), o.optString("title", "구간 ${i + 1}"))
+                        }
 
-        if (videoDuration <= 0L || songEnd < videoDuration - 1000L) {
-            newChapters.add(Chapter(songEnd, "다음 곡"))
-        }
+                        currentChapters = merged
+                        startChapterWatcher()
 
-        // 기존 챕터는 유지하고 새 챕터만 병합
-        val merged = (currentChapters + newChapters)
-            .distinctBy { it.startMs }
-            .sortedBy { it.startMs }
+                        val arr = org.json.JSONArray()
+                        merged.forEach { ch ->
+                            arr.put(org.json.JSONObject().apply {
+                                put("startMs", ch.startMs)
+                                put("title", ch.title)
+                            })
+                        }
 
-        currentChapters = merged
-        startChapterWatcher()
+                        getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+                            .edit().putString("chapters", arr.toString()).apply()
 
-        diag(
-            "chapter merge: start=$songStart end=$songEnd " +
-            "title=$title artist=$artist total=${merged.size}"
-        )
+                        resultTitle = merged.lastOrNull()?.title ?: ""
+                        updated = true
+                    } else {
+                        // 2) 서버가 suggestion만 주면 전달받은 startMs 기준으로 병합
+                        val suggestions = json.optJSONArray("suggestions")
+                        val first = suggestions?.optJSONObject(0)
+                        val title = first?.optString("title") ?: ""
+                        val artist = first?.optString("artist") ?: ""
+                        val durationSec = first?.optDouble("duration") ?: 0.0
 
-        runOnUiThread {
-            Toast.makeText(
-                        this@AudioPlayerActivity,
-                        "챕터 추가: $title",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    } else {
-        diag("chapter merge skipped: no usable suggestion")
-    }
-} catch (e: Exception) {
-    diag("chapter merge err: ${e.message}")
-}
+                        if (title.isNotBlank() && durationSec > 0.0) {
+                            val songStart = startMs.coerceAtLeast(0L)
+                            val songEnd = songStart + (durationSec * 1000L).toLong()
+                            val videoDuration = mediaController?.duration ?: 0L
 
-                runOnUiThread {
-                    val msg = if (code in 200..299) "구간 재인식이 시작되었습니다" else "구간 재인식 요청 실패: $code"
-                    android.widget.Toast.makeText(this@AudioPlayerActivity, msg, android.widget.Toast.LENGTH_SHORT).show()
-                }
-                if (code in 200..299) {
-                    repeat(60) {
-                        kotlinx.coroutines.delay(10_000L)
-                        if (currentVideoId != videoId || isFinishing || isDestroyed) return@launch
-                        val updated = ServerChapterApi.getCached(this@AudioPlayerActivity, videoId)
-                        if (updated != null && updated.size >= 2) {
-                            runOnUiThread {
-                                if (currentVideoId == videoId) {
-                                    currentChapters = updated.map { Chapter(it.startMs, it.title) }
-                                    lastShownChapterTitle = ""
-                                    startChapterWatcher()
-                                    android.widget.Toast.makeText(
-                                        this@AudioPlayerActivity,
-                                        "구간 재인식 완료 (${currentChapters.size}개)",
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
-                                }
+                            val newChapters = mutableListOf<Chapter>()
+                            newChapters.add(Chapter(songStart, title))
+
+                            if (videoDuration <= 0L || songEnd < videoDuration - 1000L) {
+                                newChapters.add(Chapter(songEnd, "다음 곡"))
                             }
-                            return@launch
+
+                            val merged = (currentChapters + newChapters)
+                                .distinctBy { it.startMs }
+                                .sortedBy { it.startMs }
+
+                            currentChapters = merged
+                            startChapterWatcher()
+
+                            val arr = org.json.JSONArray()
+                            merged.forEach { ch ->
+                                arr.put(org.json.JSONObject().apply {
+                                    put("startMs", ch.startMs)
+                                    put("title", ch.title)
+                                })
+                            }
+
+                            getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+                                .edit().putString("chapters", arr.toString()).apply()
+
+                            resultTitle = title
+                            updated = true
+
+                            diag(
+                                "chapter merge: start=$songStart end=$songEnd " +
+                                        "title=$title artist=$artist total=${merged.size}"
+                            )
+                        } else {
+                            diag("chapter merge skipped: no usable suggestion")
                         }
                     }
+                } catch (e: Exception) {
+                    diag("chapter merge err: ${e.message}")
+                }
+
+                runOnUiThread {
+                    val msg = when {
+                        updated && resultTitle.isNotBlank() -> "챕터 추가: $resultTitle"
+                        code in 200..299 -> "구간 재인식 완료"
+                        else -> "구간 재인식 요청 실패: $code"
+                    }
+                    android.widget.Toast.makeText(this@AudioPlayerActivity, msg, android.widget.Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 diag("chapter identify err: ${e.message}")
@@ -3409,7 +3434,7 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                         }
                         9 -> showSpeedDialog()
                         10 -> showChapterBottomSheet()
-                                        11 -> requestChapterIdentify(mediaController?.currentPosition ?: 0L)
+                                        11 -> requestChapterIdentify(mediaController?.currentPosition ?: 0L, false)
                     }
                 }
                 .show()

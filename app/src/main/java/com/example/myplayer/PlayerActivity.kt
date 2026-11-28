@@ -310,6 +310,7 @@ class PlayerActivity : AppCompatActivity() {
         val vThumb = intent.getStringExtra("VIDEO_THUMB") ?: ""
 
         currentVideoId = videoId ?: ""
+        registerCurrentVideoServer(currentVideoId)
         currentTitle = vTitle
         currentChannel = vChannel
         currentThumb = vThumb
@@ -3245,5 +3246,30 @@ private fun playNextRelated() {
                else "%d:%02d".format(m, sec)
     }
 
+
+    private fun registerCurrentVideoServer(videoId: String) {
+        if (videoId.isBlank() || videoId.startsWith("local:")) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val token = MyApp.instance.getSharedPreferences("server_auth", MODE_PRIVATE).getString("jwt", "") ?: ""
+                if (token.isBlank()) return@launch
+
+                val url = "${ServerConfig.get()}/chapters/current_video"
+                val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 10000
+                conn.readTimeout = 10000
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                conn.setRequestProperty("Authorization", "Bearer $token")
+
+                val body = org.json.JSONObject().put("videoId", videoId).toString().toByteArray(Charsets.UTF_8)
+                conn.outputStream.use { it.write(body) }
+                conn.responseCode
+                conn.disconnect()
+            } catch (_: Exception) {
+            }
+        }
+    }
 
 }
