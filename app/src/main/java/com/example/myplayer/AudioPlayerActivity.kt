@@ -43,6 +43,8 @@ import java.net.URL
 
 class AudioPlayerActivity : AppCompatActivity() {
 
+    private lateinit var chapterTickView: ChapterTickView
+
     private lateinit var controllerFuture: ListenableFuture<MediaController>
     private var mediaController: MediaController? = null
     private var updateJob: Job? = null
@@ -139,13 +141,38 @@ class AudioPlayerActivity : AppCompatActivity() {
     private lateinit var btnRepeat: MaterialButton
     private lateinit var btnLiveSub: MaterialButton
 
-        private val titleUpdateReceiver = object : android.content.BroadcastReceiver() {
+    private val titleUpdateReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
             val t = intent.getStringExtra("title") ?: return
+            val chaptersJson = intent.getStringExtra("chaptersJson")
             runOnUiThread {
                 findViewById<android.widget.TextView>(R.id.tvTitle)?.text = t
                 updateChapterMetadataAudioQuiet(t)
                 lastShownChapterTitle = t
+
+                if (!chaptersJson.isNullOrBlank()) {
+                    try {
+                        val arr = org.json.JSONArray(chaptersJson)
+                        val parsed = mutableListOf<Chapter>()
+                        for (i in 0 until arr.length()) {
+                            val o = arr.getJSONObject(i)
+                            parsed.add(Chapter(o.optLong("startMs", 0L), o.optString("title")))
+                        }
+                        if (parsed.isNotEmpty()) {
+                            currentChapters = parsed
+                            val saved = org.json.JSONArray()
+                            parsed.forEach { ch ->
+                                saved.put(org.json.JSONObject().apply {
+                                    put("startMs", ch.startMs)
+                                    put("title", ch.title)
+                                })
+                            }
+                            getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+                                .edit().putString("chapters", saved.toString()).apply()
+                            return@runOnUiThread
+                        }
+                    } catch (_: Exception) {}
+                }
 
                 val posMs = mediaController?.currentPosition ?: 0L
                 val idx = currentChapters.indexOfLast { it.startMs <= posMs }
@@ -245,6 +272,7 @@ class AudioPlayerActivity : AppCompatActivity() {
         tvDur = findViewById(R.id.tvDur)
         seekBar = findViewById(R.id.seekBar)
         seekBar.max = 1000
+        chapterTickView = findViewById(R.id.chapterTicks)
         btnPlay = findViewById(R.id.btnPlay)
         btnSpeed = findViewById(R.id.btnSpeed)
         btnRepeat = findViewById(R.id.btnRepeat)
@@ -1100,6 +1128,32 @@ if (chapters.isNotEmpty()) {
         }
     }
 
+    private var pendingChapterRefresh = false
+
+    private fun openGoogleSongSearch() {
+        val query = currentChapters.lastOrNull {
+            it.startMs <= (mediaController?.currentPosition ?: 0L)
+        }?.title ?: currentTitle
+        val intent = android.content.Intent(android.content.Intent.ACTION_WEB_SEARCH).apply {
+            setPackage("com.google.android.googlequicksearchbox")
+            putExtra("query", query)
+        }
+        pendingChapterRefresh = true
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            try {
+                startActivity(
+                    android.content.Intent(android.content.Intent.ACTION_WEB_SEARCH)
+                        .putExtra("query", query)
+                )
+            } catch (_: Exception) {
+                pendingChapterRefresh = false
+                android.widget.Toast.makeText(this, "Google 검색을 열 수 없습니다", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun requestChapterReidentify() {
         val videoId = currentVideoId
         if (videoId.isBlank() || videoId.startsWith("local:")) {
@@ -1159,57 +1213,6 @@ if (chapters.isNotEmpty()) {
                         android.widget.Toast.LENGTH_SHORT
                     ).show()
                 }
-                repeat(90) {
-                    kotlinx.coroutines.delay(10_000L)
-                    if (currentVideoId != videoId || isFinishing || isDestroyed) return@launch
-                    val updated = ServerChapterApi.getCached(this@AudioPlayerActivity, videoId)
-                    if (updated != null && updated.size >= 2) {
-                        runOnUiThread {
-                            if (currentVideoId == videoId) {
-                                currentChapters = updated.map { Chapter(it.startMs, it.title) }
-                                lastShownChapterTitle = ""
-                                startChapterWatcher()
-                                android.widget.Toast.makeText(
-                                    this@AudioPlayerActivity,
-                                    "챕터 재인식 완료 (${currentChapters.size}개)",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                        return@launch
-                    }
-                }
-            // Track 1 실패 → Track 2 Google 검색 브릿지
-            runOnUiThread {
-                android.widget.Toast.makeText(
-                    this@AudioPlayerActivity,
-                    "Track 1 실패 — Google 검색으로 전환합니다",
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
-                val pos = mediaController?.currentPosition ?: 0L
-                val query = currentChapters.lastOrNull { it.startMs <= pos }?.title
-                    ?: currentTitle
-                val intent = android.content.Intent(android.content.Intent.ACTION_WEB_SEARCH).apply {
-                    setPackage("com.google.android.googlequicksearchbox")
-                    putExtra("query", query)
-                }
-                try {
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    try {
-                        startActivity(
-                            android.content.Intent(android.content.Intent.ACTION_WEB_SEARCH)
-                                .putExtra("query", query)
-                        )
-                    } catch (_: Exception) {
-                        android.widget.Toast.makeText(
-                            this@AudioPlayerActivity,
-                            "Google 검색을 열 수 없습니다",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-            }
             } catch (e: Exception) {
                 diag("chapter reidentify err: ${e.message}")
                 runOnUiThread {
@@ -1306,6 +1309,7 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                 while (isActive) {
                     try {
                         val mc = mediaController
+                        chapterTickView.update(currentChapters, mc?.duration ?: 0L)
                         if (mc != null && mc.isPlaying && currentChapters.isNotEmpty()) {
                             val pos = mc.currentPosition
                             val cur = currentChapters.lastOrNull { it.startMs <= pos }
@@ -1368,7 +1372,7 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                     setOnLongClickListener {
                         android.app.AlertDialog.Builder(this@AudioPlayerActivity)
                             .setTitle(chapter.title)
-                            .setItems(arrayOf("제목 수정", "현재 구간 서버 재인식")) { _, which ->
+                            .setItems(arrayOf(" 제목 수정", "현재 구간 서버 재인식", "✂️ 여기서 분리", "◀ 시작 -1초", "▶ 시작 +1초", "◀ 종료 -1초", "▶ 종료 +1초")) { _, which ->
                                 when (which) {
                                     0 -> {
                                         val input = android.widget.EditText(this@AudioPlayerActivity)
@@ -1389,6 +1393,14 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
                                         sheet.dismiss()
                                         requestChapterIdentify(chapter.startMs, true)
                                     }
+                                    2 -> {
+                                        sheet.dismiss()
+                                        splitChapterAt(chapter.startMs)
+                                    }
+                                    3 -> adjustChapterBoundary(chapter.startMs, "start", -1000L, sheet)
+                                    4 -> adjustChapterBoundary(chapter.startMs, "start", 1000L, sheet)
+                                    5 -> adjustChapterBoundary(chapter.startMs, "end", -1000L, sheet)
+                                    6 -> adjustChapterBoundary(chapter.startMs, "end", 1000L, sheet)
                                 }
                             }
                             .setNegativeButton("취소", null)
@@ -1415,6 +1427,113 @@ GroqChapterExtractor.retitleSegments(desc, server.map { it.startMs to it.endMs }
         } catch (e: Exception) {
             diag("chapter sheet err: ${e.message}")
         }
+    }
+
+    private fun applyServerChapters(json: org.json.JSONObject) {
+        val arr = json.optJSONArray("chapters") ?: return
+        if (arr.length() <= 0) return
+        val merged = (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            Chapter(o.optLong("startMs", 0L), o.optString("title", "구간 ${i + 1}"))
+        }.sortedBy { it.startMs }
+        runOnUiThread {
+            currentChapters = merged
+            startChapterWatcher()
+        }
+        val out = org.json.JSONArray()
+        merged.forEach { ch ->
+            out.put(org.json.JSONObject().apply {
+                put("startMs", ch.startMs)
+                put("title", ch.title)
+            })
+        }
+        getSharedPreferences("chapter_prefs", MODE_PRIVATE)
+            .edit().putString("chapters", out.toString()).apply()
+    }
+
+    private fun postChapterAction(
+        path: String,
+        body: org.json.JSONObject,
+        sheet: com.google.android.material.bottomsheet.BottomSheetDialog?,
+        successMessage: String
+    ) {
+        val videoId = currentVideoId
+        if (videoId.isBlank() || videoId.startsWith("local:")) {
+            android.widget.Toast.makeText(this, "서버 챕터가 없습니다", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val token = MyApp.instance.getSharedPreferences("server_auth", android.content.Context.MODE_PRIVATE)
+            .getString("jwt", "") ?: ""
+        if (token.isBlank()) {
+            android.widget.Toast.makeText(this, "서버 로그인이 필요합니다", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        body.put("videoId", videoId)
+        android.widget.Toast.makeText(this, successMessage, android.widget.Toast.LENGTH_SHORT).show()
+        bgScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val conn = java.net.URL("${ServerConfig.get()}$path").openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 10000
+                conn.readTimeout = 120000
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                val code = conn.responseCode
+                val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() } ?: ""
+                diag("chapter action $path: code=$code resp=$text")
+                if (code in 200..299) {
+                    applyServerChapters(org.json.JSONObject(text))
+                    runOnUiThread {
+                        android.widget.Toast.makeText(this@AudioPlayerActivity, "완료", android.widget.Toast.LENGTH_SHORT).show()
+                        sheet?.dismiss()
+                        showChapterBottomSheet()
+                    }
+                } else {
+                    runOnUiThread {
+                        android.widget.Toast.makeText(this@AudioPlayerActivity, "요청 실패: $code", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                diag("chapter action err: ${e.message}")
+                runOnUiThread {
+                    android.widget.Toast.makeText(this@AudioPlayerActivity, "오류: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun splitChapterAt(startMs: Long) {
+        postChapterAction(
+            "/chapters/split",
+            org.json.JSONObject().put("startMs", startMs),
+            null,
+            "챕터를 분리합니다"
+        )
+    }
+
+    private fun adjustChapterBoundary(
+        startMs: Long,
+        field: String,
+        deltaMs: Long,
+        sheet: com.google.android.material.bottomsheet.BottomSheetDialog?
+    ) {
+        val idx = currentChapters.indexOfFirst { it.startMs == startMs }
+        if (idx < 0) {
+            android.widget.Toast.makeText(this, "챕터를 찾을 수 없습니다", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        postChapterAction(
+            "/chapters/adjust",
+            org.json.JSONObject()
+                .put("chapterIndex", idx)
+                .put("field", field)
+                .put("deltaMs", deltaMs),
+            sheet,
+            "챕터 경계를 조정합니다"
+        )
     }
 
     private fun requestChapterIdentify(startMs: Long, fromChapterStart: Boolean = false) {
@@ -3298,6 +3417,12 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
         diag("onResume: 재생 상태 유지 (video 트랙 건드리지 않음)")
         // ★ 자동 저장 시작 (매 10초)
         startPositionAutoSave()
+        if (pendingChapterRefresh) {
+            pendingChapterRefresh = false
+            if (currentVideoId.isNotBlank() && !currentVideoId.startsWith("local:")) {
+                loadChapters(currentVideoId)
+            }
+        }
     }
 
     override fun onStop() {
@@ -3441,7 +3566,8 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                     "🎚 재생 속도",
                     "📑 챕터 목록"
                 ,
-                                        "🔄 챕터 재인식"
+                                        "🔄 챕터 재인식",
+                    "🔍 Track 2 Google 검색"
                                     )) { _, which ->
                     when (which) {
                         0 -> saveCurrentToPlaylist() 
@@ -3470,7 +3596,8 @@ private fun loadAudio(videoId: String, isInitial: Boolean = false) {
                         }
                         9 -> showSpeedDialog()
                         10 -> showChapterBottomSheet()
-                                        11 -> requestChapterIdentify(mediaController?.currentPosition ?: 0L, false)
+                                        11 -> requestChapterReidentify()
+                        12 -> openGoogleSongSearch()
                     }
                 }
                 .show()
@@ -3569,7 +3696,7 @@ val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
                     if (dur > 0) {
                         val targetPos = dur * targetProgress / 1000L
                         mc.seekTo(targetPos)
-                        if (currentChapters.size >= 2) {
+                        if (currentChapters.isNotEmpty()) {
                             currentChapters.lastOrNull { it.startMs <= targetPos }?.let {
                                 updateChapterMetadataAudioQuiet(it.title)
                             }
@@ -3675,6 +3802,7 @@ val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
                         tvPos.text = fmt(pos)
                         tvDur.text = if (dur > 0) fmt(dur) else "0:00"
                         if (dur > 0) seekBar.progress = (pos * 1000 / dur).toInt()
+                        chapterTickView.update(currentChapters, dur)
                         btnPlay.setImageResource(
                             if (isPlaying) android.R.drawable.ic_media_pause
                             else android.R.drawable.ic_media_play
